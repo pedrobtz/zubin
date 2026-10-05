@@ -1,0 +1,108 @@
+#!/bin/sh
+# Design 16.1: the header gate. Run from the package root.
+#
+#   1. every header under inst/include/zubin compiles standalone as C99 under
+#      -Wall -Wextra -Wpedantic -Werror, and as C++11 under -Wall -Wextra
+#      -Werror, at -O0 and -O2;
+#   2. a unit that includes <zubin.h> and uses nothing is warning-free (the
+#      unused-function check of design 4.5);
+#   3. a unit that calls every public function is warning-free, as C and C++;
+#   4. the headers under zubin/ mention no R API, and none but buf.h
+#      allocates (design 5).
+#
+# Before any of that, two canaries: a header with a plain `static` function
+# must fail step 2, and a header that names SEXP must fail step 4. A gate is
+# trusted once it has been seen to fail (roadmap, principle 7).
+#
+# CC and CXX select the compilers (default cc and c++). ZUFAST_INCLUDE is
+# zufast's include directory; by default it is asked of an installed zufast.
+set -eu
+
+CC=${CC:-cc}
+CXX=${CXX:-c++}
+INC=inst/include
+if [ -z "${ZUFAST_INCLUDE:-}" ]; then
+    ZUFAST_INCLUDE=$(Rscript -e 'cat(system.file("include", package = "zufast"))' 2>/dev/null || true)
+fi
+if [ -z "$ZUFAST_INCLUDE" ] || [ ! -f "$ZUFAST_INCLUDE/zufast.h" ]; then
+    echo "zufast headers not found: set ZUFAST_INCLUDE or install zufast"
+    exit 1
+fi
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+CWARN="-Wall -Wextra -Wpedantic -Werror"
+XWARN="-Wall -Wextra -Werror"
+fail=0
+
+compile_c() {   # $1 source, rest extra flags
+    src=$1; shift
+    $CC -std=c99 $CWARN "$@" -I"$INC" -I"$ZUFAST_INCLUDE" -c "$src" -o "$TMP/out.o"
+}
+compile_cxx() {
+    src=$1; shift
+    $CXX -std=c++11 $XWARN "$@" -I"$INC" -I"$ZUFAST_INCLUDE" -x c++ -c "$src" -o "$TMP/out.o"
+}
+
+# Comment-stripped text of a header; string literals in the headers hold no
+# comment markers, so a regex is enough.
+strip_comments() {
+    perl -0777 -pe 's{/\*.*?\*/}{ }gs; s{//[^\n]*}{}g' "$1"
+}
+r_api() {        # true when the file names the R API
+    strip_comments "$1" | grep -nE '\bSEXP\b|\bRf_|[<"]R\.h[>"]|Rinternals' >/dev/null
+}
+allocates() {    # true when the file calls an allocator
+    strip_comments "$1" | grep -nE '\b(malloc|calloc|realloc|free)[[:space:]]*\(' >/dev/null
+}
+
+echo "== canaries"
+printf '#include "canary.h"\nint zb_probe(void);\nint zb_probe(void) { return 0; }\n' > "$TMP/canary.c"
+printf 'static inline int zb_canary(void) { return 1; }\n' > "$TMP/canary.h"
+if ! compile_c "$TMP/canary.c" -O2 -I"$TMP"; then
+    echo "FAIL control: an unused static inline function did not compile"; fail=1
+fi
+printf 'static int zb_canary(void) { return 1; }\n' > "$TMP/canary.h"
+if compile_c "$TMP/canary.c" -O2 -I"$TMP" 2>/dev/null; then
+    echo "FAIL canary: an unused plain static function compiled clean"; fail=1
+else
+    echo "ok: an unused plain static function fails the probe"
+fi
+printf 'typedef struct SEXPREC *SEXP;\nvoid *zb_canary = malloc(1);\n' > "$TMP/canary.h"
+if r_api "$TMP/canary.h" && allocates "$TMP/canary.h"; then
+    echo "ok: the R-API and allocation greps fire"
+else
+    echo "FAIL canary: the R-API or allocation grep missed"; fail=1
+fi
+
+echo "== standalone headers ($CC, $CXX)"
+for h in $(cd "$INC" && find . -name '*.h' ! -name 'zubin-r.h' | sed 's|^\./||' | sort); do
+    printf '#include <%s>\ntypedef int zb_check_nonempty;\n' "$h" > "$TMP/one.c"
+    for opt in -O0 -O2; do
+        if ! compile_c "$TMP/one.c" $opt; then echo "FAIL C99 $opt: $h"; fail=1; fi
+        if ! compile_cxx "$TMP/one.c" $opt; then echo "FAIL C++11 $opt: $h"; fail=1; fi
+    done
+done
+
+echo "== probes"
+for probe in tools/abi/probe-none.c tools/abi/probe-all.c; do
+    for opt in -O0 -O2; do
+        if ! compile_c "$probe" $opt; then echo "FAIL C99 $opt: $probe"; fail=1; fi
+        if ! compile_cxx "$probe" $opt; then echo "FAIL C++11 $opt: $probe"; fail=1; fi
+    done
+done
+
+echo "== forbidden identifiers"
+for h in $(find "$INC/zubin" "$INC/zubin.h" -name '*.h' | sort); do
+    if r_api "$h"; then echo "FAIL R API in $h"; fail=1; fi
+    case "$h" in
+    */zubin/buf.h) ;;
+    *) if allocates "$h"; then echo "FAIL allocation outside buf.h: $h"; fail=1; fi ;;
+    esac
+done
+
+if [ "$fail" -ne 0 ]; then
+    echo "header gate FAILED"
+    exit 1
+fi
+echo "header gate passed"

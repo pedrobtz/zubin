@@ -1,0 +1,68 @@
+# Design 16.1: the installed headers compile standalone as C99 and C++11, a
+# unit that includes everything and uses nothing is warning-free, and a unit
+# that calls every public function is warning-free, with GCC and clang; then
+# the call-everything probe references nothing R CMD check forbids. Both
+# scripts run their canaries first.
+#
+# zubin's headers include zufast's, so the gate needs zufast's include
+# directory: a checkout of pedrobtz/zufast for the header gate (no R there),
+# and the installed package for the symbol audit.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+name: abi
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  headers:
+    name: headers (${{ matrix.os }}, ${{ matrix.cc }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, cc: gcc, cxx: g++ }
+          - { os: ubuntu-latest, cc: clang, cxx: clang++ }
+          - { os: macos-latest, cc: clang, cxx: clang++ }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: pedrobtz/zufast
+          path: .zufast
+      - name: Header gate
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+          ZUFAST_INCLUDE: ${{ github.workspace }}/.zufast/inst/include
+        run: |
+          $CC --version
+          tools/check-headers
+
+  symbol-audit:
+    name: symbol audit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          dependencies: '"hard"'
+          extra-packages: github::pedrobtz/zufast
+      - name: Design 16.1 compiled-code audit
+        run: tools/run-symbol-audit

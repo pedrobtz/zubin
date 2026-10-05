@@ -3,10 +3,19 @@
 #include <R_ext/Rdynload.h>
 #include <R_ext/Visibility.h>
 
+#include "zubin_r.h"
+
+#define CALLDEF(name, n) {#name, (DL_FUNC) &name, n}
+
 /* Every .Call entry point is listed here; nothing is registered with
    R_RegisterCCallable, because consumers include the headers instead
-   (design 4). The table grows with each stage. */
+   (design 4). */
 static const R_CallMethodDef call_methods[] = {
+    CALLDEF(zubin_info, 0),
+    CALLDEF(zubin_test_status_string, 1),
+    CALLDEF(zubin_test_rw, 3),
+    CALLDEF(zubin_test_rw_write, 3),
+    CALLDEF(zubin_test_cursor, 2),
     {NULL, NULL, 0}
 };
 

@@ -1,0 +1,63 @@
+#!/bin/sh
+# Design 16.1: the compiled-code audit. Builds the call-everything probe
+# (tools/abi/probe-all.c) into a shared object with R's own compiler and
+# flags, at R's optimisation level and at -O0, and fails if it references any
+# symbol R CMD check reports in compiled code. Because every zubin function
+# is compiled into each consumer, a hit here would be a NOTE in every
+# consumer's check, not in zubin's. Run from the package root.
+#
+# First a canary: the probe with a planted printf() must fail the audit, so a
+# pass means the scan looked (roadmap, principle 7).
+set -eu
+
+ROOT=$(pwd)
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+ZUFAST_INCLUDE=${ZUFAST_INCLUDE:-$(Rscript -e 'cat(system.file("include", package = "zufast"))')}
+if [ ! -f "$ZUFAST_INCLUDE/zufast.h" ]; then
+    echo "zufast headers not found: set ZUFAST_INCLUDE or install zufast"; exit 1
+fi
+
+# The scan is R's own: tools:::check_so_symbols() is what R CMD check's
+# "checking compiled code" runs, with this platform's table of symbol names
+# (glibc's fortified __printf_chk, Darwin's leading underscores, sprintf and
+# the C RNG included), so the audit cannot drift from the check it predicts.
+audit() {   # $1 label, $2 source; prints the hits, returns 1 when there are any
+    rm -f "$TMP"/*.o "$TMP"/*.so
+    cp "$2" "$TMP/probe.c"
+    (cd "$TMP" && PKG_CPPFLAGS="-I$ROOT/inst/include -I$ZUFAST_INCLUDE" R CMD SHLIB -o probe.so probe.c >build.log 2>&1) || {
+        cat "$TMP/build.log"; echo "FAIL: the probe did not build ($1)"; exit 1; }
+    Rscript -e '
+        so <- commandArgs(TRUE)[1L]; label <- commandArgs(TRUE)[2L]
+        tab <- tools:::check_so_symbols(so)
+        if (is.null(tab)) stop("no system ABI: the audit cannot run here")
+        hits <- unique(tab[, "ssname"])
+        if (length(hits) || length(attr(tab, "nonAPI"))) {
+            cat(sprintf("(%s) the probe references: %s\n", label,
+                        paste(c(hits, attr(tab, "nonAPI")), collapse = ", ")))
+            quit(status = 1L)
+        }
+        cat(sprintf("ok (%s): no symbol R CMD check reports\n", label))
+    ' "$TMP/probe.so" "$1"
+}
+
+{ cat tools/abi/probe-all.c
+  printf '#include <stdio.h>\nint zb_probe_canary(void);\nint zb_probe_canary(void) { return printf("%%d\\n", zb_probe_all()); }\n'
+} > "$TMP/canary.c"
+unset R_MAKEVARS_USER || true
+if audit canary "$TMP/canary.c" >/dev/null; then
+    echo "FAIL canary: a planted printf() passed the audit"; exit 1
+fi
+echo "ok (canary): a planted printf() fails the audit"
+
+fail=0
+for level in default O0; do
+    if [ "$level" = O0 ]; then
+        printf 'CFLAGS = -O0 -g\n' > "$TMP/Makevars"
+        export R_MAKEVARS_USER="$TMP/Makevars"
+    else
+        unset R_MAKEVARS_USER || true
+    fi
+    audit "$level" tools/abi/probe-all.c || fail=1
+done
+[ "$fail" -eq 0 ] && echo "symbol audit passed" || { echo "symbol audit FAILED"; exit 1; }

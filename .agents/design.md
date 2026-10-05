@@ -317,6 +317,13 @@ language does and is documented as such (a double that is exactly halfway betwee
 halfs after the first narrowing is a known double-rounding case; the test suite pins the
 behaviour rather than claiming single rounding).
 
+Two helpers sit beside the readers and writers. `zb_host_big_endian()` returns 1 on a
+big-endian host and is what `"native"` and the `=` prefix resolve to (§14.2). The double to
+float narrowing used by every f32, f16 and bf16 writer clamps a finite double beyond
+`FLT_MAX` itself, to `FLT_MAX` below the midpoint to 2^128 and to infinity from it, because
+the C conversion of an out-of-range finite double is undefined behaviour; the result is the
+IEEE rounding, and `writeBin(size = 4)` agrees with it on every tested value.
+
 ## 9. `buf.h` — the buffer
 
 ### 9.1 The struct
