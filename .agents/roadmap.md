@@ -769,6 +769,14 @@ version-stable object hash streamed through zufast's hasher (design §12.1, §13
 - `R_Serialize` never checks for an interrupt itself, so "an interrupt during a large
   serialisation" lands in a refhook's evaluation; the lifetime test uses a refhook that does
   R work per environment.
+- The committed digest failed on every Linux and Windows leg on its first CI run, and the
+  cause was the fixture, not the header skipping: it held `1e-300`, which R's parser on
+  macOS arm64 reads as `0x1.56e1fc2f8f355p-997`, four ulps from the correctly rounded
+  `…f359p-997` Linux reads, so the object hashed was a different object per platform. The
+  fixture's doubles are now exact (`2^-996`) and the digests were recomputed once, which is
+  the cross-version test working as intended: it found a value that was not portable.
+- The R fuzz targets failed to link on the runner: `R CMD config --ldflags` there names
+  `-lomp`, which is not installed. They link libR alone now, as r-actions' `fuzz.yml` does.
 - The libFuzzer targets embed R, which needed an `embed-r` input in r-actions' `fuzz.yml`
   (R installed, `R CMD config` flags, libR rpath, `-detect_leaks=0`) and R in the canaries
   job.

@@ -34,11 +34,13 @@ serialize_corpus <- function() {
 
 # The fixture for the committed digest: plain data only, nothing whose
 # serialization depends on the R that writes it (no closures, environments
-# or compact sequences).
+# or compact sequences), and every double exact: R's parser on macOS arm64
+# reads 1e-300 four ulps away from Linux's correctly rounded value, which
+# made the first version of this fixture a different object per platform.
 hash_fixture <- function() {
   list(
     ints = c(1L, -2L, NA, 2147483647L),
-    dbls = c(0.25, -1.5, NA, 1e-300),
+    dbls = c(0.25, -1.5, NA, 2^-996),
     chr = c("zubin", "", NA),
     lgl = c(TRUE, FALSE, NA),
     raw = as.raw(c(0, 127, 255)),
