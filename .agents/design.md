@@ -546,10 +546,10 @@ static inline zb_status zb_unpack_f64x(const uint8_t *base, size_t n, size_t str
 static inline zb_status zb_unpack_bytes(const uint8_t *base, size_t n, size_t stride, const zb_field *f, uint8_t *dst);              /* b s: n * size contiguous */
 
 /* The inverses. *bad receives the index of the first value that does not fit. */
-static inline zb_status zb_pack_i32  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const int32_t *src, int allow_na, size_t *bad);
-static inline zb_status zb_pack_f64  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const double  *src, size_t *bad);
-static inline zb_status zb_pack_i64  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const int64_t *src, size_t *bad);
-static inline void      zb_pack_bytes(uint8_t *base, size_t n, size_t stride, const zb_field *f, const uint8_t *src);
+static inline zb_status zb_pack_i32  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const int32_t *src, int allow_na, size_t *bad);  /* u8 i8 u16 i16 i32 bool */
+static inline zb_status zb_pack_f64  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const double  *src, int allow_na, size_t *bad);  /* every numeric type */
+static inline zb_status zb_pack_i64  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const int64_t *src, int allow_na, size_t *bad);  /* i64 u64 */
+static inline zb_status zb_pack_bytes(uint8_t *base, size_t n, size_t stride, const zb_field *f, const uint8_t *src);
 static inline void      zb_pack_zeros(uint8_t *base, size_t n, size_t stride, const zb_field *f);                                   /* x, and the alignment gaps */
 ```
 
@@ -557,6 +557,15 @@ Array fields (`count > 1`) are written **column-major**: element k of record i l
 `dst[k * n + i]`, which is R's matrix layout, so the R glue hands the kernel a matrix's
 data pointer and nothing is transposed afterwards. The kernels never see a `SEXP`; they are
 what a C consumer calls to decode a block of records into its own arrays.
+
+The pack kernels refuse rather than wrap (Stage 5): a value out of range, a fraction or an
+infinity written to an integer type is `ZB_ERR_RANGE`; R's missing-value markers, `INT32_MIN`
+in an `int32_t` column, a NaN in a `double` column bound for an integer type, and `INT64_MIN`
+in an `int64_t` column, are `ZB_ERR_NA`, except that `allow_na` lets `INT32_MIN` (and NaN)
+through to `i32` and `INT64_MIN` through to `i64`. `zb_pack_f64` writes every numeric type,
+because R's doubles carry most integers: it checks the range before any cast, since casting
+an out-of-range double is undefined. The R glue zeroes the whole output before the first
+field, so `zb_pack_zeros` is for C consumers that pack into memory they did not zero.
 
 Every unpack kernel returns a status (Stage 4): `ZB_ERR_INVALID` for a field of a type the
 kernel does not read, so a consumer that dispatches wrongly is told rather than handed
@@ -704,7 +713,9 @@ as.raw(b)         # the bytes as raw; the builder is unchanged
 ```
 
 `bin_put` appends a raw vector as it is (`type` must be `NULL`), or a vector encoded as
-`type` (required otherwise, so a double is never silently eight bytes), or a string as
+`type` (required otherwise, so a double is never silently eight bytes) by the same pack
+kernels, written straight into reserved space whose length is committed only after the
+last 64 MiB chunk, or a string as
 `"z"` (bytes plus a NUL) or `"s<n>"` (fixed width, NUL-padded). `max` is the hard cap of
 §9.3; exceeding it is `zubin_limit_error` and the builder is unchanged. The builder is an
 external pointer created through `zb_r_buf_new()` (§12); a finalized or taken builder that

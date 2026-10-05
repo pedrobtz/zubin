@@ -150,6 +150,11 @@ int zb_probe_all(void)
             acc += (int)zb_unpack_i64(buf, 1, l.size, &fields[2], i64, &bad);
             acc += (int)zb_unpack_f64x(buf, 1, l.size, &fields[2], f64, &bad);
             acc += (int)zb_unpack_bytes(buf, 1, l.size, &fields[3], bytes);
+            acc += (int)zb_pack_i32(buf, 1, l.size, &fields[0], i32, 0, &bad);
+            acc += (int)zb_pack_f64(buf, 1, l.size, &fields[1], f64, 0, &bad);
+            acc += (int)zb_pack_i64(buf, 1, l.size, &fields[2], i64, 0, &bad);
+            acc += (int)zb_pack_bytes(buf, 1, l.size, &fields[3], bytes);
+            zb_pack_zeros(buf, 1, l.size, &fields[3]);
         }
     }
 

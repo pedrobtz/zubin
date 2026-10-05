@@ -55,12 +55,17 @@ bin_builder <- function(reserve = 0, max = Inf) {
 #' Append bytes or strings to a builder
 #'
 #' Appends `x` to the end of the builder `b`. A raw vector is appended as it
-#' is. A character vector is appended with `type = "z"`, each string's UTF-8
-#' bytes followed by a NUL, or with `type = "s<n>"`, each string's UTF-8 bytes
-#' padded with NULs to exactly `n` bytes, the fixed-string field of a
-#' layout. Nothing is appended unless every element can be: an `NA`
-#' is a `zubin_na_error`, and a string longer than `n` bytes is a
-#' `zubin_range_error` carrying the 0-based `index` of the first one.
+#' is (`type = NULL`). Any other vector needs a `type`, so that a double is
+#' never silently eight bytes: a numeric, logical or `integer64` vector is
+#' encoded as [bin_encode()] would encode it (`"u32"`, `"f64"`, `"bool"`, ...),
+#' in `endian` order, written straight into the builder; a list of raw
+#' vectors as `"b<n>"`. A character vector is appended with `type = "z"`,
+#' each string's UTF-8 bytes followed by a NUL, or with `type = "s<n>"`, each
+#' string's UTF-8 bytes padded with NULs to exactly `n` bytes, the
+#' fixed-string field of [bin_layout()]. Nothing is appended unless every
+#' element can be: an `NA` is a `zubin_na_error`, and a value that does not
+#' fit its type is a `zubin_range_error`, each carrying the 0-based `index`
+#' of the first one.
 #'
 #' Appending past the builder's `max` is a `zubin_limit_error` carrying
 #' `size`, the size the builder would have reached, and `max`; the builder is
@@ -68,14 +73,17 @@ bin_builder <- function(reserve = 0, max = Inf) {
 #' interrupted append leaves the builder unchanged too.
 #'
 #' @param b A builder from [bin_builder()].
-#' @param x A raw vector, or a character vector with `type`.
-#' @param type `NULL` for raw input; `"z"` or `"s<n>"` for character input.
-#' @param endian Byte order, for typed appends.
+#' @param x A raw vector; or a vector to encode as `type`.
+#' @param type `NULL` for raw input; one type token of [bin_layout()]
+#'   otherwise; or `"z"` for NUL-terminated strings.
+#' @param endian Byte order of a typed append: `"little"`, `"big"` or
+#'   `"native"`.
 #' @return `b`, invisibly, so appends can be chained.
 #' @export
 #' @examples
 #' b <- bin_builder()
 #' bin_put(b, c("RIFF", "WAVE"), type = "s4")
+#' bin_put(b, c(1, 65535), type = "u16", endian = "big")
 #' bin_put(b, "a C string", type = "z")
 #' bin_take(b)
 bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
@@ -93,13 +101,20 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
     }
     width <- string_width(type)
     if (is.null(width)) {
-      invalid_argument(sprintf("Unknown or unsupported `type` \"%s\".", type), arg = "type")
+      # a numeric, bool or b<n> token: the pack kernels write it in place
+      layout <- type_layout(type, endian)
+      col <- pack_value(x, layout$fields$type, 1L, "x", sys.call())
+      is64 <- inherits(col, "integer64")
+      attributes(col) <- NULL
+      res <- .Call(zubin_builder_put_typed, ptr, layout$spec, col, is64)
+      n <- length(col) * bin_size(layout)
+    } else {
+      if (!is.character(x)) {
+        invalid_argument(sprintf("`x` must be character for type \"%s\".", type), arg = "x")
+      }
+      res <- .Call(zubin_builder_put_str, ptr, x, width)
+      n <- if (width < 0L) sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1) else length(x) * width
     }
-    if (!is.character(x)) {
-      invalid_argument(sprintf("`x` must be character for type \"%s\".", type), arg = "x")
-    }
-    res <- .Call(zubin_builder_put_str, ptr, x, width)
-    n <- if (width < 0L) sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1) else length(x) * width
   }
   if (is_status(res)) builder_fail(res, b, n, x)
   invisible(b)
@@ -216,6 +231,7 @@ builder_state <- function(b, call = sys.call(-1L)) {
 builder_fail <- function(res, b, n, x = NULL, call = sys.call(-1L)) {
   name <- as.character(res)
   index <- attr(res, "index")
+  if (is.null(index)) index <- NA_real_
   switch(name,
     ZB_ERR_LIMIT = {
       s <- builder_state(b, call)
@@ -225,9 +241,13 @@ builder_fail <- function(res, b, n, x = NULL, call = sys.call(-1L)) {
     },
     ZB_ERR_NA = zb_fail(res, sprintf("`x[%s]` is NA, which has no bytes.", index + 1),
                         field = NA_character_, index = index, call = call),
-    ZB_ERR_RANGE = zb_fail(res, sprintf("`x[%s]` is longer than the field.", index + 1),
+    ZB_ERR_RANGE = zb_fail(res, sprintf("`x[%s]` does not fit the type.", index + 1),
                            field = NA_character_, index = index, call = call),
-    ZB_ERR_INVALID = builder_state(b, call),
+    ZB_ERR_INVALID = {
+      builder_state(b, call)
+      zb_fail(res, sprintf("`x[%s]` cannot be written as this type.", index + 1),
+              field = NA_character_, index = index, call = call)
+    },
     zb_fail(res, "Could not allocate the builder's storage.", call = call)
   )
 }

@@ -40,7 +40,7 @@ double, logical, character, or a list of raw vectors for \verb{b<n>}.
 \description{
 \code{bin_decode()} reads \code{n} consecutive values of one type from the raw
 vector \code{x}, starting at the 0-based byte \code{offset}: \code{bin_decode(x, "u32", offset = 4)} is a header field, \code{bin_decode(x, "f32", offset = 64, n = 1e6)} is a column. It is \code{\link[=readBin]{readBin()}} generalised to every width and both
-byte orders, exact or an error; \code{bin_encode()} is its inverse. Offsets are
+byte orders, exact or an error; \code{\link[=bin_encode]{bin_encode()}} is its inverse. Offsets are
 0-based.
 }
 \examples{
