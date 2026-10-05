@@ -61,7 +61,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
             if (slen + add > SHADOW) break;
             /* the shadow takes the new bytes from the buffer, then the old
                ones must still match: an append never disturbs what was there */
-            memcpy(shadow + slen, b.data + before, add);
+            if (add) memcpy(shadow + slen, b.data + before, add);   /* data is NULL until the first growth */
             slen += add;
         }
         FUZZ_CHECK(slen == b.len);

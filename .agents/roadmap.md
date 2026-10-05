@@ -538,7 +538,9 @@ trust.
   check between chunks, and commits `len` only at the end; on failure nothing is appended.
 - `fuzz_buf` keeps a shadow copy of the buffer by plain `memcpy` and checks the bytes,
   `len <= cap <= max` and `ZB_BUF_HIT_LIMIT` after every step. Its first crash was the
-  harness's own mistake (a refused reserve checked against the append size).
+  harness's own mistake (a refused reserve checked against the append size), and so was its
+  first CI finding: the shadow copy did `memcpy(shadow, b.data + len, 0)` while `b.data` was
+  still `NULL`, which UBSan reports once it cannot recover. The input is now a seed.
 - `bin_pack()` accepts the data frame `bin_unpack()` returns, array fields as `name.k`
   columns included, so `expect_roundtrip()` checks both directions in both shapes.
 
