@@ -18,26 +18,27 @@ if [ ! -f "$ZUFAST_INCLUDE/zufast.h" ]; then
     echo "zufast headers not found: set ZUFAST_INCLUDE or install zufast"; exit 1
 fi
 
-# What R CMD check's "checking compiled code" looks for (tools:::check_so_symbols):
-# termination, the C stdio streams and printing, and the C library's RNG.
-FORBIDDEN='abort|__assert_fail|__assert_rtn|_assert|exit|_exit|_Exit|quick_exit|printf|vprintf|puts|putchar|stdout|stderr|__stdoutp|__stderrp|_stdout|_stderr|rand|srand|random|srandom|rand_r|drand48|srand48'
-
+# The scan is R's own: tools:::check_so_symbols() is what R CMD check's
+# "checking compiled code" runs, with this platform's table of symbol names
+# (glibc's fortified __printf_chk, Darwin's leading underscores, sprintf and
+# the C RNG included), so the audit cannot drift from the check it predicts.
 audit() {   # $1 label, $2 source; prints the hits, returns 1 when there are any
     rm -f "$TMP"/*.o "$TMP"/*.so
     cp "$2" "$TMP/probe.c"
     (cd "$TMP" && PKG_CPPFLAGS="-I$ROOT/inst/include -I$ZUFAST_INCLUDE" R CMD SHLIB -o probe.so probe.c >build.log 2>&1) || {
         cat "$TMP/build.log"; echo "FAIL: the probe did not build ($1)"; exit 1; }
-    case "$(uname -s)" in
-        Darwin) syms=$(nm -u "$TMP/probe.so" | sed 's/^_//') ;;
-        *)      syms=$(nm -u "$TMP/probe.so" | awk '{print $NF}' | sed 's/@.*//') ;;
-    esac
-    hits=$(printf '%s\n' "$syms" | grep -xE "($FORBIDDEN)" || true)
-    if [ -n "$hits" ]; then
-        echo "($1) the probe references:"
-        printf '    %s\n' $hits
-        return 1
-    fi
-    echo "ok ($1): $(printf '%s\n' "$syms" | grep -c . | tr -d ' ') undefined symbols, none forbidden"
+    Rscript -e '
+        so <- commandArgs(TRUE)[1L]; label <- commandArgs(TRUE)[2L]
+        tab <- tools:::check_so_symbols(so)
+        if (is.null(tab)) stop("no system ABI: the audit cannot run here")
+        hits <- unique(tab[, "ssname"])
+        if (length(hits) || length(attr(tab, "nonAPI"))) {
+            cat(sprintf("(%s) the probe references: %s\n", label,
+                        paste(c(hits, attr(tab, "nonAPI")), collapse = ", ")))
+            quit(status = 1L)
+        }
+        cat(sprintf("ok (%s): no symbol R CMD check reports\n", label))
+    ' "$TMP/probe.so" "$1"
 }
 
 { cat tools/abi/probe-all.c

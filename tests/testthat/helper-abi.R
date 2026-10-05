@@ -11,6 +11,9 @@ exported_symbols <- function(path) {
   }
   syms <- sub("^.* ", "", out)
   syms <- sub("^_(R_init)", "\\1", syms)
+  # Coverage builds link an instrumentation runtime that exports its own
+  # symbols (gcov's, LLVM's profile runtime); they are not zubin's.
+  syms <- syms[!grepl("^_*(gcov|llvm_prf|llvm_profile|llvm_gcov)", syms)]
   # Linker-defined section markers are not code.
   setdiff(syms, c("", "_edata", "_end", "__bss_start", "_init", "_fini",
                   "__end__", "__bss_start__", "_bss_end__", "__bss_end__"))

@@ -255,6 +255,13 @@ before any feature rides on it.
   (§14.3 names only `i32` and `f64` today).
 - `devtools::test(shuffle = TRUE)` shuffles top-level code too, so objects shared by tests
   (`base_endian`, the mixed cursor record) belong in `helper-*.R`, not at file scope.
+- The planted-`printf` canary failed on its first Linux run: glibc's `_FORTIFY_SOURCE`
+  turns `printf()` into `__printf_chk`, which zufast's hand-written list of forbidden names
+  does not contain (nor `sprintf`). The audit now asks R itself,
+  `tools:::check_so_symbols()`, which is what `R CMD check` runs, with the platform's own
+  table. The canary earned its keep on day one.
+- `test-abi.R` drops the gcov and LLVM profile runtimes' exported symbols, which the native
+  coverage build links in, instead of skipping the test there.
 - `abi.yaml` checks out `pedrobtz/zufast` for the header gate and installs it for the symbol
   audit; both go away only when zufast's headers are reachable another way (never: the gate
   needs them).
