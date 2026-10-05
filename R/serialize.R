@@ -89,7 +89,10 @@ bin_unserialize <- function(x, offset = 0, refhook = NULL) {
 #'
 #' It is a fingerprint, not a cryptographic digest: fast, and well
 #' distributed, but not a defence against someone choosing inputs to
-#' collide. `version = 2`, the default, writes compact sequences such as
+#' collide. The digest is the same on every platform R runs on, with one
+#' exception: on 32-bit x86 a double `NA` is stored with different bits, so an
+#' object holding one hashes differently there. `version = 2`, the default,
+#' writes compact sequences such as
 #' `1:10` as the vectors they are; `version = 3` writes their compact form,
 #' so the same values may then hash differently.
 #'

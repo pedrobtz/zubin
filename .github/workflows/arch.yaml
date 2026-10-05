@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   arch:
-    uses: pedrobtz/r-actions/.github/workflows/arch.yml@26e45df7fdb1d57c083bad840b1dadc7ac78565b # v1.20.0
+    uses: pedrobtz/r-actions/.github/workflows/arch.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
     with:
       targets: >-
         [{"name": "i386", "platform": "linux/386",

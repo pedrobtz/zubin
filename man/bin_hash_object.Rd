@@ -28,7 +28,10 @@ encoding). Two objects with the same digest have the same serialization.
 \details{
 It is a fingerprint, not a cryptographic digest: fast, and well
 distributed, but not a defence against someone choosing inputs to
-collide. \code{version = 2}, the default, writes compact sequences such as
+collide. The digest is the same on every platform R runs on, with one
+exception: on 32-bit x86 a double \code{NA} is stored with different bits, so an
+object holding one hashes differently there. \code{version = 2}, the default,
+writes compact sequences such as
 \code{1:10} as the vectors they are; \code{version = 3} writes their compact form,
 so the same values may then hash differently.
 }

@@ -775,7 +775,13 @@ version-stable object hash streamed through zufast's hasher (design §12.1, §13
   macOS arm64 reads as `0x1.56e1fc2f8f355p-997`, four ulps from the correctly rounded
   `…f359p-997` Linux reads, so the object hashed was a different object per platform. The
   fixture's doubles are now exact (`2^-996`) and the digests were recomputed once, which is
-  the cross-version test working as intended: it found a value that was not portable.
+  the cross-version test working as intended: it found a value that was not portable. The
+  arch run then failed on i386 alone (s390x, on the same Debian R 4.2.2, agreed): R's
+  `NA_real_` carries a signalling NaN's bits, which 32-bit x86's x87 unit quiets when it loads
+  them, so i386 serialises a double `NA` as different bytes. The fixture keeps `NA` in its
+  integer, logical and character elements and none in its doubles (fixed in Stage 11's PR).
+  `bin_hash_object()` of an object holding a double `NA` therefore differs on i386, which
+  `?bin_hash_object` says.
 - The R fuzz targets failed to link on the runner: `R CMD config --ldflags` there names
   `-lomp`, which is not installed. They link libR alone now, as r-actions' `fuzz.yml` does.
 - The libFuzzer targets embed R, which needed an `embed-r` input in r-actions' `fuzz.yml`
