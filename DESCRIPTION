@@ -1,14 +1,36 @@
 Package: zubin
-Title: What the Package Does (One Line, Title Case)
+Title: Read and Write Structured Binary Data
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Pedro", "Baltazar", , "pedrobtz@gmail.com", role = c("aut", "cre", "cph"))
+Description: Describe a fixed binary record once, as a layout, and read or
+    write millions of them in one vectorised call: integers from 8 to 64
+    bits, half, brain and single and double precision floats, booleans,
+    fixed bytes and fixed strings, padding, arrays and C struct alignment,
+    in either byte order. Typed codecs convert whole vectors to and from
+    bytes at every width and byte order, refusing rather than rounding a
+    value that does not fit, and a growable byte builder with a hard cap
+    appends without quadratic copying. The same buffer, cursor, typed reads
+    and writes and layout kernels are a header-only C library that other
+    packages use through 'LinkingTo' alone.
 License: MIT + file LICENSE
-Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 8.0.0
+URL: https://pedrobtz.github.io/zubin/, https://github.com/pedrobtz/zubin
+BugReports: https://github.com/pedrobtz/zubin/issues
+Depends: 
+    R (>= 4.1)
+LinkingTo: 
+    zufast (>= 0.1.0)
 Suggests: 
-    testthat (>= 3.0.0)
+    bit64,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    withr
+VignetteBuilder: knitr
+Remotes: 
+    pedrobtz/zufast@main
 Config/testthat/edition: 3
-URL: https://pedrobtz.github.io/zubin/
+Encoding: UTF-8
+Language: en-GB
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0

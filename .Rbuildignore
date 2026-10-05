@@ -4,3 +4,12 @@
 ^docs$
 ^pkgdown$
 ^\.agents$
+^\.claude$
+^tools$
+^cran-comments\.md$
+^vignettes/articles$
+^CRAN-SUBMISSION$
+^src/.*\.o$
+^src/.*\.so$
+^src/.*\.dll$
+^src/.*\.dylib$
