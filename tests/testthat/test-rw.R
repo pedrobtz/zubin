@@ -140,5 +140,5 @@ test_that("doubles beyond the float range narrow by rounding, not by undefined b
                    bytes(rep(c("ff ff 7f 7f", "00 00 80 7f"), each = 3L)))
   expect_identical(rw_write("f32", "le", -x),
                    bytes(rep(c("ff ff 7f ff", "00 00 80 ff"), each = 3L)))
-  expect_identical(rw_write("f32", "le", x), writeBin(x, raw(), size = 4L))
+  expect_identical(rw_write("f32", "le", x), writeBin(x, raw(), size = 4L, endian = "little"))
 })

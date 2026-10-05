@@ -475,6 +475,13 @@ model in the reading direction, and the golden vectors proven on a big-endian ho
 - `arch.yaml` cannot use r-actions' dependency resolution for zufast either: each leg
   downloads zufast's `main` tarball from GitHub and installs it, which needed
   `ca-certificates` in the images.
+- The s390x leg's first run: all 34 golden vectors decoded identically on the big-endian
+  host, and it caught one test comparing little-endian output with `writeBin()`'s default,
+  which is the *native* order. The i386 leg (R 4.2) caught three portability bugs in tests:
+  `DLLInfo` has no `forceSymbols` before R 4.3, `sample()` cannot hold the whole `int`
+  range on a 32-bit build, and `rawToChar()` gives a native string that the check's C
+  locale cannot translate to UTF-8. `arch.yaml` sets `_R_CHECK_TESTS_NLINES_=0` so a failing
+  leg shows its whole test output.
 - The interrupt test interrupts an unpack of 64 string fields over 200 000 records (one
   interrupt check per field, never inside a kernel), then unpacks the same input in full.
 
