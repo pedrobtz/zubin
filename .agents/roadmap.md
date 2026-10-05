@@ -198,7 +198,7 @@ and build hygiene, so every later stage is measured against a clean 0/0/0.
 
 ## Stage 1 — Layer 0: status, version, rw, cursor; the header gate · M
 
-**Status:** not started.
+**Status:** done (#5).
 
 **Goal:** the first four headers exist, compile standalone under the gate, and are
 exercised through the package's own shared object; the delivery mechanism of §4 is proven
@@ -233,6 +233,31 @@ before any feature rides on it.
 - The cursor is unchanged on every failure, at every position, for every type.
 
 **Not this stage:** `buf.h`, `layout.h`, anything a user calls except `bin_info()`.
+
+**What actually happened**
+
+- The zufast version check lives in `detail/portability.h`, which every header includes
+  first, not only in `zubin.h`: a consumer that includes `<zubin/cursor.h>` alone gets it too.
+- `zb_status_string()` returns the enumerator's name (`"ZB_ERR_EOF"`), so the R side maps
+  statuses to classes by name (`zb_status_class` in `R/conditions.R`) with no table of
+  numbers to keep in step.
+- `rw.h` gained `zb_host_big_endian()` and an internal double-to-float narrowing that
+  clamps out-of-range finite doubles itself (the C conversion is undefined there); design §8
+  now says so.
+- Both gate scripts carry their canaries inside them, so every CI run re-proves them: the
+  header gate compiles an unused plain `static` function (must fail) beside a `static
+  inline` control (must pass) and fires its R-API and allocation greps on a planted header;
+  the symbol audit builds the probe with a planted `printf()` and must fail before it audits
+  the real one. The gate also enforces design §5's "no allocation outside `buf.h`".
+- The harness returns 64-bit integers as their bit pattern in a double, which is bit64's
+  representation; that exposed that **bit64 reads −2^63 as `NA_integer64_`**. The reader is
+  right to return the bits; what `int64 = "integer64"` does with −2^63 is a Stage 4 decision
+  (§14.3 names only `i32` and `f64` today).
+- `devtools::test(shuffle = TRUE)` shuffles top-level code too, so objects shared by tests
+  (`base_endian`, the mixed cursor record) belong in `helper-*.R`, not at file scope.
+- `abi.yaml` checks out `pedrobtz/zufast` for the header gate and installs it for the symbol
+  audit; both go away only when zufast's headers are reachable another way (never: the gate
+  needs them).
 
 ---
 

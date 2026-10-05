@@ -33,9 +33,12 @@ commit.
 
 ## Current state
 
-Stage 0 is done: the package checks clean with an empty registration table, `zufast` is
-resolved through `Remotes: pedrobtz/zufast@main` (removed at Stage 9, once zufast is on
-CRAN), and the condition helpers exist. No header exists yet; Stage 1 adds layer 0.
+Stages 0 and 1 are done. Layer 0 exists: `inst/include/zubin.h` and `zubin/{version,status,
+rw,cursor}.h`, compiled standalone by `tools/check-headers` (needs `ZUFAST_INCLUDE` or an
+installed zufast) and audited by `tools/run-symbol-audit`, both in `abi.yaml`. The only user
+function is `bin_info()`. `src/zubin_test.c` drives the headers from `tests/testthat/` via
+`zubin_test_*` entry points. `zufast` is resolved through `Remotes: pedrobtz/zufast@main`
+(removed at Stage 9, once zufast is on CRAN). Next: Stage 2, the buffer and the builder.
 
 ## Commands
 
@@ -95,6 +98,9 @@ Allocation and errors:
 - Self-sufficient, byte-explicit (hex strings through `bytes()`), assert on condition
   classes never messages, pass under `devtools::test(shuffle = TRUE)`, serial (no
   `Config/testthat/parallel`, so gctorture and valgrind instrument this package's C).
+- Shuffling reorders top-level code as well as tests: anything two tests share goes in a
+  `helper-*.R` file, never at file scope in a `test-*.R`.
+- Compare doubles bit for bit with `bits()` when NaN payloads or `-0` matter.
 - Exhaustive sweeps and big buffers sit behind `ZUBIN_SLOW_TESTS=true`; tests that
   allocate heavily call `skip_heavy()` (`ZUBIN_SKIP_HEAVY`, set by the gctorture leg).
 - Design §13.1, the roxygen table and the tests are the same table three times.

@@ -31,3 +31,16 @@ zubin_abort <- function(message, class = character(), ..., call = sys.call(-1L))
 invalid_argument <- function(message, ..., call = sys.call(-1L)) {
   zubin_abort(message, "zubin_invalid_argument", ..., call = call)
 }
+
+# zb_status enumerator names (zb_status_string() in C) to condition classes.
+# Keyed by name, never by number, so a renumbered enum cannot silently remap
+# a class. ZB_OK is absent: success never reaches zubin_abort().
+zb_status_class <- c(
+  ZB_ERR_INVALID = "zubin_invalid_argument",
+  ZB_ERR_EOF     = "zubin_bounds_error",
+  ZB_ERR_RANGE   = "zubin_range_error",
+  ZB_ERR_MEMORY  = "zubin_memory_error",
+  ZB_ERR_LIMIT   = "zubin_limit_error",
+  ZB_ERR_SPEC    = "zubin_spec_error",
+  ZB_ERR_NA      = "zubin_na_error"
+)
