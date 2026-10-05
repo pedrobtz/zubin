@@ -10,6 +10,11 @@ test_that("the shared object exports exactly R_init_zubin", {
   path <- getLoadedDLLs()[["zubin"]][["path"]]
   syms <- exported_symbols(path)
   skip_if(is.null(syms))
+  # A coverage build links an instrumentation runtime (libgcov, LLVM's
+  # profile runtime) that exports symbols of its own, not all of them
+  # recognisable by name; that is not the shared object CRAN builds, and
+  # every R-CMD-check leg runs this test on one that is.
+  skip_if(any(grepl("gcov|llvm_prf|llvm_profile", syms)), "instrumented build")
   expect_identical(syms, "R_init_zubin")
 })
 

@@ -260,8 +260,10 @@ before any feature rides on it.
   does not contain (nor `sprintf`). The audit now asks R itself,
   `tools:::check_so_symbols()`, which is what `R CMD check` runs, with the platform's own
   table. The canary earned its keep on day one.
-- `test-abi.R` drops the gcov and LLVM profile runtimes' exported symbols, which the native
-  coverage build links in, instead of skipping the test there.
+- The native coverage build links libgcov, which exports `__gcov_*` and also `mangle_path`;
+  `test-abi.R` skips on an instrumented object (one exporting any gcov or LLVM profile
+  symbol) rather than guessing the runtime's names, since every `R-CMD-check` leg runs it on
+  the object CRAN builds.
 - `abi.yaml` checks out `pedrobtz/zufast` for the header gate and installs it for the symbol
   audit; both go away only when zufast's headers are reachable another way (never: the gate
   needs them).
