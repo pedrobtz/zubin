@@ -376,7 +376,10 @@ static inline zb_status zb_buf_reserve(zb_buf *b, size_t extra);   /* room for l
 
 `reserve` is the only place that reallocates. Growth doubles until 64 MiB and grows by half
 after that, never below `len + extra`, never below 256 bytes, never above `max` when set
-(the last growth is clamped to `max`, so a buffer can fill to exactly its cap). Every size
+(the last growth is clamped to `max`, so a buffer can fill to exactly its cap), and never
+above `PTRDIFF_MAX` (`ZB_BUF_MAX_CAP`), the largest object C allows: a larger request is
+`ZB_ERR_MEMORY` before the allocator is asked. GCC's `-Walloc-size-larger-than` found the
+missing bound at Stage 2. Every size
 computation goes through `zb_int_add()` and `zb_int_mul()`, which return `ZB_ERR_MEMORY`
 instead of wrapping (zukomp's `zu_buf.c` rule: there is no bare size arithmetic anywhere).
 A request that would exceed `max` returns `ZB_ERR_LIMIT`, sets `ZB_BUF_HIT_LIMIT`, and

@@ -95,11 +95,15 @@ jobs:
             echo "::error::rchk could not install the package, so nothing was analysed"
             exit 1
           fi
-          # rchk prints one line per checked function only for findings; it
-          # always prints its version footer when it ran.
+          # It always prints its version footer when it ran.
           grep -q '^Rchk version' rchk-output.txt || { echo "::error::no rchk footer: did it run?"; exit 1; }
-          if grep -qE '^Function |\[(UP|PB|UPB)\]|Suspicious call|too many states' rchk-output.txt; then
+          # Findings as r-actions' rchk.yml parses them: rchk's diagnostic
+          # tags, or "unprotected" in a maacheck WARNING. "too many states"
+          # names R's own functions that rchk gave up on, never findings.
+          if grep -v '^ERROR: too many states' rchk-output.txt |
+              grep -E '\[(UP|PB|UPB)\]|unprotected|negative depth|imbalanced'; then
             echo "::error::rchk reported findings"
             exit 1
           fi
+          grep 'too many states' rchk-output.txt || true
           echo "rchk: no findings"

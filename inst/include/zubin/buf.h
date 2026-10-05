@@ -51,6 +51,9 @@
 #define ZB_BUF_DOUBLING_LIMIT ((size_t)64 * 1024 * 1024)
 /* The smallest capacity a growable buffer allocates. */
 #define ZB_BUF_MIN_CAP ((size_t)256)
+/* The largest capacity: no C object is larger than PTRDIFF_MAX, and asking
+   malloc or realloc for more is refused before it is asked. */
+#define ZB_BUF_MAX_CAP ((size_t)PTRDIFF_MAX)
 
 typedef struct zb_buf {
     uint8_t *data;
@@ -81,15 +84,18 @@ ZB_INLINE zb_status zb_int_mul(size_t a, size_t b, size_t *out)
 /* The capacity to grow `cap` to so that it holds `need` bytes: double below
    ZB_BUF_DOUBLING_LIMIT, half again from it, never below need or
    ZB_BUF_MIN_CAP, and clamped to max when max is set (the caller has checked
-   need <= max). */
+   need <= max) and to ZB_BUF_MAX_CAP. ZB_ERR_MEMORY when need is above
+   ZB_BUF_MAX_CAP. */
 ZB_INLINE zb_status zb_int_grow(size_t cap, size_t need, size_t max, size_t *out)
 {
     size_t next;
+    if (need > ZB_BUF_MAX_CAP) return ZB_ERR_MEMORY;
     if (cap < ZB_BUF_DOUBLING_LIMIT) {
         next = cap * 2;   /* cannot wrap: cap is below 64 MiB */
     } else if (zb_int_add(cap, cap / 2, &next)) {
-        next = (size_t)-1;
+        next = ZB_BUF_MAX_CAP;
     }
+    if (next > ZB_BUF_MAX_CAP) next = ZB_BUF_MAX_CAP;
     if (next < need) next = need;
     if (next < ZB_BUF_MIN_CAP) next = ZB_BUF_MIN_CAP;
     if (max && next > max) next = max;
@@ -123,6 +129,7 @@ ZB_INLINE zb_status zb_buf_alloc(zb_buf *b, size_t cap, size_t max)
 {
     zb_buf_init(b);
     if (max && cap > max) return ZB_ERR_LIMIT;
+    if (cap > ZB_BUF_MAX_CAP) return ZB_ERR_MEMORY;
     if (cap) {
         b->data = (uint8_t *)malloc(cap);
         if (!b->data) return ZB_ERR_MEMORY;
@@ -193,7 +200,10 @@ ZB_INLINE zb_status zb_buf_reserve(zb_buf *b, size_t extra)
         b->flags |= ZB_BUF_HIT_LIMIT;
         return ZB_ERR_LIMIT;
     }
-    zb_int_grow(b->cap, need, b->max, &next);
+    if (zb_int_grow(b->cap, need, b->max, &next)) {
+        b->flags &= ~ZB_BUF_HIT_LIMIT;
+        return ZB_ERR_MEMORY;
+    }
     p = (uint8_t *)realloc(b->data, next);
     if (!p) {
         b->flags &= ~ZB_BUF_HIT_LIMIT;

@@ -336,6 +336,15 @@ is Stage 5.
   into the image's library (in the mounted directory) with the image's `R` passthrough, then
   runs rchk with r-actions' failure detection, made blocking on any finding. It goes back
   to the reusable workflow at Stage 9.
+- CI found three things the local build could not. GCC's `-Walloc-size-larger-than`
+  proved a `realloc(SIZE_MAX)` reachable after overflow in `zb_int_grow()` (a WARNING on
+  every GCC leg, Windows included): growth is now bounded by `ZB_BUF_MAX_CAP`
+  (`PTRDIFF_MAX`) and refuses before asking. rchk found an unprotected result across
+  `zb_r_buf_free()` in the harness, because `zb_r_buf_get()` called `Rf_install()`; it now
+  compares the tag by name and allocates nothing, so consumers need not protect around it.
+  And it flagged `zubin_int_status()`'s unprotected `Rf_setAttrib()` arguments.
+- The first bespoke rchk run failed on "too many states" lines, which name R's own
+  functions rchk gives up on; the gate now parses findings as r-actions' `rchk.yml` does.
 - R's headers on 4.6 use a C23 fixed-underlying-type enum (`R_ext/Boolean.h`), so the
   `zubin-r.h` probe compiles as gnu17 without `-Wpedantic`, in C and C++11; the `abi.yaml`
   header jobs now set up R for it.

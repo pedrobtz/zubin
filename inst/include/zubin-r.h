@@ -88,10 +88,15 @@ ZB_INLINE SEXP zb_r_buf_new(size_t reserve, size_t max, zb_status *st)
 }
 
 /* The buffer behind ptr; NULL when ptr is not one of these buffers or has
-   been freed (eagerly, or because it was serialized and restored). */
+   been freed (eagerly, or because it was serialized and restored). Allocates
+   nothing, so its caller need protect nothing around it: the tag is compared
+   by name rather than through Rf_install(). */
 ZB_INLINE zb_buf *zb_r_buf_get(SEXP ptr)
 {
-    if (TYPEOF(ptr) != EXTPTRSXP || R_ExternalPtrTag(ptr) != zb_r_int_buf_tag()) return NULL;
+    SEXP tag;
+    if (TYPEOF(ptr) != EXTPTRSXP) return NULL;
+    tag = R_ExternalPtrTag(ptr);
+    if (TYPEOF(tag) != SYMSXP || strcmp(CHAR(PRINTNAME(tag)), "zubin_buf") != 0) return NULL;
     return (zb_buf *)R_ExternalPtrAddr(ptr);
 }
 

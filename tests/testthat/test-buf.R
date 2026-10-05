@@ -61,5 +61,5 @@ test_that("typed appends equal the writers of rw.h, one at a time or vectorised"
 test_that("the corners of buf.h hold", {
   checks <- .Call(zubin_test_buf_misc)
   expect_true(all(checks), label = paste(names(checks)[!checks], collapse = ", "))
-  expect_length(checks, 12L)
+  expect_length(checks, 13L)
 })

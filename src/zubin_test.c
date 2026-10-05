@@ -422,9 +422,9 @@ SEXP zubin_test_buf_put(SEXP type, SEXP endian, SEXP values, SEXP vectorised)
         UNPROTECT(1);
         return zubin_int_status(st, -1);
     }
-    out = zb_r_buf_to_raw(b);
+    out = PROTECT(zb_r_buf_to_raw(b));
     zb_r_buf_free(ptr);
-    UNPROTECT(1);
+    UNPROTECT(2);
     return out;
 }
 
@@ -433,7 +433,7 @@ SEXP zubin_test_buf_misc(void)
 {
     const char *names[] = {"add_overflow", "mul_overflow", "mul_zero", "alloc_over_max",
                            "reserve_overflow", "grow_rule", "put_raw_empty", "detach",
-                           "detach_borrowed", "release_twice", "n_overflow", "fill_to_max", ""};
+                           "detach_borrowed", "release_twice", "n_overflow", "fill_to_max", "max_cap", ""};
     SEXP out = PROTECT(Rf_mkNamed(LGLSXP, names));
     int *ok = LOGICAL(out);
     size_t r = 0;
@@ -487,6 +487,16 @@ SEXP zubin_test_buf_misc(void)
     zb_buf_alloc(&b, 0, 1000);
     while (zb_put_u8(&b, 7) == ZB_OK) {}
     ok[11] = b.len == 1000 && b.cap == 1000 && (b.flags & ZB_BUF_HIT_LIMIT);
+    zb_buf_release(&b);
+
+    /* nothing is ever asked of the allocator above PTRDIFF_MAX */
+    zb_int_grow(ZB_BUF_DOUBLING_LIMIT * 2, ZB_BUF_MAX_CAP, 0, &g1);
+    ok[12] = zb_int_grow(0, ZB_BUF_MAX_CAP + 1, 0, &g2) == ZB_ERR_MEMORY &&
+             g1 == ZB_BUF_MAX_CAP &&
+             zb_buf_alloc(&b, ZB_BUF_MAX_CAP + 1, 0) == ZB_ERR_MEMORY && b.data == NULL;
+    zb_buf_alloc(&b, 0, 0);
+    zb_put_u8(&b, 1);
+    ok[12] = ok[12] && zb_buf_reserve(&b, ZB_BUF_MAX_CAP) == ZB_ERR_MEMORY && b.len == 1;
     zb_buf_release(&b);
 
     UNPROTECT(1);

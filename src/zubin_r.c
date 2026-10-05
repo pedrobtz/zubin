@@ -14,9 +14,14 @@ long zubin_int_live_buffers = 0;
 SEXP zubin_int_status(zb_status st, R_xlen_t index)
 {
     SEXP out = PROTECT(Rf_mkString(zb_status_string(st)));
-    Rf_setAttrib(out, R_ClassSymbol, Rf_mkString("zubin_status"));
-    if (index >= 0) Rf_setAttrib(out, Rf_install("index"), Rf_ScalarReal((double)index));
-    UNPROTECT(1);
+    SEXP cls = PROTECT(Rf_mkString("zubin_status"));
+    Rf_setAttrib(out, R_ClassSymbol, cls);
+    if (index >= 0) {
+        SEXP v = PROTECT(Rf_ScalarReal((double)index));
+        Rf_setAttrib(out, Rf_install("index"), v);
+        UNPROTECT(1);
+    }
+    UNPROTECT(2);
     return out;
 }
 

@@ -112,7 +112,7 @@ int zb_probe_all(void)
         zb_buf_borrow(&b, buf, sizeof buf);
         zb_buf_release(&b);
         acc += (int)zb_int_add(1, 2, &r) + (int)zb_int_mul(3, 4, &r) + (int)r;
-        acc += (int)(ZB_BUF_DOUBLING_LIMIT > ZB_BUF_MIN_CAP);
+        acc += (int)(ZB_BUF_DOUBLING_LIMIT > ZB_BUF_MIN_CAP && ZB_BUF_MAX_CAP > ZB_BUF_MIN_CAP);
     }
 
     /* zufast/utf8.h, re-exported by the umbrella */
