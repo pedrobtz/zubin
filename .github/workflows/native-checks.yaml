@@ -45,12 +45,7 @@ jobs:
   analyzers:
     uses: pedrobtz/r-actions/.github/workflows/analyzers.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
 
-  # zufast (LinkingTo) is on neither CRAN nor Bioconductor until Stage 9, and
-  # those are all the rchk image installs from: github-packages installs it
-  # into the image first. Drop that input once zufast is on CRAN.
   rchk:
     uses: pedrobtz/r-actions/.github/workflows/rchk.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
     with:
       fail-on-findings: true
-      github-packages: |
-        pedrobtz/zufast

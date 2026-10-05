@@ -13,14 +13,11 @@ library that other packages use through `LinkingTo`.
 
 ## Installation
 
-Once zubin is on CRAN:
-
 ``` r
 install.packages("zubin")
 ```
 
-The development version, which also needs the development version of
-[zufast](https://github.com/pedrobtz/zufast) until that is on CRAN:
+or the development version from GitHub:
 
 ``` r
 # install.packages("pak")

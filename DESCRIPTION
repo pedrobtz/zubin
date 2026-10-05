@@ -1,6 +1,6 @@
 Package: zubin
 Title: Read and Write Structured Binary Data
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: 
     person("Pedro", "Baltazar", , "pedrobtz@gmail.com",
            role = c("aut", "cre", "cph"))
@@ -28,8 +28,6 @@ Suggests:
     testthat (>= 3.0.0),
     withr
 VignetteBuilder: knitr
-Remotes: 
-    pedrobtz/zufast@main
 Config/testthat/edition: 3
 Encoding: UTF-8
 Language: en-GB

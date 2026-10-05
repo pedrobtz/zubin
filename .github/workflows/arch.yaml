@@ -4,8 +4,7 @@
 # (design 15): the golden vectors must decode to the same values there.
 #
 # Debian's R packages supply testthat and withr on the Debian legs; Alpine
-# builds them from source. zufast (LinkingTo) is not on CRAN until Stage 9,
-# so each leg downloads its main branch from GitHub and installs it first.
+# builds them from source, and zufast (LinkingTo) comes from CRAN.
 # The vignette is ignored: whether it builds is R-CMD-check's question.
 on:
   schedule:
@@ -37,10 +36,8 @@ jobs:
       # output, not its last 13 lines; these legs are where that matters.
       install-dependencies: >-
         mkdir -p ~/.R && echo _R_CHECK_TESTS_NLINES_=0 > ~/.R/check.Renviron
-        && Rscript -e 'for (p in c("testthat", "withr")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, repos = "https://cloud.r-project.org")'
-        && Rscript -e 'download.file("https://github.com/pedrobtz/zufast/archive/refs/heads/main.tar.gz", "/tmp/zufast.tar.gz", mode = "wb")'
-        && mkdir -p /tmp/zufast && tar -xzf /tmp/zufast.tar.gz -C /tmp/zufast --strip-components 1
-        && R CMD INSTALL /tmp/zufast
+        && Rscript -e 'for (p in c("testthat", "withr", "zufast")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, repos = "https://cloud.r-project.org")'
+        && Rscript -e 'stopifnot(requireNamespace("zufast"))'
       check-args: --no-manual --ignore-vignettes
       error-on: warning
       require-tests: true
