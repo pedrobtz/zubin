@@ -1,0 +1,117 @@
+---
+title: "The C API"
+---
+
+```{r, include = FALSE}
+# Every C example here is a file of the fixture package tools/zubintest,
+# which CI builds, checks and tests on three operating systems; nothing is
+# written for this page alone.
+fixture <- function(path, lang = "c") {
+  lines <- readLines(file.path("..", "..", "tools", "zubintest", path))
+  cat("```", lang, "\n", paste(lines, collapse = "\n"), "\n```\n", sep = "")
+}
+```
+
+zubin's R functions are built on a header-only C99 library, and any package can use the same
+code: the buffer, the cursor, the typed reads and writes, and the record layouts with their
+unpack and pack kernels. This page is for the author of such a package.
+
+## Linking
+
+There is nothing to link. Every function is `static inline` in a header, so a package that
+includes them carries its own copy of what it uses, and zubin need not be installed when it
+runs. The whole recipe is three files:
+
+```{r, echo = FALSE, results = "asis"}
+cat("`DESCRIPTION` (an excerpt):\n\n")
+cat("```\n", grep("^LinkingTo", readLines("../../tools/zubintest/DESCRIPTION"), value = TRUE), "\n```\n", sep = "")
+cat("\n`NAMESPACE`:\n\n")
+fixture("NAMESPACE", "")
+cat("\n`src/Makevars`:\n\n")
+fixture("src/Makevars", "make")
+```
+
+`LinkingTo` names both zubin and zufast because it is not transitive: R adds each named
+package's `include/` directory to the compiler's path, and zubin's headers include zufast's
+`<zufast/bits.h>` and `<zufast/utf8.h>`. `$(C_VISIBILITY)` hides your symbols; the headers
+emit nothing that is not already `static`, so two packages that both use zubin never bind to
+each other's copies.
+
+The contract is source compatibility, as for zufast: within major version 1 a function, type,
+macro or enumerator that exists keeps existing with the same meaning, enumerator values are
+permanent, and struct fields are only ever appended. Initialise every struct through its
+`zb_*` function, never by aggregate initialisation, so an appended field has a defined value.
+`ZUBIN_VERSION_NUMBER` is `10000 * major + 100 * minor + patch`.
+
+## The headers
+
+| Header | What it holds |
+|---|---|
+| `<zubin.h>` | everything below except `zubin-r.h` |
+| `<zubin/status.h>` | `zb_status` and `zb_status_string()` |
+| `<zubin/rw.h>` | `zb_rd_<type><order>()` and `zb_wr_...()` for every type at any alignment |
+| `<zubin/cursor.h>` | `zb_cur`: checked sequential reads |
+| `<zubin/buf.h>` | `zb_buf`: a buffer with ownership, a hard cap and checked growth |
+| `<zubin/layout.h>` | record layouts, the spec parser, and the unpack and pack kernels |
+| `<zubin-r.h>` | a `zb_buf` owned by an R external pointer; the only header that includes R's |
+
+Every function that can fail returns a `zb_status`, which is `ZB_OK` (0) on success; results
+come back through out-parameters. **On failure the inputs are unchanged**: a cursor that
+returns `ZB_ERR_EOF` has not moved, a buffer that returns `ZB_ERR_LIMIT` holds what it held.
+Nothing in the headers prints, aborts, exits or allocates, except `buf.h`, and that only
+through `malloc`, `realloc` and `free`.
+
+## Reading: the cursor
+
+A cursor is a pointer, a length and a 0-based position, so every error a reader reports is
+"at byte `c.pos`". One read per type and byte order: `zb_cur_u32le()`, `zb_cur_f64be()`,
+`zb_cur_bytes()` to borrow a run of bytes, `zb_cur_seek()` and `zb_cur_skip()`.
+
+```{r, echo = FALSE, results = "asis"}
+fixture("src/cursor.c")
+```
+
+## Records: layouts and kernels
+
+A layout is parsed from the same specification string `bin_layout()` takes, into a field
+array the caller supplies, so the parser allocates nothing. Size the array with
+`zb_layout_count_fields()`; names in the result are borrowed pointers into the
+specification, which must outlive the layout.
+
+The kernels then process one field of `n` records in one strided loop, into one typed column:
+`zb_unpack_i32()` for the small integer types and `bool`, `zb_unpack_f64()` for `u32` and the
+floating types, `zb_unpack_i64()` and `zb_unpack_f64x()` (exact or an error) for the 64-bit
+integers, and `zb_unpack_bytes()` for `b` and `s`. Array fields are written column-major,
+element `k` of record `i` at `dst[k * n + i]`. The `zb_pack_*()` kernels are the inverses, and
+refuse a value that does not fit rather than wrapping it. The kernels do not bounds-check:
+prove `offset + (n - 1) * stride + size <= length` first.
+
+```{r, echo = FALSE, results = "asis"}
+fixture("src/layout.c")
+```
+
+## Writing: the buffer, and buffers owned by R
+
+A `zb_buf` is a pointer, a length, a capacity, a hard cap `max` (0 for none), flags, and a
+`release` function with the `owner` it frees: the shape of the Arrow C data interface.
+`zb_buf_alloc()` makes a growable buffer, `zb_buf_borrow()` a window onto your own memory
+(writable up to its length, never grown), and `zb_buf_release()` frees whatever needs
+freeing. Growth doubles to 64 MiB and grows by half after, never past `max`: an append that
+would is `ZB_ERR_LIMIT`, sets `ZB_BUF_HIT_LIMIT`, and changes nothing. There is no bare size
+arithmetic: sums and products that would overflow are `ZB_ERR_MEMORY`.
+
+Ownership is a flag, never the identity of `release`: every translation unit has its own
+copy of a header-only function, so comparing function pointers across units is meaningless.
+
+In an R package, heap memory that must survive a longjmp from `Rf_error()` or
+`R_CheckUserInterrupt()` must be owned by R before the first call that can jump.
+`zb_r_buf_new()` creates the external pointer and registers its finalizer before the buffer
+exists; `zb_r_buf_free()` releases it early, and the finalizer then does nothing:
+
+```{r, echo = FALSE, results = "asis"}
+fixture("src/buffer.c")
+```
+
+`zb_r_buf_get()` allocates nothing, so nothing needs protecting around it, and returns
+`NULL` for an external pointer that is not one of these buffers or has been freed (one
+restored from a saved session, say).
