@@ -8,6 +8,12 @@
  * buffer that returns ZB_ERR_LIMIT holds exactly what it held.
  *
  * Enumerator values are permanent (design 4.4).
+ *
+ * Threads: every function here is pure, or reads and writes only the
+ * buffer, cursor or arrays it is passed; no zubin header holds static or
+ * global state (tools/check-headers refuses a static object under zubin/).
+ * Any function may be called from any thread, as long as no two threads use
+ * one buffer, cursor or output array at the same time (design 15).
  */
 #ifndef ZUBIN_STATUS_H
 #define ZUBIN_STATUS_H

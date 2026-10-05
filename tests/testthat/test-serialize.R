@@ -127,9 +127,9 @@ test_that("bin_hash_object() is the committed digest, on every R version", {
   x <- hash_fixture()
   # Committed on 2026-10-05 (R 4.6.1, macOS arm64); every CI leg, oldrel and
   # devel and big-endian s390x included, must reproduce them.
-  expect_identical(bin_hash_object(x), "58be1f5b27ecf452")
-  expect_identical(bin_hash_object(x, "xxh3_128"), "473ae5109a905aea58be1f5b27ecf452")
-  expect_identical(bin_hash_object(x, seed = 42), "c3824896ffd23133")
+  expect_identical(bin_hash_object(x), "a0b4f6c369f76312")
+  expect_identical(bin_hash_object(x, "xxh3_128"), "4967ba1cceedd163a0b4f6c369f76312")
+  expect_identical(bin_hash_object(x, seed = 42), "27f4747ea8ac90d5")
 })
 
 test_that("bin_hash_object() hashes the stream after its header", {

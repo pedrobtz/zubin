@@ -360,7 +360,16 @@ static inline void      zb_buf_borrow (zb_buf *b, const void *p, size_t n);    /
 static inline void      zb_buf_release(zb_buf *b);                             /* calls release if OWNED; zeroes */
 static inline void      zb_buf_reset  (zb_buf *b);                             /* len = 0; keeps cap */
 static inline zb_status zb_buf_detach (zb_buf *b, uint8_t **data, size_t *len); /* hand the malloc block to the caller */
+static inline zb_status zb_buf_adopt  (zb_buf *b, uint8_t *data, size_t len, size_t cap, size_t max); /* the inverse */
 ```
+
+`zb_buf_adopt` (Stage 11, [#26](https://github.com/pedrobtz/zubin/issues/26)) takes ownership
+of a block the caller allocated with `malloc()`, or got back from `zb_buf_detach()`: `OWNED |
+GROWABLE`, freed with `free()` on release, and detaching again returns the same pointer. It is
+how a pipeline hands a block to a worker (detach) and takes it back after an in-place
+transform (adopt). It returns a status rather than the `void` #26 sketched: `len > cap`,
+`cap > max`, `cap > ZB_BUF_MAX_CAP` or a `NULL` block with a capacity would build a buffer
+that lies about its memory, so they are `ZB_ERR_INVALID` and nothing is taken over.
 
 Writing into a borrowed buffer is allowed up to `cap` (it is the caller's memory); growing
 one is `ZB_ERR_INVALID`. `zb_buf_borrow` takes `const void *` and casts, because the same
@@ -380,8 +389,12 @@ after that, never below `len + extra`, never below 256 bytes, never above `max` 
 above `PTRDIFF_MAX` (`ZB_BUF_MAX_CAP`), the largest object C allows: a larger request is
 `ZB_ERR_MEMORY` before the allocator is asked. GCC's `-Walloc-size-larger-than` found the
 missing bound at Stage 2. Every size
-computation goes through `zb_int_add()` and `zb_int_mul()`, which return `ZB_ERR_MEMORY`
+computation goes through `zb_size_add()` and `zb_size_mul()`, which return `ZB_ERR_MEMORY`
 instead of wrapping (zukomp's `zu_buf.c` rule: there is no bare size arithmetic anywhere).
+They were internal (`zb_int_add`, `zb_int_mul`, still present as aliases) until Stage 11
+made them public for consumers such as rdz, which check every count, length and offset read
+from a file before it sizes an allocation or a seek (#26). The growth policy, `zb_int_grow`,
+stays internal.
 A request that would exceed `max` returns `ZB_ERR_LIMIT`, sets `ZB_BUF_HIT_LIMIT`, and
 changes nothing.
 
@@ -930,6 +943,16 @@ Byte order is handled by construction, and **the big-endian s390x leg of `arch.y
 load-bearing for this package**: the committed golden vectors (§16.4) must decode to the
 same values there. zufast could say "no CI leg runs big-endian"; zubin cannot.
 
+**Threads** (Stage 11, #26). Every function under `zubin/` is pure or reads and writes only
+the buffer, cursor or arrays it is passed, and no header there defines a static or global
+object, so any function may be called from any thread as long as no two threads use one
+buffer, cursor or output array at once; rdz's pipeline runs `buf.h`, `rw.h`, `cursor.h` and
+the `layout.h` kernels on worker threads this way. Each header says so in its opening
+comment, and `tools/check-headers` refuses a `static` object under `zubin/` (with a canary).
+`zubin-r.h` is main-thread only: it calls R's API. The one static object the headers had,
+the dummy slot `zb_put_raw(b, 0)` returned for a buffer with no storage, became a pointer
+into the `zb_buf` itself.
+
 `Depends: R (>= 4.1)`, `LinkingTo: zufast (>= 0.1.0)`, `Suggests: bit64, testthat (>=
 3.0.0), withr, knitr, rmarkdown`, `Language: en-GB`, `Config/roxygen2/version: 8.1.0`, no
 `Config/testthat/parallel` (serial, so gctorture and valgrind legs run this package's C and
@@ -949,7 +972,7 @@ standalone as C99 under `-Wall -Wextra -Wpedantic -Werror` and as C++11, with GC
 clang, at `-O0` and `-O2`; `tools/abi/probe-none.c` includes `<zubin.h>` and uses nothing;
 `tools/abi/probe-all.c` calls every public function; `zubin-r.h` compiles against R's
 headers in a third probe; a comment-stripped grep finds no `SEXP`, `Rf_`, `R.h` under
-`zubin/`. `tools/run-symbol-audit` runs R's compiled-code `nm` scan over the full-use
+`zubin/`, no allocator call outside `buf.h`, and no `static` object (§15, threads). `tools/run-symbol-audit` runs R's compiled-code `nm` scan over the full-use
 probe.
 
 ### 16.2 The shared object — `test-abi.R`
@@ -998,7 +1021,13 @@ records it.
 `tools/zubintest`: `LinkingTo: zubin, zufast`, no `Imports:`, nothing in `NAMESPACE` but
 `useDynLib`, two translation units including `<zubin.h>` (so a non-`static` symbol would
 collide), one including `<zubin-r.h>`, and a testthat suite that parses a layout, unpacks
-a record, builds a buffer and borrows a raw vector. The workflow installs zufast, zubin
+a record, builds a buffer and borrows a raw vector. From Stages 10 and 11 it also has
+`serial.c` (the serialisation streams) and `rdz.c`, rdz's generic codec in miniature: a
+40-byte block-header layout, an object serialised through `zb_serialize_to_sink()` into
+4 KiB blocks behind those headers in one `zb_buf`, read back with `zb_cur_*` over the
+headers (each block's XXH3 checked) and `zb_unserialize()` over the reassembled payload, and
+`identical()` to the input; a flipped byte is caught. It is the proof that the pieces rdz
+needs compose, run with zubin uninstalled like the rest of the fixture. The workflow installs zufast, zubin
 and the fixture; checks the fixture with `--as-cran` and fails on any compiled-code NOTE;
 runs its tests; asserts with `nm` that its shared object defines no global `zb_` or `zuf_`
 symbol; then removes zubin from the library path (with `R_LIBS_USER='-'`, zukomp's trap)

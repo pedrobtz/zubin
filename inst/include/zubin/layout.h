@@ -31,6 +31,12 @@
  *
  * Record sizes and offsets are uint32_t and at most 2^31 - 1, which is also
  * what fits an R integer; record counts are size_t everywhere.
+ *
+ * Threads: every function here is pure, or reads and writes only the
+ * buffer, cursor or arrays it is passed; no zubin header holds static or
+ * global state (tools/check-headers refuses a static object under zubin/).
+ * Any function may be called from any thread, as long as no two threads use
+ * one buffer, cursor or output array at the same time (design 15).
  */
 #ifndef ZUBIN_LAYOUT_H
 #define ZUBIN_LAYOUT_H

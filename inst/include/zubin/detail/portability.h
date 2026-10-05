@@ -3,6 +3,12 @@
  *
  * Internal: the macros here are outside the compatibility promise of design
  * 4.4. Every zubin header includes this one first.
+ *
+ * Threads: every function here is pure, or reads and writes only the
+ * buffer, cursor or arrays it is passed; no zubin header holds static or
+ * global state (tools/check-headers refuses a static object under zubin/).
+ * Any function may be called from any thread, as long as no two threads use
+ * one buffer, cursor or output array at the same time (design 15).
  */
 #ifndef ZUBIN_DETAIL_PORTABILITY_H
 #define ZUBIN_DETAIL_PORTABILITY_H

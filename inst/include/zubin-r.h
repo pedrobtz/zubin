@@ -24,6 +24,10 @@
  * zb_serialize_to_sink) are the exception that proves the rule: R's own
  * errors during R_Serialize and R_Unserialize are R's, and reach the caller
  * unchanged; only the failures zubin owns come back as statuses.
+ *
+ * Threads: main thread only. Every function here calls R's API, which R
+ * allows from the main thread alone; the R-free headers are the ones to use
+ * on worker threads (design 15).
  */
 #ifndef ZUBIN_R_GLUE_H
 #define ZUBIN_R_GLUE_H

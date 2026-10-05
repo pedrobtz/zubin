@@ -113,7 +113,9 @@ Linkage (design §4.5):
 Allocation and errors:
 
 - No allocation anywhere in the headers except `buf.h`, and there only via `malloc`,
-  `realloc`, `free`. No bare size arithmetic: `zb_int_add()`/`zb_int_mul()`.
+  `realloc`, `free`. No bare size arithmetic: `zb_size_add()`/`zb_size_mul()`.
+- No `static` object under `inst/include/zubin/`: every header promises any thread may call
+  it (design §15), and `tools/check-headers` enforces it. `zubin-r.h` is main-thread only.
 - On any failure the inputs are unchanged: a cursor that fails has not advanced, a buffer
   that fails holds what it held. Tests check this at every truncation point.
 - Heap state that must survive a longjmp is owned by R before the first call that can jump

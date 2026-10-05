@@ -9,8 +9,9 @@
 #   3. a unit that calls every public function is warning-free, as C and C++;
 #   4. <zubin-r.h> compiles against R's headers and calls every function it
 #      adds (tools/abi/probe-r.c);
-#   5. the headers under zubin/ mention no R API, and none but buf.h
-#      allocates (design 5).
+#   5. the headers under zubin/ mention no R API, none but buf.h allocates
+#      (design 5), and none defines a static object, which is what lets any
+#      thread call them (design 15).
 #
 # Before any of that, two canaries: a header with a plain `static` function
 # must fail step 2, and a header that names SEXP must fail step 4. A gate is
@@ -54,6 +55,9 @@ strip_comments() {
 r_api() {        # true when the file names the R API
     strip_comments "$1" | grep -nE '\bSEXP\b|\bRf_|[<"]R\.h[>"]|Rinternals' >/dev/null
 }
+static_object() {   # true when the file defines a static object, not a function
+    strip_comments "$1" | grep -E '\bstatic\b' | grep -vE 'static[[:space:]]+inline|static_assert' >/dev/null
+}
 allocates() {    # true when the file calls an allocator
     strip_comments "$1" | grep -nE '\b(malloc|calloc|realloc|free)[[:space:]]*\(' >/dev/null
 }
@@ -70,11 +74,15 @@ if compile_c "$TMP/canary.c" -O2 -I"$TMP" 2>/dev/null; then
 else
     echo "ok: an unused plain static function fails the probe"
 fi
-printf 'typedef struct SEXPREC *SEXP;\nvoid *zb_canary = malloc(1);\n' > "$TMP/canary.h"
-if r_api "$TMP/canary.h" && allocates "$TMP/canary.h"; then
-    echo "ok: the R-API and allocation greps fire"
+printf 'typedef struct SEXPREC *SEXP;\nvoid *zb_canary = malloc(1);\nstatic int zb_count;\n' > "$TMP/canary.h"
+if r_api "$TMP/canary.h" && allocates "$TMP/canary.h" && static_object "$TMP/canary.h"; then
+    echo "ok: the R-API, allocation and static-object greps fire"
 else
-    echo "FAIL canary: the R-API or allocation grep missed"; fail=1
+    echo "FAIL canary: the R-API, allocation or static-object grep missed"; fail=1
+fi
+printf 'static inline int zb_f(void) { return 0; }\nZB_STATIC_ASSERT(1, x);\n' > "$TMP/canary.h"
+if static_object "$TMP/canary.h"; then
+    echo "FAIL control: a static inline function read as a static object"; fail=1
 fi
 
 echo "== standalone headers ($CC, $CXX)"
@@ -120,6 +128,8 @@ fi
 echo "== forbidden identifiers"
 for h in $(find "$INC/zubin" "$INC/zubin.h" -name '*.h' | sort); do
     if r_api "$h"; then echo "FAIL R API in $h"; fail=1; fi
+    # no static or global state, so any thread may call (design 15)
+    if static_object "$h"; then echo "FAIL static object in $h"; fail=1; fi
     case "$h" in
     */zubin/buf.h) ;;
     *) if allocates "$h"; then echo "FAIL allocation outside buf.h: $h"; fail=1; fi ;;

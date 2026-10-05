@@ -37,10 +37,14 @@ serialize_corpus <- function() {
 # or compact sequences), and every double exact: R's parser on macOS arm64
 # reads 1e-300 four ulps away from Linux's correctly rounded value, which
 # made the first version of this fixture a different object per platform.
+# No double NA either: NA_real_ has a signalling NaN's bits, which the x87
+# unit of 32-bit x86 quiets when it loads them, so i386 serializes NA_real_
+# as different bytes (the second version's lesson). NA stays in the integer,
+# logical and character elements, whose bytes no FPU touches.
 hash_fixture <- function() {
   list(
     ints = c(1L, -2L, NA, 2147483647L),
-    dbls = c(0.25, -1.5, NA, 2^-996),
+    dbls = c(0.25, -1.5, 2^-996),
     chr = c("zubin", "", NA),
     lgl = c(TRUE, FALSE, NA),
     raw = as.raw(c(0, 127, 255)),

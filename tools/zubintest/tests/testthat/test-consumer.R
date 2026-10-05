@@ -32,3 +32,18 @@ test_that("serial.c round-trips an object through a buffer, a cursor and a sink"
   expect_identical(r[[3]], as.double(length(serialize(x, NULL, version = 2)) - 14))
   expect_identical(.Call(zt_serial, x, 5L), "ZB_ERR_EOF")
 })
+
+test_that("rdz.c: an object through 4 KiB blocks behind 40-byte headers, and back", {
+  small <- list(a = 1:3, b = "zubin")
+  r <- .Call(zt_rdz, small, -1L)
+  expect_identical(r[[1]], small)
+  expect_identical(r[[2]], 1)
+  big <- list(x = as.double(seq_len(5000)), y = rep(c("p", "q"), 3000), m = matrix(1:400, 20))
+  r <- .Call(zt_rdz, big, -1L)
+  expect_identical(r[[1]], big)
+  n <- length(serialize(big, NULL))
+  expect_identical(r[[2]], as.double(ceiling(n / 4096)))
+  expect_identical(r[[3]], as.double(n + 40 * ceiling(n / 4096)))
+  # a byte flipped in the second block's payload is caught by its hash
+  expect_identical(.Call(zt_rdz, big, 4096L + 80L + 10L), "hash mismatch")
+})

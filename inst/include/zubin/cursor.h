@@ -21,6 +21,12 @@
  *     zb_cur_f16le zb_cur_f16be zb_cur_bf16le zb_cur_bf16be    (double *)
  *     zb_cur_f32le zb_cur_f32be                                (float *)
  *     zb_cur_f64le zb_cur_f64be                                (double *)
+ *
+ * Threads: every function here is pure, or reads and writes only the
+ * buffer, cursor or arrays it is passed; no zubin header holds static or
+ * global state (tools/check-headers refuses a static object under zubin/).
+ * Any function may be called from any thread, as long as no two threads use
+ * one buffer, cursor or output array at the same time (design 15).
  */
 #ifndef ZUBIN_CURSOR_H
 #define ZUBIN_CURSOR_H

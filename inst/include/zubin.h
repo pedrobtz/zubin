@@ -10,6 +10,12 @@
  * Every function is static inline: there is nothing to link and no
  * implementation macro to define. The R glue, <zubin-r.h>, is not included
  * here: it is the only header that includes R's. See design 4 and 5.
+ *
+ * Threads: every function here is pure, or reads and writes only the
+ * buffer, cursor or arrays it is passed; no zubin header holds static or
+ * global state (tools/check-headers refuses a static object under zubin/).
+ * Any function may be called from any thread, as long as no two threads use
+ * one buffer, cursor or output array at the same time (design 15).
  */
 #ifndef ZUBIN_H
 #define ZUBIN_H
