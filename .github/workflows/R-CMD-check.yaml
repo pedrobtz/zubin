@@ -22,3 +22,6 @@ jobs:
       # Quick on each push to a pull request, full after merge. The
       # `full-ci` label runs the full set on a pull request before merging.
       profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
+      # The full profile also runs the sweeps and the big inputs (a raw
+      # vector above 2^31 bytes, growth past 64 MiB): roadmap, testing strategy.
+      env: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && '' || 'ZUBIN_SLOW_TESTS=true' }}

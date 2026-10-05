@@ -1,0 +1,25 @@
+# Roadmap Stage 8: r-actions' allocation-failure sweep fails the Nth
+# allocation of tools/alloc-exercise.R for each N above R's own startup, and
+# every run must end in an error rather than a crash. target-pattern counts
+# the runs where the failure reached zubin's allocator and came back as a
+# zubin_memory_error. Informational: weekly and by hand, until it reads clean.
+on:
+  schedule:
+    - cron: "37 4 * * 3"
+  workflow_dispatch:
+  pull_request:
+    paths: [.github/workflows/alloc-failure.yaml, tools/alloc-exercise.R]
+
+name: alloc-failure
+
+permissions:
+  contents: read
+
+jobs:
+  alloc-failure:
+    uses: pedrobtz/r-actions/.github/workflows/alloc-failure.yml@26e45df7fdb1d57c083bad840b1dadc7ac78565b # v1.20.0
+    with:
+      run: R_ENABLE_JIT=0 Rscript tools/alloc-exercise.R
+      baseline-run: R_ENABLE_JIT=0 Rscript -e 'suppressPackageStartupMessages(library(zubin))'
+      expect-pattern: "caught:|cannot allocate|memory exhausted"
+      target-pattern: "zubin_memory_error"

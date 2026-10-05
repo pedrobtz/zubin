@@ -60,20 +60,35 @@ elements, for the numeric types and \code{bool} only (write \code{b24}, not
 
 \section{Types}{
 
-\tabular{lll}{
-\strong{Spec} \tab \strong{Bytes} \tab \strong{R type} \cr
-\verb{u8 i8 u16 i16} \tab 1--2 \tab integer \cr
-\code{i32} \tab 4 \tab integer; -2^31 is \code{NA} \cr
-\code{u32} \tab 4 \tab double \cr
-\verb{i64 u64} \tab 8 \tab double, exact to 2^53, or \code{integer64} \cr
-\verb{f16 bf16} \tab 2 \tab double \cr
-\verb{f32 f64} \tab 4, 8 \tab double \cr
-\code{bool} \tab 1 \tab logical \cr
-\verb{b<n>} \tab n \tab a list of raw vectors \cr
-\verb{s<n>} \tab n \tab character, up to the first NUL \cr
-\verb{x<n>} \tab n \tab not a value: padding \cr
-\code{t[k]} \tab k x width \tab a matrix of k columns \cr
+The type model, in both directions (\code{\link[=bin_unpack]{bin_unpack()}} and \code{\link[=bin_decode]{bin_decode()}}
+read; \code{\link[=bin_pack]{bin_pack()}}, \code{\link[=bin_encode]{bin_encode()}} and \code{\link[=bin_put]{bin_put()}} write):
+
+\tabular{llll}{
+\strong{Spec} \tab \strong{Bytes} \tab \strong{Read as} \tab \strong{Written from} \cr
+\verb{u8 i8 u16 i16} \tab 1--2 \tab integer \tab integer, whole double, logical \cr
+\code{i32} \tab 4 \tab integer; -2^31 is an error unless \code{na = "allow"} \tab
+integer, whole double; \code{NA} only with \code{na = "allow"} \cr
+\code{u32} \tab 4 \tab double \tab integer, whole double \cr
+\verb{i64 u64} \tab 8 \tab double, an error above 2^53 in magnitude; or
+\code{integer64} (\code{int64 = "integer64"}), an error for \code{u64} from 2^63 \tab
+integer, whole double, \code{integer64} \cr
+\verb{f16 bf16} \tab 2 \tab double \tab numeric, rounded to nearest even \cr
+\verb{f32 f64} \tab 4, 8 \tab double \tab numeric; \code{NA} survives \code{f64} and is
+a NaN in the others \cr
+\code{bool} \tab 1 \tab logical; any non-zero byte is \code{TRUE} \tab logical, not
+\code{NA} \cr
+\verb{b<n>} \tab n \tab a list of raw vectors \tab a list of raw vectors of
+exactly n bytes \cr
+\verb{s<n>} \tab n \tab character: the bytes before the first NUL, as UTF-8
+\tab character of at most n UTF-8 bytes, NUL-padded \cr
+\verb{x<n>} \tab n \tab not returned \tab not given; written as zeros \cr
+\code{t[k]} \tab k x width \tab a matrix of k columns (\code{name.1} ... \code{name.k} in
+a data frame) \tab a matrix of k columns, or one record's k values \cr
 }
+
+A value that does not fit is a \code{zubin_range_error}, and an \code{NA} with no
+bytes a \code{zubin_na_error}; nothing is truncated, wrapped or rounded into an
+integer. See \link{zubin-conditions}.
 }
 
 \section{Alignment}{

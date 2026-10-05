@@ -631,7 +631,7 @@ will have, with and without zubin installed, on three operating systems.
 
 ## Stage 8 — Hardening, documentation, benchmarks · M
 
-**Status:** not started.
+**Status:** in review (#12): the hour of fuzzing per target and the step-20 gctorture run happen on `main` after merge.
 
 **Goal:** everything a user, a CRAN reviewer or a sanitizer reads or runs is in place and
 matches the code.
@@ -664,6 +664,27 @@ matches the code.
 - Every deliverable of design §18 except criterion 9 is met and linked from the PR.
 - Each fuzz target has accumulated an hour; each canary was seen to crash.
 - `devtools::check(cran = TRUE)` 0/0/0 on all three platforms; spelling and URLs clean.
+
+**What actually happened**
+
+- The benchmarks found two misses against §17. `bin_put()` cost 4.1 µs a call, slower
+  than a raw connection, because argument matching ran before the raw-vector path; it is
+  now 0.69 µs. `bin_pack()` was 40% slower than `writeBin()` per field: stripping
+  attributes from each column (`attributes(x) <- NULL`) copied every column, `storage.mode<-`
+  copied even when the type was already right, and `zb_pack_f64()` decided the type per
+  value. With all three fixed it is 12% behind, bound by first-touch page faults and four
+  write passes; `.agents/benchmarks.md` says so rather than claiming the target.
+- r-actions grew `github-packages` (v1.20.0) for zubin's sake (Stages 2 and 3), and every
+  r-actions workflow here is now pinned to that release by commit, `R-CMD-check.yaml`
+  excepted (`@v1`, as the roadmap's CI section says).
+- `R-CMD-check.yaml` sets `ZUBIN_SLOW_TESTS=true` on the full profile (`main`, and PRs
+  labelled `full-ci`), so the sweeps and the 2 GiB input run in CI.
+- `alloc-failure.yaml` is weekly and informational, with `tools/alloc-exercise.R` as its
+  workload and `zubin_memory_error` as the target pattern.
+- `cran-comments.md` is written for the submission at Stage 9, when zufast is on CRAN; it
+  claims only checks the CI runs.
+- A `zubin-conditions` help page lists every class and its fields; `?bin_layout` carries
+  the §13.1 table in both directions.
 
 ---
 

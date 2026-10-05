@@ -561,7 +561,17 @@ SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_
     if (zb_int_mul(nrec, l.size, &total) || total > (size_t)R_XLEN_T_MAX)
         return zubin_int_status(ZB_ERR_MEMORY, -1);
     out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t)total));
-    if (total) memset(RAW(out), 0, total);
+    {
+        /* Zeroed first when the record has padding or alignment gaps, so
+           they are zeros and no byte is uninitialised; when the value
+           fields cover every byte, each is written below and the extra
+           pass over the output is skipped. */
+        size_t covered = 0;
+        for (j = 0; j < l.nfields; j++) {
+            if (l.fields[j].type != ZB_PAD) covered += l.fields[j].size;
+        }
+        if (total && covered != l.size) memset(RAW(out), 0, total);
+    }
     for (j = 0; j < l.nfields; j++) {
         const zb_field *f = &l.fields[j];
         size_t bad = 0;

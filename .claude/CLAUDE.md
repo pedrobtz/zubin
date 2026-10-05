@@ -33,7 +33,7 @@ commit.
 
 ## Current state
 
-Stages 0–7 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
+Stages 0–7 are done; Stage 8 is in review. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
 (layout.h: types, spec parser, unpack and pack kernels), plus `zubin-r.h`. Gates:
 `abi.yaml`, `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml` (`fuzz_layout`,
 `fuzz_unpack`, `fuzz_buf`), `arch.yaml` (i386, musl, s390x). R API: `bin_info()`,
@@ -44,7 +44,7 @@ the builder (`bin_builder()`, `bin_put()` raw/typed/`"z"`/`"s<n>"`, `bin_reserve
 (rchk, fuzzing, arch) fetch zufast themselves (r-actions' `github-packages` input for
 rchk and fuzz). `tools/zubintest` is the consumer fixture (`consumer.yaml`); the README's
 "Using zubin from C" quotes it, and `tools/check-recipe` keeps the two identical: edit the
-fixture, then copy the change into the README. Next: Stage 8, hardening, documentation, benchmarks.
+fixture, then copy the change into the README. Next: Stage 9, which waits for zufast to be on CRAN.
 
 In C, `zb_field.count` is the byte width for `b`, `s` and `x` fields; the element count of a
 column is 1 for them.
@@ -130,6 +130,11 @@ Allocation and errors:
 - Design §13.1, the roxygen table and the tests are the same table three times.
 
 ## CI
+
+Every r-actions workflow except `R-CMD-check.yaml` is pinned by commit to a release, the tag
+in a trailing comment. r-actions' `github-packages` input (rchk, fuzz) fetches zufast until
+it is on CRAN. Benchmarks: `tools/run-benchmarks` locally, `benchmarks.yaml` on Linux;
+results in `.agents/benchmarks.md`.
 
 Reusable workflows from `pedrobtz/r-actions`; `coverage.yaml` is pinned by commit with the
 tag in a comment, because it holds a write token. `R-CMD-check.yaml` is quick on PRs and

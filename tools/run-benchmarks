@@ -1,0 +1,10 @@
+#!/bin/sh
+# Design 17: install zubin from this checkout into a temporary library and
+# run tools/benchmarks.R against it. Not a CI gate. ZUBIN_BENCH_SCALE scales
+# the sizes (1 = the design's). Run from the package root.
+set -eu
+LIB=$(mktemp -d)
+trap 'rm -rf "$LIB"' EXIT
+R CMD INSTALL --no-test-load -l "$LIB" . >/dev/null
+echo "commit $(git rev-parse --short HEAD)"
+R_LIBS="$LIB${R_LIBS:+:$R_LIBS}" Rscript tools/benchmarks.R

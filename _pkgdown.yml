@@ -7,3 +7,36 @@ template:
 # root. The deploy step keeps both (clean: false in pkgdown.yaml).
 development:
   mode: auto
+
+reference:
+  - title: Layouts
+    contents:
+      - bin_layout
+      - bin_size
+  - title: Records
+    contents:
+      - bin_unpack
+      - bin_pack
+  - title: Codecs
+    contents:
+      - bin_decode
+      - bin_encode
+  - title: The builder
+    contents:
+      - bin_builder
+      - bin_put
+  - title: Inspection
+    contents:
+      - bin_hexdump
+  - title: The package
+    contents:
+      - bin_info
+      - zubin-conditions
+      - zubin-package
+
+articles:
+  - title: Using zubin
+    navbar: ~
+    contents:
+      - zubin
+      - articles/c-api

@@ -54,7 +54,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [layout, unpack, buf]
-    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@2677abce7451ed039a46f7b75d93cc9a6cb5622d # feat/github-packages
+    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@26e45df7fdb1d57c083bad840b1dadc7ac78565b # v1.20.0
     with:
       harness: tools/fuzz/fuzz_${{ matrix.target }}.c
       sources: tools/fuzz/support.c
