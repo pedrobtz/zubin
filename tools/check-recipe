@@ -2,22 +2,27 @@
 # Roadmap Stage 7: the README's "Using zubin from C" recipe and the fixture
 # package tools/zubintest agree line for line. Each fenced block that follows
 # a `<!-- recipe: FILE -->` marker must equal FILE in the fixture (or, for
-# `DESCRIPTION LinkingTo`, the fixture's LinkingTo line). Run from the root.
+# `DESCRIPTION LinkingTo`, the fixture's LinkingTo line). Carriage returns are
+# ignored, since a Windows checkout may convert line endings. Run from the root.
 set -eu
 fail=0
-blocks=$(grep -c '^<!-- recipe: ' README.md)
+README=$(mktemp)
+trap 'rm -f "$README"' EXIT
+tr -d '\r' < README.md > "$README"
+blocks=$(grep -c '^<!-- recipe: ' "$README")
 [ "$blocks" -ge 5 ] || { echo "FAIL: only $blocks recipe blocks in README.md"; exit 1; }
-for target in $(grep '^<!-- recipe: ' README.md | sed 's/^<!-- recipe: //; s/ -->$//; s/ /:/'); do
+for target in $(grep '^<!-- recipe: ' "$README" | sed 's/^<!-- recipe: //; s/ -->$//; s/ /:/'); do
     marker="<!-- recipe: $(echo "$target" | tr ':' ' ') -->"
     block=$(awk -v m="$marker" '
         $0 == m { found = 1; next }
         found && /^```/ { if (inside) exit; inside = 1; next }
         found && inside { print }
-    ' README.md)
+    ' "$README")
     case "$target" in
-        DESCRIPTION:LinkingTo) want=$(grep '^LinkingTo' tools/zubintest/DESCRIPTION) ;;
-        *) want=$(cat "tools/zubintest/$target") ;;
+        DESCRIPTION:LinkingTo) want=$(grep '^LinkingTo' tools/zubintest/DESCRIPTION | tr -d '\r') ;;
+        *) want=$(tr -d '\r' < "tools/zubintest/$target") ;;
     esac
+    block=$(printf '%s\n' "$block" | tr -d '\r')
     if [ "$block" = "$want" ]; then
         echo "ok   $target"
     else

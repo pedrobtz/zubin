@@ -2,7 +2,8 @@ docs
 inst/doc
 CRAN-SUBMISSION
 _problems/
-src/*.o
-src/*.so
-src/*.dll
-src/*.dylib
+# build products, anywhere (the fixture under tools/ is built in place too)
+*.o
+*.so
+*.dll
+*.dylib

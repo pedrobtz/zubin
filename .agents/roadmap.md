@@ -618,6 +618,12 @@ will have, with and without zubin installed, on three operating systems.
   (so a non-`static` symbol would collide), `buffer.c` includes `<zubin-r.h>`. Its
   `buffer.c` raises with `Rf_error()` while a buffer is live, which is the case the R glue
   exists for.
+- Its first CI run failed for two reasons, neither the fixture's. A fix committed to Stage 5
+  with `git add -A` had swept up the fixture's macOS build products, untracked in the
+  working tree and not yet ignored on that branch, and they reached `main`: Linux then
+  found an up-to-date `zubintest.so` with a Mach-O header. This stage removes them and
+  ignores object files repository-wide. And Windows converts line endings on checkout, so
+  `tools/check-recipe` now ignores carriage returns.
 - `consumer.yaml` uninstalls zufast as well as zubin before the last run: neither is needed
   at run time, and only removing both proves it.
 
