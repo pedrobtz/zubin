@@ -7,6 +7,8 @@
 # Run from the package root.
 #
 #   tools/run-fuzz [target ...]     targets: layout (later: unpack, buf)
+#   CANARY_ONLY=1 tools/run-fuzz    only prove each canary crashes (CI runs the
+#                                   fuzzing itself through r-actions' fuzz.yml)
 set -eu
 
 CC=${CC:-clang}
@@ -33,6 +35,7 @@ for t in $TARGETS; do
     fi
     grep -q 'AddressSanitizer' "$TMP/canary_$t.log" || { echo "FAIL $t: the canary crash was not ASan's"; status=1; continue; }
     echo "ok $t: canary crashed under ASan"
+    [ "${CANARY_ONLY:-}" = 1 ] && continue
 
     $CC $FLAGS "$src" tools/fuzz/support.c -o "$TMP/fuzz_$t"
     corpus=${CORPUS_DIR:+$CORPUS_DIR/$t}

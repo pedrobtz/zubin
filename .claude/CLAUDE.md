@@ -37,7 +37,7 @@ Stages 0–3 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,curs
 plus `zubin-r.h` (R glue). `layout.h` has the types and the allocation-free spec parser; the
 unpack and pack kernels arrive in Stages 4 and 5. Gates: `abi.yaml` (`tools/check-headers`,
 `tools/run-symbol-audit`), `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml`
-(`tools/run-fuzz`, bespoke, corpus in the Actions cache). R API so far: `bin_info()`, the
+(canaries through `tools/run-fuzz`, then r-actions' `fuzz.yml` per target). R API so far: `bin_info()`, the
 builder (`bin_builder()`, `bin_put()` raw/`"z"`/`"s<n>"`, `bin_reserve()`, `bin_reset()`,
 `bin_take()`, `as.raw()`), `bin_layout()` and `bin_size()`. `zufast` comes from
 `Remotes: pedrobtz/zufast@main` until Stage 9. Next: Stage 4, unpack and decode.

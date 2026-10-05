@@ -1,13 +1,13 @@
 # Design 16.6: the headers compiled into libFuzzer targets with ASan and
-# UBSan, no R in the picture. tools/run-fuzz first builds each target's
-# canary and requires it to crash on tools/fuzz/canary.input, which proves
-# the instrumentation is live; then it fuzzes the target from its seeds and
-# a corpus cached between runs, so short runs add up: ten minutes a target on
-# pull requests and pushes, an hour nightly, and a dispatched run takes its
-# budget as an input.
+# UBSan, no R in the picture. The canaries job first proves the
+# instrumentation is live: each target's canary build must crash on
+# tools/fuzz/canary.input (tools/run-fuzz). Each target then fuzzes through
+# r-actions' fuzz.yml from its seeds and a corpus cached between runs, so
+# short runs add up: ten minutes a target on pull requests and pushes, an
+# hour nightly, and a dispatched run takes its budget as an input.
 #
-# Bespoke rather than r-actions' fuzz.yml: the headers include zufast's, and
-# the reusable workflow has no step that could fetch them.
+# The headers include zufast's, which is not on CRAN until Stage 9:
+# github-packages checks it out for the include path.
 on:
   push:
     branches: [main, master]
@@ -30,16 +30,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fuzz:
-    name: fuzz (${{ matrix.target }})
+  canaries:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [layout]
-    env:
-      SECONDS_BUDGET: ${{ github.event_name == 'workflow_dispatch' && inputs.seconds || github.event_name == 'schedule' && 3600 || 600 }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/checkout@v6
@@ -52,32 +44,25 @@ jobs:
           sudo apt-get install -y -q clang
           v=$(clang -dumpversion | cut -d. -f1)
           sudo apt-get install -y -q "libclang-rt-$v-dev" || true
-          clang --version
-      - name: Restore the corpus
-        uses: actions/cache/restore@v6
-        with:
-          path: .corpus/${{ matrix.target }}
-          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
-          restore-keys: fuzz-corpus-${{ matrix.target }}-
-      - name: Canary, then fuzz
+      - name: Every canary crashes
         env:
           ZUFAST_INCLUDE: ${{ github.workspace }}/.zufast/inst/include
-          CORPUS_DIR: ${{ github.workspace }}/.corpus
-          ARTIFACTS: ${{ github.workspace }}/.artifacts
-        run: |
-          echo "corpus before: $(ls .corpus/${{ matrix.target }} 2>/dev/null | wc -l) inputs"
-          FUZZ_SECONDS="$SECONDS_BUDGET" tools/run-fuzz ${{ matrix.target }}
-          echo "corpus after: $(ls .corpus/${{ matrix.target }} | wc -l) inputs"
-      - name: Save the corpus
-        if: always()
-        uses: actions/cache/save@v6
-        with:
-          path: .corpus/${{ matrix.target }}
-          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
-      - name: Upload any crashing input
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: fuzz-${{ matrix.target }}-findings
-          path: .artifacts/
-          if-no-files-found: ignore
+        run: CANARY_ONLY=1 tools/run-fuzz
+
+  fuzz:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [layout]
+    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@2677abce7451ed039a46f7b75d93cc9a6cb5622d # feat/github-packages
+    with:
+      harness: tools/fuzz/fuzz_${{ matrix.target }}.c
+      sources: tools/fuzz/support.c
+      github-packages: pedrobtz/zufast
+      # UBSan must stop the run, not print and carry on
+      cflags: -g -O1 -fno-omit-frame-pointer -fno-sanitize-recover=undefined -Iinst/include -I.github-packages/zufast/inst/include -Itools/fuzz
+      seed-corpus: tools/fuzz/seeds/${{ matrix.target }}
+      libfuzzer-args: -max_len=4096
+      # fromJSON: a dispatched input can arrive as a string
+      max-total-time: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.seconds) || github.event_name == 'schedule' && 3600 || 600 }}
+      timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 150 || 90 }}
