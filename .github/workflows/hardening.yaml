@@ -57,7 +57,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [layout, unpack, buf, serialize, sink]
-    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@b429ef794d950a9bda41fc95912f29761da67dac # feat/fuzz-embed-r
+    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@6d3805680b2a84ecddb1fafc9994509659d0d89b # feat/fuzz-embed-r
     with:
       harness: tools/fuzz/fuzz_${{ matrix.target }}.c
       # serialize and sink (issue #25) exercise zubin-r.h, so R is embedded
