@@ -62,3 +62,45 @@ test_that("an interrupted bin_put() leaves the builder unchanged", {
   expect_identical(bin_size(b), 1)
   expect_identical(as.raw(b), bytes("01"))
 })
+
+test_that("a buffer stranded by an erroring refhook during serialization is freed", {
+  gc()
+  before <- live_buffers()
+  expect_error(.Call(zubin_test_serialize_owned, list(new.env()), function(x) stop("no")), "no")
+  gc()
+  expect_identical(live_buffers(), before)
+})
+
+test_that("an interrupt during a large serialization leaves nothing behind", {
+  skip_on_cran()   # timing-dependent by construction
+  skip_heavy()
+  envs <- lapply(seq_len(20000), function(i) new.env())
+  slow_hook <- function(x) {
+    for (i in 1:200) NULL   # evaluation is where R checks for interrupts
+    NULL
+  }
+  gc()
+  before <- live_buffers()
+  cut_short <- FALSE
+  for (limit in c(0.05, 0.2, 1)) {
+    if (interrupted_by_time_limit(function() .Call(zubin_test_serialize_owned, envs, slow_hook), limit)) {
+      cut_short <- TRUE
+      break
+    }
+  }
+  expect_true(cut_short)
+  gc()
+  expect_identical(live_buffers(), before)
+  # and a builder interrupted mid-serialization holds what it held
+  b <- bin_builder()
+  bin_put(b, bytes("01"))
+  cut_short <- FALSE
+  for (limit in c(0.05, 0.2, 1)) {
+    if (interrupted_by_time_limit(function() bin_serialize(envs, b, refhook = slow_hook), limit)) {
+      cut_short <- TRUE
+      break
+    }
+  }
+  expect_true(cut_short)
+  expect_identical(as.raw(b), bytes("01"))
+})

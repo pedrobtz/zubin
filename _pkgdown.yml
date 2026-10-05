@@ -28,6 +28,10 @@ reference:
   - title: Inspection
     contents:
       - bin_hexdump
+  - title: Serialization
+    contents:
+      - bin_serialize
+      - bin_hash_object
   - title: The package
     contents:
       - bin_info

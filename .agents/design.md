@@ -64,7 +64,7 @@ an arithmetic type over bytes. Each has its owner in the family (§2).
 | Zero-copy views, typed reinterpretation views (ALTREP) | | 0.3.0 | |
 | Memory-mapped files | | 0.4.0 | |
 | Custom connections over views and builders | | 0.4.0 | |
-| R serialisation into a builder, unserialise from an offset, version-stable object hash | | when rdz (§3.2) is rewritten in C | |
+| R serialisation into a builder, unserialise from an offset, version-stable object hash | | 0.2.0: §12.1, roadmap Stage 10 ([#25](https://github.com/pedrobtz/zubin/issues/25)) | |
 | nanoarrow buffer bridge | | when a consumer asks | |
 | Compression, hashing as a digest, encryption | | | yes: zukomp, zucrypt |
 | Arithmetic or bitwise operators on raw | | | yes: base R has them |
@@ -602,12 +602,52 @@ buffer exists, and the finalizer clears the pointer before freeing, so an eager 
 the success path and a later GC pass are mutually safe. zubin's own `.Call` entry points
 use these same functions; there is no second path.
 
-Draft 1's `zb_pod_*` helpers (a plain-old-data struct in a `RAWSXP`) and the serialisation
-streams are not here (next.md); nothing in v0.1.0 needs them.
+Draft 1's `zb_pod_*` helpers (a plain-old-data struct in a `RAWSXP`) are not here (next.md);
+nothing needs them yet.
+
+### 12.1 Serialisation streams (0.2.0, Stage 10)
+
+R's own serialisation pointed at zubin's containers, for rdz's C rewrite (§3.2;
+[#25](https://github.com/pedrobtz/zubin/issues/25)), whose generic codec streams one R
+serialisation through its block pipeline instead of allocating it whole:
+
+```c
+typedef void (*zb_sink_fn)(void *state, const void *p, size_t n);
+zb_status zb_serialize(SEXP x, zb_buf *b, int version, int xdr, SEXP refhook);
+SEXP      zb_unserialize(zb_cur *c, SEXP refhook, zb_status *st);   /* R_NilValue on failure */
+void      zb_serialize_to_sink(SEXP x, zb_sink_fn fn, void *state,
+                               int version, int xdr, int skip_header);
+```
+
+The formats are R's: version 2 or 3, XDR or native binary; unserialisation reads any of
+them. `skip_header` drops the header (the format tag, the stream version, R's version, the
+oldest reader's version and, in version 3, the native encoding), so a digest of the stream
+does not change with the R that wrote it; the sink parses the header's length as it streams,
+including the encoding's length field in the format's byte order.
+
+These are the one place in `zubin-r.h` where R raises, and deliberately: R_Serialize and
+R_Unserialize raise for an unserializable object, a malformed stream or a refhook error, and
+those conditions reach the caller **unchanged**, class, message and call. Only the failures
+zubin owns are statuses:
+
+- **A stream that runs out** is `ZB_ERR_EOF` from `zb_unserialize`, with `R_NilValue` and the
+  cursor unchanged. R's in-stream callback can leave `R_Unserialize` only by a longjmp, so it
+  signals a condition of a class private to the header, which `R_tryCatch` catches for that
+  class alone; every other condition unwinds past it untouched. The signature gained the
+  `zb_status *st` (it was `zb_unserialize(zb_cur *, SEXP)` in draft 1) because without it
+  EOF could only have been raised, which `zubin-r.h` does not do.
+- **A builder that cannot grow** is `ZB_ERR_LIMIT` or `ZB_ERR_MEMORY` from `zb_serialize`;
+  the stream runs on into nothing and the builder is restored to its length before. When R
+  raises instead, `R_UnwindProtect` restores the length on the way out, so an error or an
+  interrupt (in a refhook; R_Serialize itself never checks for one) appends nothing. The
+  buffer's memory must be owned by R (`zb_r_buf_new()`) for that jump not to leak it.
+
+A sink must not call `R_CheckUserInterrupt()` or anything else that can jump. The R
+functions are `bin_serialize()`, `bin_unserialize()` and `bin_hash_object()` (§13.9).
 
 ## 13. R API
 
-Fourteen exports, plus S3 methods. Every argument is validated in R first with a classed
+Fourteen exports in 0.1.0, seventeen from 0.2.0 (§13.9), plus S3 methods. Every argument is validated in R first with a classed
 condition, and again in C where native safety depends on it.
 
 ### 13.1 Type model
@@ -782,6 +822,23 @@ bin_hexdump(x, n = 64)
 A C struct dumped by another program, with alignment: `bin_layout("=a:u8 b:u32 c:u16",
 align = TRUE)` has size 12 and offsets 0, 4, 8, as `struct { uint8_t a; uint32_t b;
 uint16_t c; }` does on every target R supports.
+
+### 13.9 Serialisation (0.2.0)
+
+```r
+bin_serialize(x, b, version = 3L, xdr = TRUE, refhook = NULL)   # into a builder, no intermediate raw
+bin_unserialize(x, offset = 0, refhook = NULL)                   # from a raw vector at a 0-based offset
+bin_hash_object(x, algo = c("xxh3_64", "xxh3_128"), version = 2L, seed = 0)
+```
+
+`bin_serialize()` writes exactly what `serialize()` writes, and `bin_unserialize()` reads it.
+R's errors arrive as R raised them; a stream cut short is `zubin_bounds_error` (`offset`,
+`length`); a builder at its `max` is `zubin_limit_error` (`size`, `max`) and keeps its bytes.
+`bin_hash_object()` streams the headerless serialisation through `zuf_hasher_*`, so the
+digest is stable across R versions and the bytes are never allocated; the hex is zufast's
+`fast_hash()` form. `version = 2L` by default, because version 3 writes compact sequences
+as their ALTREP state and embeds the native encoding in the header. It is a content
+fingerprint, not a cryptographic digest.
 
 ## 14. Semantics decided once
 
@@ -1023,8 +1080,12 @@ Draft 1's eleven open questions, resolved, followed by the decisions revision 2 
 | 6 | Views in a separate package | Not decided here; views are 0.3.0 and the decision is taken then (next.md). Nothing in v0.1.0 depends on it. |
 | 7 | Variable-length fields | 0.2.0. They need the record-major path, which is a second kernel; v0.1.0 ships one kernel completely. `bin_put(b, s, "z")` covers the writer's case now. |
 | 8 | Bitfields | Later, with CAN/DBC as the trigger (next.md). The grammar reserves `:` after the width. |
-| 9 | Where `hash_object()` lives | zubin, later, and only if rdz is rewritten in C: the stream is the hard part and rdz is the consumer. Without that decision there is no consumer and `digest` exists. |
-| 10 | Serialisation and connection API status | Checked against R 4.6.1's `tools:::nonAPI` on 2026-10-04: `R_InitOutPStream`, `R_InitInPStream`, `R_Serialize`, `R_Unserialize`, `R_new_custom_connection`, `R_ReadConnection`, `R_WriteConnection`, `R_make_altraw_class`, `R_new_altrep` are not on it; `DATAPTR` is. Re-check at the stage that uses each. |
+| 9 | Where `hash_object()` lives | zubin, as `bin_hash_object()` in 0.2.0 (§13.9), alongside the serialisation streams that rdz's C rewrite needs ([#25](https://github.com/pedrobtz/zubin/issues/25)); the stream is the hard part and rdz is the consumer. |
+| 10 | Serialisation and connection API status | Checked against R 4.6.1's `tools:::nonAPI` on 2026-10-04: `R_InitOutPStream`, `R_InitInPStream`, `R_Serialize`, `R_Unserialize`, `R_new_custom_connection`, `R_ReadConnection`, `R_WriteConnection`, `R_make_altraw_class`, `R_new_altrep` are not on it; `DATAPTR` is. Re-check at the stage that uses each. **Re-checked at Stage 10
+(2026-10-05) against R-devel trunk** (`src/library/tools/R/sotools.R` last changed
+2026-08-09; trunk head 2026-10-03) and R 4.6.1: `R_InitOutPStream`, `R_InitInPStream`,
+`R_Serialize`, `R_Unserialize`, and the condition machinery the streams use, `R_tryCatch`,
+`R_UnwindProtect`, `R_MakeUnwindCont`, `R_ContinueUnwind`, are on neither list. |
 | 11 | `split_at()` return type | Views, from the start, in 0.3.0: there is no version that returns copies. |
 | 12 | R prefix | `bin_`, by the family rule and because `layout()` is `graphics::layout()` (§3.1). |
 | 13 | Byte helpers | Built on zufast's `bits.h`, not re-implemented; consumers list `LinkingTo: zubin, zufast` (§4.1). The family keeps one copy of each primitive. |

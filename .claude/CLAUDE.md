@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. **An R API over raw vectors**, prefixed `bin_`: record layouts (`bin_layout()`), vectorised
    `bin_unpack()`/`bin_pack()`, homogeneous codecs `bin_decode()`/`bin_encode()`, a byte
-   builder (`bin_builder()`, `bin_put()`, `bin_take()`), and `bin_hexdump()`/`bin_diff()`.
+   builder (`bin_builder()`, `bin_put()`, `bin_take()`), `bin_hexdump()`/`bin_diff()`, and from Stage 10 `bin_serialize()`, `bin_unserialize()`,
+`bin_hash_object()` over `zubin-r.h`'s `zb_serialize()`, `zb_unserialize()` and
+`zb_serialize_to_sink()`.
 2. **A header-only C99 library** under `inst/include/zubin/`, consumed through
    `LinkingTo: zubin, zufast` alone: a buffer with ownership and limits, a checked cursor,
    typed reads and writes at any alignment and byte order, and layout kernels.
@@ -33,7 +35,8 @@ commit.
 
 ## Current state
 
-Stages 0–8 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
+Stages 0–8 are done; Stage 10 (serialisation streams, 0.2.0, #25) is in its PR, built
+while Stage 9 waits for zufast on CRAN. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
 (layout.h: types, spec parser, unpack and pack kernels), plus `zubin-r.h`. Gates:
 `abi.yaml`, `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml` (`fuzz_layout`,
 `fuzz_unpack`, `fuzz_buf`), `arch.yaml` (i386, musl, s390x). R API: `bin_info()`,
@@ -48,6 +51,13 @@ fixture, then copy the change into the README. Next: Stage 9, which waits for zu
 
 In C, `zb_field.count` is the byte width for `b`, `s` and `x` fields; the element count of a
 column is 1 for them.
+
+**zubin-r.h's serialisation streams are the one place R raises:** R's errors during
+R_Serialize/R_Unserialize (a malformed stream, a refhook) reach the caller unchanged; only
+EOF (`zb_unserialize`, via `R_tryCatch` on a private condition class) and a builder that
+cannot grow (`zb_serialize`, with `R_UnwindProtect` restoring its length on a jump) are
+statuses. The R fuzz targets (`fuzz_serialize`, `fuzz_sink`) embed R through
+`tools/fuzz/rfuzz.c`; run them with `R_HOME` set (`tools/run-fuzz` does).
 
 **The `.Call` convention:** an entry point that can fail returns, on failure, a
 `zubin_status`-classed string holding the `zb_status` enumerator name (attribute `index`

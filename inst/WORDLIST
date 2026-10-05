@@ -3,6 +3,8 @@ LinkingTo
 NUL
 NULs
 R's
+XDR
+XXH
 bfloat
 bitfields
 booleans
@@ -12,6 +14,8 @@ nanoarrow
 strided
 struct
 structs
+unserialize
+unserializing
 writable
 zu
 zubin's

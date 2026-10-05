@@ -711,3 +711,97 @@ SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
     UNPROTECT(1);
     return out;
 }
+
+/* ---- serialization streams ------------------------------------------------- */
+
+/* A sink in the shape rdz's pipeline has: bytes go into a fixed block of
+   `chunk` bytes, and each full block is flushed to a buffer owned by R. The
+   result must equal the builder form whatever the chunk size. */
+typedef struct {
+    zb_buf *out;
+    uint8_t *block;
+    size_t chunk, used, flushes;
+    zb_status st;
+} test_block_sink;
+
+static void test_block_flush(test_block_sink *s)
+{
+    if (!s->used) return;
+    if (!s->st) s->st = zb_put_bytes(s->out, s->block, s->used);
+    s->used = 0;
+    s->flushes++;
+}
+
+static void test_block_put(void *state, const void *p, size_t n)
+{
+    test_block_sink *s = (test_block_sink *)state;
+    const uint8_t *q = (const uint8_t *)p;
+    while (n) {
+        size_t take = s->chunk - s->used < n ? s->chunk - s->used : n;
+        memcpy(s->block + s->used, q, take);
+        s->used += take;
+        q += take;
+        n -= take;
+        if (s->used == s->chunk) test_block_flush(s);
+    }
+}
+
+SEXP zubin_test_sink(SEXP x, SEXP version, SEXP xdr, SEXP skip, SEXP chunk)
+{
+    zb_status st;
+    test_block_sink s;
+    size_t k;
+    SEXP ptr, out;
+    if (zubin_int_size(chunk, &k) || k == 0) Rf_error("bad chunk");
+    ptr = PROTECT(zb_r_buf_new(0, 0, &st));
+    if (st) Rf_error("allocation failed");
+    memset(&s, 0, sizeof s);
+    s.out = zb_r_buf_get(ptr);
+    s.chunk = k;
+    s.block = (uint8_t *)R_alloc(k, 1);
+    zb_serialize_to_sink(x, test_block_put, &s, Rf_asInteger(version),
+                         Rf_asLogical(xdr) == TRUE, Rf_asLogical(skip) == TRUE);
+    test_block_flush(&s);
+    if (s.st) Rf_error("put failed");
+    out = PROTECT(zb_r_buf_to_raw(s.out));
+    zb_r_buf_free(ptr);
+    UNPROTECT(2);
+    return out;
+}
+
+/* zb_serialize into a fresh buffer owned by R: when the refhook errors or
+   an interrupt lands in it, the buffer is stranded and only its finalizer
+   frees it, which test-lifetime.R counts. */
+SEXP zubin_test_serialize_owned(SEXP x, SEXP refhook)
+{
+    zb_status st;
+    SEXP ptr = PROTECT(zb_r_buf_new(0, 0, &st)), out;
+    if (st) Rf_error("allocation failed");
+    st = zb_serialize(x, zb_r_buf_get(ptr), 3, 1, refhook);
+    if (st) Rf_error("serialize failed: %s", zb_status_string(st));
+    out = PROTECT(zb_r_buf_to_raw(zb_r_buf_get(ptr)));
+    zb_r_buf_free(ptr);
+    UNPROTECT(2);
+    return out;
+}
+
+/* zb_unserialize from a cursor at `offset`: the value, the status, and the
+   cursor's position after (unchanged on failure). */
+SEXP zubin_test_unserialize_cursor(SEXP bytes, SEXP offset)
+{
+    const char *names[] = {"value", "status", "pos", ""};
+    zb_cur c;
+    zb_status st;
+    size_t off;
+    SEXP out, v;
+    if (TYPEOF(bytes) != RAWSXP || zubin_int_size(offset, &off)) Rf_error("bad arguments");
+    zb_cur_init(&c, XLENGTH(bytes) ? RAW(bytes) : NULL, (size_t)XLENGTH(bytes));
+    if (zb_cur_seek(&c, off)) Rf_error("offset past the end");
+    v = PROTECT(zb_unserialize(&c, R_NilValue, &st));
+    out = PROTECT(Rf_mkNamed(VECSXP, names));
+    SET_VECTOR_ELT(out, 0, v);
+    SET_VECTOR_ELT(out, 1, Rf_mkString(zb_status_string(st)));
+    SET_VECTOR_ELT(out, 2, Rf_ScalarReal((double)c.pos));
+    UNPROTECT(2);
+    return out;
+}

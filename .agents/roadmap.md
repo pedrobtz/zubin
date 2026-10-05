@@ -131,6 +131,7 @@ step; both remain available to reproduce a CRAN failure.
 | 7 — The consumer fixture and the C contract | M | 5 | `tools/zubintest`, `consumer.yaml`, the README recipe, the C-API article |
 | 8 — Hardening, documentation, benchmarks | M | 6, 7 | vignette, WORDLIST, cran-comments, benchmarks, full gates |
 | 9 — Release 0.1.0 | S | 8, and zufast on CRAN | the submission |
+| 10 — Serialisation streams (0.2.0) | M | 8 | `zb_serialize`, `zb_unserialize`, `zb_serialize_to_sink`; `bin_serialize()`, `bin_unserialize()`, `bin_hash_object()` |
 
 Stage 6 is off the critical path and can be done in any spare sitting after Stage 1.
 
@@ -717,6 +718,60 @@ every leg is green (that run is the win-builder and macbuilder result), submit.
   the README; propose zubin's cells for the family table at the next all-repository change.
 
 **Exit:** zubin 0.1.0 on CRAN; `main` at `0.1.0.9000`; the issues filed.
+
+---
+
+## Stage 10 — Serialisation streams · M
+
+**Status:** done (#25), for 0.2.0. Merged to `main` only on the user's confirmation, because
+#25's own gate, rdz#2's decision item 1, was unticked when the work started.
+
+**Goal:** R's own serialisation pointed at zubin's containers, the item next.md held for
+rdz's C rewrite: a builder or any sink as the out-stream, a cursor as the in-stream, and a
+version-stable object hash streamed through zufast's hasher (design §12.1, §13.9).
+
+**Do**
+
+- `zubin-r.h`: `zb_serialize()`, `zb_unserialize()`, `zb_serialize_to_sink()`; the header
+  filter for `skip_header`; `R_UnwindProtect` so a jump appends nothing to a builder;
+  `R_tryCatch` on a private class so only the in-stream's EOF becomes a status.
+- `R/serialize.R`: `bin_serialize()`, `bin_unserialize()`, `bin_hash_object()`.
+- Harness: `zubin_test_sink()` (a block sink of a chosen chunk size, rdz's shape),
+  `zubin_test_serialize_owned()` (for the lifetime tests), `zubin_test_unserialize_cursor()`.
+- `tools/abi/probe-r.c` and a fourth fixture unit, `tools/zubintest/src/serial.c`.
+- Fuzz targets that embed R: `fuzz_serialize` (round trip, then truncation) and
+  `fuzz_sink` (block sink against the builder form, header skipped or not), on
+  `tools/fuzz/rfuzz.c`; r-actions' `fuzz.yml` gained `embed-r` for them.
+
+**Exit**
+
+- Round trips byte-equal to `serialize()` and `identical()` to the object, for versions 2 and
+  3, XDR on and off, over the corpus (atomic vectors with `NA`s, attributes, lists, factors,
+  data frames, a compact sequence, a closure, a formula, symbols, calls, strings in UTF-8,
+  latin1 and bytes; an environment by contents and self-reference).
+- Unserialisation at offsets 0, 1, 7 and 64 with bytes after; the cursor past the stream on
+  success and unchanged at every truncation point.
+- The sink form byte-equal to the builder form at chunk sizes 1–64, 100, 1000, 4096 and
+  10^6, and with the header skipped equal to the stream minus its header.
+- `bin_hash_object()` of a fixed fixture equal to committed digests (64-bit, 128-bit, seeded)
+  on every CI R version: release, oldrel-1, devel, and big-endian s390x.
+- A refhook's classed condition arrives with its class through both directions; the builder
+  keeps its bytes after a refhook error, an interrupt and a limit error.
+- The lifetime tests: an erroring refhook and an interrupt during a large serialisation leave
+  the live-buffer counter at baseline after `gc()`.
+- `consumer.yaml` green with the fixture's `serial.c` and zubin uninstalled;
+  `hardening.yaml` green with both new targets, canaries first.
+
+**What actually happened**
+
+- The spec's `SEXP zb_unserialize(zb_cur *, SEXP)` could not report EOF without raising; it
+  gained `zb_status *st`, agreed on #25 before the code was written.
+- `R_Serialize` never checks for an interrupt itself, so "an interrupt during a large
+  serialisation" lands in a refhook's evaluation; the lifetime test uses a refhook that does
+  R work per environment.
+- The libFuzzer targets embed R, which needed an `embed-r` input in r-actions' `fuzz.yml`
+  (R installed, `R CMD config` flags, libR rpath, `-detect_leaks=0`) and R in the canaries
+  job.
 
 ---
 

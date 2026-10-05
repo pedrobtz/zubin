@@ -6,14 +6,18 @@
 # libFuzzer, and zufast's headers (ZUFAST_INCLUDE, or an installed zufast).
 # Run from the package root.
 #
-#   tools/run-fuzz [target ...]     targets: layout unpack buf
+#   tools/run-fuzz [target ...]     targets: layout unpack buf serialize sink
+#
+# serialize and sink embed R (tools/fuzz/rfuzz.c): they compile with R's
+# flags, link libR, need R_HOME, and run with -detect_leaks=0, since R's heap
+# persists between inputs by design.
 #   CANARY_ONLY=1 tools/run-fuzz    only prove each canary crashes (CI runs the
 #                                   fuzzing itself through r-actions' fuzz.yml)
 set -eu
 
 CC=${CC:-clang}
 SECONDS_PER_TARGET=${FUZZ_SECONDS:-30}
-TARGETS=${*:-layout unpack buf}
+TARGETS=${*:-layout unpack buf serialize sink}
 if [ -z "${ZUFAST_INCLUDE:-}" ]; then
     ZUFAST_INCLUDE=$(Rscript -e 'cat(system.file("include", package = "zufast"))' 2>/dev/null || true)
 fi
@@ -25,9 +29,21 @@ FLAGS="-g -O1 -fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined -fno-s
 status=0
 for t in $TARGETS; do
     src=tools/fuzz/fuzz_$t.c
+    EXTRA=""
+    LIBS=""
+    ARGS=""
+    case "$t" in
+        serialize|sink)
+            export R_HOME="${R_HOME:-$(R RHOME)}"
+            EXTRA="$(R CMD config --cppflags) tools/fuzz/rfuzz.c"
+            LIBS="$(R CMD config --ldflags) -Wl,-rpath,$R_HOME/lib"
+            ARGS="-detect_leaks=0"
+            ;;
+    esac
     # The exit status is the canary binary's own, captured directly, never a
     # pipe's: a crash must be seen as a crash.
-    $CC $FLAGS -DZB_FUZZ_CANARY "$src" tools/fuzz/support.c -o "$TMP/canary_$t"
+    # shellcheck disable=SC2086
+    $CC $FLAGS -DZB_FUZZ_CANARY "$src" tools/fuzz/support.c $EXTRA $LIBS -o "$TMP/canary_$t"
     if "$TMP/canary_$t" tools/fuzz/canary.input >"$TMP/canary_$t.log" 2>&1; then
         echo "FAIL $t: the canary build did not crash on the canary input"
         status=1
@@ -37,13 +53,15 @@ for t in $TARGETS; do
     echo "ok $t: canary crashed under ASan"
     [ "${CANARY_ONLY:-}" = 1 ] && continue
 
-    $CC $FLAGS "$src" tools/fuzz/support.c -o "$TMP/fuzz_$t"
+    # shellcheck disable=SC2086
+    $CC $FLAGS "$src" tools/fuzz/support.c $EXTRA $LIBS -o "$TMP/fuzz_$t"
     corpus=${CORPUS_DIR:+$CORPUS_DIR/$t}
     corpus=${corpus:-$TMP/corpus_$t}
     mkdir -p "$corpus"
     cp tools/fuzz/seeds/$t/* "$corpus/"
     mkdir -p "${ARTIFACTS:-$TMP}"
-    if "$TMP/fuzz_$t" -max_total_time="$SECONDS_PER_TARGET" -print_final_stats=1 -max_len=4096 \
+    # shellcheck disable=SC2086
+    if "$TMP/fuzz_$t" -max_total_time="$SECONDS_PER_TARGET" -print_final_stats=1 -max_len=4096 $ARGS \
             -artifact_prefix="${ARTIFACTS:-$TMP}/" "$corpus" >"$TMP/fuzz_$t.log" 2>&1; then
         echo "ok $t: $(grep -o 'stat::number_of_executed_units: *[0-9]*' "$TMP/fuzz_$t.log" | grep -o '[0-9]*$') executions, no finding"
     else

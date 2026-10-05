@@ -1,3 +1,16 @@
+# zubin 0.2.0
+
+Unreleased; in development after 0.1.0.
+
+* `bin_serialize()` appends R's serialization of an object to a builder, without first
+  allocating it as a raw vector; `bin_unserialize()` reads one from a raw vector at a 0-based
+  offset; `bin_hash_object()` gives an XXH3 fingerprint of an object that does not change
+  with the R version, streamed so that the serialization is never allocated (#25).
+* In C, `<zubin-r.h>` gains `zb_serialize()`, `zb_unserialize()` and
+  `zb_serialize_to_sink()`, the last streaming a serialization through any sink, as a block
+  pipeline consumes it. R's own errors reach the caller unchanged; a stream that runs out
+  and a builder that cannot grow are statuses.
+
 # zubin 0.0.0.9000
 
 The development version of the first release, 0.1.0 (this heading becomes `# zubin 0.1.0`

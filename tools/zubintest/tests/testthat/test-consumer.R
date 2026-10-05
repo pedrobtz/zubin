@@ -23,3 +23,12 @@ test_that("buffer.c builds bytes in a buffer owned by R", {
   expect_identical(.Call(zt_build, numeric(), raw(0)), raw(0))
   expect_error(.Call(zt_build, numeric(), raw(2^20 + 1)), "cap")
 })
+
+test_that("serial.c round-trips an object through a buffer, a cursor and a sink", {
+  x <- list(a = 1:3, b = "zubintest", c = c(1.5, NA))
+  r <- .Call(zt_serial, x, 0L)
+  expect_identical(r[[1]], x)
+  expect_identical(r[[2]], as.double(length(serialize(x, NULL))))
+  expect_identical(r[[3]], as.double(length(serialize(x, NULL, version = 2)) - 14))
+  expect_identical(.Call(zt_serial, x, 5L), "ZB_ERR_EOF")
+})

@@ -23,7 +23,7 @@ Nothing here is promised. The rules:
 | Release | Contents | Trigger | Needs |
 |---|---|---|---|
 | **0.2.0** | variable-length fields; the cursor-style reader from R; the Python `struct` translator | a format with length-prefixed or NUL-terminated fields that someone is reading in R (ISO 8583, SBE var data, copybook `OCCURS DEPENDING ON`); or rdz's C rewrite | 0.1.0 |
-| **0.2.x or 0.3.0** | R serialisation into a builder, unserialisation from an offset, a version-stable object hash | **rdz decides to rewrite in C** (§3.2) | 0.1.0 |
+| **0.2.0** | R serialisation into a builder, unserialisation from an offset, a version-stable object hash | **fired**: rdz's C rewrite proposed (pedrobtz/rdz#2); now roadmap Stage 10, [#25](https://github.com/pedrobtz/zubin/issues/25) | 0.1.0 |
 | **0.3.0** | zero-copy views, typed reinterpretation views, byte search and splitting over them, zero-copy `bin_take()` | a reader that holds a file larger than it wants to copy (zucsv; rdz's selective reads) | 0.1.0 |
 | **0.4.0** | memory-mapped files; custom connections over views and builders | the same reader, past memory; connection-only consumers (`read.csv`, `readRDS`) over a view | 0.3.0 |
 | **when asked** | nanoarrow bridge; bitfields; `blob` and `float` outputs; a `bigint` for `u64`; the POD-in-`RAWSXP` helper; explicit offsets and unions in the grammar | one named consumer each | varies |
@@ -67,6 +67,13 @@ C unions need; both are refused by the 0.1.0 parser with a message naming this f
 `COPY`, and every chunked container.
 
 ## 0.2.x or 0.3.0 — Serialisation streams, conditional on rdz
+
+**Moved to the roadmap as Stage 10** ([#25](https://github.com/pedrobtz/zubin/issues/25)),
+2026-10-05: the trigger fired with rdz's C-rewrite proposal (pedrobtz/rdz#2,
+`.agents/plan-c.md` §3.2). Design §12.1 and §13.9 hold what was built, including the one
+change from the sketch below: `zb_unserialize()` takes a `zb_status *` so that a stream that
+runs out is a status rather than an R error. The text below is kept as the record of the
+plan.
 
 **What.** Draft 1's §5.5 and §6.7, unchanged in substance:
 
