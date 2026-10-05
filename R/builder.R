@@ -122,14 +122,18 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
   invisible(b)
 }
 
-# "z" is -1; "s<n>" is n; anything else is NULL.
+# "z" is -1; "s<n>" is n; anything else is NULL. No regular expression: this
+# runs on every typed bin_put(), and the allocation-failure sweep found R's
+# regex engine segfaulting when an allocation inside grepl() fails.
 string_width <- function(type) {
   if (identical(type, "z")) {
     return(-1L)
   }
-  if (grepl("^s[0-9]+$", type)) {
-    w <- suppressWarnings(as.numeric(substring(type, 2L)))
-    if (!is.na(w) && w >= 1 && w <= .Machine$integer.max) {
+  if (startsWith(type, "s")) {
+    digits <- substring(type, 2L)
+    w <- suppressWarnings(as.numeric(digits))
+    if (!is.na(w) && w >= 1 && w <= .Machine$integer.max && w == floor(w) &&
+          identical(digits, format(w, scientific = FALSE))) {
       return(as.integer(w))
     }
   }

@@ -680,7 +680,11 @@ matches the code.
 - `R-CMD-check.yaml` sets `ZUBIN_SLOW_TESTS=true` on the full profile (`main`, and PRs
   labelled `full-ci`), so the sweeps and the 2 GiB input run in CI.
 - `alloc-failure.yaml` is weekly and informational, with `tools/alloc-exercise.R` as its
-  workload and `zubin_memory_error` as the target pattern.
+  workload and `zubin_memory_error` as the target pattern. Its first run, on the PR, killed
+  R four times out of 300 injected failures, every one a segfault inside R's regex engine:
+  `grepl()` in `bin_put()`'s type parsing, when the failed allocation was TRE's. That is a
+  finding about R, as r-actions' documentation warns, but `bin_put()` no longer uses a
+  regex, and the sweep no longer runs on pull requests, which it would otherwise gate.
 - `cran-comments.md` is written for the submission at Stage 9, when zufast is on CRAN; it
   claims only checks the CI runs.
 - A `zubin-conditions` help page lists every class and its fields; `?bin_layout` carries
