@@ -87,7 +87,10 @@ encoding). Two objects with the same digest have the same serialization.</p>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>It is a fingerprint, not a cryptographic digest: fast, and well
 distributed, but not a defence against someone choosing inputs to
-collide. <code>version = 2</code>, the default, writes compact sequences such as
+collide. The digest is the same on every platform R runs on, with one
+exception: on 32-bit x86 a double <code>NA</code> is stored with different bits, so an
+object holding one hashes differently there. <code>version = 2</code>, the default,
+writes compact sequences such as
 <code>1:10</code> as the vectors they are; <code>version = 3</code> writes their compact form,
 so the same values may then hash differently.</p>
     </div>
