@@ -21,5 +21,10 @@ You can install the development version of zubin from
 pak::pak("pedrobtz/zubin")
 ```
 
-# 
+# Package index
+
+## All functions
+
+- [`bin_info()`](https://pedrobtz.github.io/zubin/reference/bin_info.md)
+  : Information about the compiled zubin headers
 
