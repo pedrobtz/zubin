@@ -5,8 +5,9 @@ vector `x`, starting at the 0-based byte `offset`:
 `bin_decode(x, "u32", offset = 4)` is a header field,
 `bin_decode(x, "f32", offset = 64, n = 1e6)` is a column. It is
 [`readBin()`](https://rdrr.io/r/base/readBin.html) generalised to every
-width and both byte orders, exact or an error; `bin_encode()` is its
-inverse. Offsets are 0-based.
+width and both byte orders, exact or an error;
+[`bin_encode()`](https://pedrobtz.github.io/zubin/reference/bin_encode.md)
+is its inverse. Offsets are 0-based.
 
 ## Usage
 

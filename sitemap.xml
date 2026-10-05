@@ -7,8 +7,10 @@
 <url><loc>https://pedrobtz.github.io/zubin/news/index.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zubin/reference/bin_builder.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zubin/reference/bin_decode.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zubin/reference/bin_encode.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zubin/reference/bin_info.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zubin/reference/bin_layout.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zubin/reference/bin_pack.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zubin/reference/bin_put.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zubin/reference/bin_size.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zubin/reference/bin_unpack.html</loc></url>

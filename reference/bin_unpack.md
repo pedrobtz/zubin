@@ -95,7 +95,9 @@ A single header is `bin_unpack(x, hdr, n = 1)`: a one-row result.
 ## See also
 
 [`bin_decode()`](https://pedrobtz.github.io/zubin/reference/bin_decode.md)
-for one field read as a vector; `bin_pack()` for the inverse.
+for one field read as a vector;
+[`bin_pack()`](https://pedrobtz.github.io/zubin/reference/bin_pack.md)
+for the inverse.
 
 ## Examples
 
