@@ -395,7 +395,8 @@ static inline uint8_t  *zb_put_raw(zb_buf *b, size_t n);        /* reserve n, ad
 ```
 
 `zb_put_raw` is the shape the R glue and a format writer want: reserve once, then write a
-whole record with `zb_wr_*` into the returned slot. Every `_n` function reserves once and
+whole record with `zb_wr_*` into the returned slot. For `n = 0` it never returns `NULL` (so
+`NULL` always means failure), but the slot must not be written through. Every `_n` function reserves once and
 then loops, so appending a million values costs one allocation check, not a million.
 
 ## 10. `cursor.h` — checked sequential reads
@@ -551,11 +552,20 @@ The only header that includes `<Rinternals.h>`. For a consumer that is itself an
 ```c
 /* A zb_buf owned by an external pointer with a finalizer (onexit = TRUE), so that a
    longjmp from Rf_error() or R_CheckUserInterrupt() cannot leak it. */
-SEXP    zb_r_buf_new   (size_t reserve, size_t max);
-zb_buf *zb_r_buf_get   (SEXP ptr);                 /* NULL once finalized */
+SEXP    zb_r_buf_new   (size_t reserve, size_t max, zb_status *st);  /* R_NilValue on failure */
+zb_buf *zb_r_buf_get   (SEXP ptr);                 /* NULL once finalized, or not a zubin buffer */
+void    zb_r_buf_free  (SEXP ptr);                 /* eager release; the finalizer then does nothing */
 void    zb_r_buf_borrow(zb_buf *b, SEXP raw);       /* borrow RAW(raw); caller keeps raw protected */
 SEXP    zb_r_buf_to_raw(const zb_buf *b);          /* allocVector(RAWSXP) + memcpy */
 ```
+
+Nothing in `zubin-r.h` raises: `zb_r_buf_new` reports `ZB_ERR_LIMIT` (reserve above max) or
+`ZB_ERR_MEMORY` through `*st` and returns `R_NilValue`, and the caller decides how to
+report it (Stage 2 added the status out-parameter, so the "C never raises" rule of §13.7
+holds for consumers too). The external pointer carries the tag symbol `zubin_buf`, which
+`zb_r_buf_get` checks, so a foreign external pointer is `NULL` rather than a wild cast. Two
+internal hooks, `ZB_INT_R_ON_NEW()` and `ZB_INT_R_ON_FREE()`, may be defined before the
+include to count buffers; zubin's own test harness does, for the lifetime tests of §16.3.
 
 The rule it encodes is zukomp §13's: any heap state that must survive a longjmp is owned by
 R before the first call that can jump. `zb_r_buf_new` registers the finalizer before the

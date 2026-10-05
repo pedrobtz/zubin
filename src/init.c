@@ -12,10 +12,25 @@
    (design 4). */
 static const R_CallMethodDef call_methods[] = {
     CALLDEF(zubin_info, 0),
+    CALLDEF(zubin_builder_new, 2),
+    CALLDEF(zubin_builder_state, 1),
+    CALLDEF(zubin_builder_put_raw, 2),
+    CALLDEF(zubin_builder_put_str, 3),
+    CALLDEF(zubin_builder_reserve, 2),
+    CALLDEF(zubin_builder_reset, 1),
+    CALLDEF(zubin_builder_take, 2),
     CALLDEF(zubin_test_status_string, 1),
     CALLDEF(zubin_test_rw, 3),
     CALLDEF(zubin_test_rw_write, 3),
     CALLDEF(zubin_test_cursor, 2),
+    CALLDEF(zubin_test_live_buffers, 0),
+    CALLDEF(zubin_test_buf_growth, 2),
+    CALLDEF(zubin_test_buf_cap, 3),
+    CALLDEF(zubin_test_buf_borrow, 2),
+    CALLDEF(zubin_test_buf_put, 4),
+    CALLDEF(zubin_test_buf_misc, 0),
+    CALLDEF(zubin_test_put_then_error, 0),
+    CALLDEF(zubin_test_put_loop, 2),
     {NULL, NULL, 0}
 };
 

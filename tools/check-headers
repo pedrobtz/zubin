@@ -7,7 +7,9 @@
 #   2. a unit that includes <zubin.h> and uses nothing is warning-free (the
 #      unused-function check of design 4.5);
 #   3. a unit that calls every public function is warning-free, as C and C++;
-#   4. the headers under zubin/ mention no R API, and none but buf.h
+#   4. <zubin-r.h> compiles against R's headers and calls every function it
+#      adds (tools/abi/probe-r.c);
+#   5. the headers under zubin/ mention no R API, and none but buf.h
 #      allocates (design 5).
 #
 # Before any of that, two canaries: a header with a plain `static` function
@@ -91,6 +93,29 @@ for probe in tools/abi/probe-none.c tools/abi/probe-all.c; do
         if ! compile_cxx "$probe" $opt; then echo "FAIL C++11 $opt: $probe"; fail=1; fi
     done
 done
+
+echo "== zubin-r.h against R's headers"
+# R_INCLUDE is R's include directory; by default it is asked of Rscript. The
+# probe is not optional: set ZB_NO_R_PROBE=1 to skip it knowingly.
+if [ "${ZB_NO_R_PROBE:-}" = 1 ]; then
+    echo "skipped (ZB_NO_R_PROBE=1)"
+else
+    R_INCLUDE=${R_INCLUDE:-$(Rscript -e 'cat(R.home("include"))' 2>/dev/null || true)}
+    if [ -z "$R_INCLUDE" ] || [ ! -f "$R_INCLUDE/Rinternals.h" ]; then
+        echo "FAIL: R's headers not found (set R_INCLUDE, or ZB_NO_R_PROBE=1)"; fail=1
+    else
+        for opt in -O0 -O2; do
+            if ! $CC -std=gnu17 -Wall -Wextra -Werror $opt -I"$INC" -I"$ZUFAST_INCLUDE" -I"$R_INCLUDE" \
+                    -c tools/abi/probe-r.c -o "$TMP/out.o"; then
+                echo "FAIL gnu17 $opt: tools/abi/probe-r.c"; fail=1
+            fi
+            if ! $CXX -std=c++11 $XWARN $opt -I"$INC" -I"$ZUFAST_INCLUDE" -I"$R_INCLUDE" \
+                    -x c++ -c tools/abi/probe-r.c -o "$TMP/out.o"; then
+                echo "FAIL C++11 $opt: tools/abi/probe-r.c"; fail=1
+            fi
+        done
+    fi
+fi
 
 echo "== forbidden identifiers"
 for h in $(find "$INC/zubin" "$INC/zubin.h" -name '*.h' | sort); do

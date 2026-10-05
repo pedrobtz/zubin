@@ -44,3 +44,12 @@ zb_status_class <- c(
   ZB_ERR_SPEC    = "zubin_spec_error",
   ZB_ERR_NA      = "zubin_na_error"
 )
+
+# Raise the condition for a status returned by a .Call entry point. `res` is
+# the classed zubin_status string; `...` carries the condition's fields.
+zb_fail <- function(res, message, ..., call = sys.call(-1L)) {
+  class <- zb_status_class[[as.character(res)]]
+  zubin_abort(message, class, ..., call = call)
+}
+
+is_status <- function(x) inherits(x, "zubin_status")
