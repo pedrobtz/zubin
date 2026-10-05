@@ -26,6 +26,12 @@
  * lies exactly halfway between two halves only after the first step is
  * rounded twice; the tests pin that behaviour rather than claim single
  * rounding (design 8).
+ *
+ * Threads: every function here is pure, or reads and writes only the
+ * buffer, cursor or arrays it is passed; no zubin header holds static or
+ * global state (tools/check-headers refuses a static object under zubin/).
+ * Any function may be called from any thread, as long as no two threads use
+ * one buffer, cursor or output array at the same time (design 15).
  */
 #ifndef ZUBIN_RW_H
 #define ZUBIN_RW_H

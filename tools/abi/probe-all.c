@@ -112,6 +112,10 @@ int zb_probe_all(void)
         zb_buf_borrow(&b, buf, sizeof buf);
         zb_buf_release(&b);
         acc += (int)zb_int_add(1, 2, &r) + (int)zb_int_mul(3, 4, &r) + (int)r;
+        acc += (int)zb_size_add(1, 2, &r) + (int)zb_size_mul(3, 4, &r) + (int)r;
+        data = (uint8_t *)malloc(8);
+        if (zb_buf_adopt(&b, data, 0, 8, 0) == ZB_OK) zb_buf_release(&b);
+        else free(data);
         acc += (int)(ZB_BUF_DOUBLING_LIMIT > ZB_BUF_MIN_CAP && ZB_BUF_MAX_CAP > ZB_BUF_MIN_CAP);
     }
 

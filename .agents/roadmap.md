@@ -132,6 +132,7 @@ step; both remain available to reproduce a CRAN failure.
 | 8 — Hardening, documentation, benchmarks | M | 6, 7 | vignette, WORDLIST, cran-comments, benchmarks, full gates |
 | 9 — Release 0.1.0 | S | 8, and zufast on CRAN | the submission |
 | 10 — Serialisation streams | M | 8 | `zb_serialize`, `zb_unserialize`, `zb_serialize_to_sink`; `bin_serialize()`, `bin_unserialize()`, `bin_hash_object()` |
+| 11 — What else rdz needs | S | 10 | public size arithmetic, `zb_buf_adopt()`, the thread statement and its gate, rdz's codec in the fixture |
 
 Stage 6 is off the critical path and can be done in any spare sitting after Stage 1.
 
@@ -780,6 +781,42 @@ version-stable object hash streamed through zufast's hasher (design §12.1, §13
 - The libFuzzer targets embed R, which needed an `embed-r` input in r-actions' `fuzz.yml`
   (R installed, `R CMD config` flags, libR rpath, `-detect_leaks=0`) and R in the canaries
   job.
+
+---
+
+## Stage 11 — What else rdz needs · S
+
+**Status:** done (#26).
+
+**Goal:** the small additions rdz's C rewrite needs beyond Stage 10, so that everything rdz
+needs from zubin ships in 0.1.0 (#26).
+
+**Do**
+
+- `buf.h`: `zb_size_add()` and `zb_size_mul()`, the public names of the checked arithmetic
+  (the internal ones stay as aliases); `zb_buf_adopt()`, the inverse of `zb_buf_detach()`.
+- A thread statement in every header (pure or confined to the buffer or cursor passed; no
+  static state; `zubin-r.h` main-thread only), and a `tools/check-headers` grep, with a
+  canary, that no `static` object exists under `zubin/`.
+- `tools/zubintest/src/rdz.c`: rdz's generic codec in miniature, end to end.
+- Design §9, §15 and §16 amended.
+
+**Exit**
+
+- The harness: adopt then detach returns the same pointer; an invalid adopt takes nothing
+  over; an adopted block grows by `realloc` and is freed on release (under the sanitizers
+  and valgrind); the public arithmetic refuses to wrap and leaves `*out` alone.
+- `abi.yaml` green with the new grep and the new functions in `probe-all.c`.
+- `consumer.yaml` green on three operating systems with `rdz.c`'s test, zubin uninstalled.
+
+**What actually happened**
+
+- `zb_buf_adopt()` returns a `zb_status`, not the `void` #26 sketched: a block whose `len`
+  exceeds its `cap`, or whose `cap` exceeds `max`, would make a buffer that lies about its
+  memory, and refusing it needs a way to say so.
+- The static-object grep found one on its first run: `zb_put_raw(b, 0)`'s dummy slot. Never
+  written, so never a race, but the rule is cheaper to keep without exceptions; it now
+  points into the `zb_buf`.
 
 ---
 

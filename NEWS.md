@@ -26,9 +26,11 @@ when it is submitted).
 * A header-only C99 library under `inst/include`, used through `LinkingTo: zubin, zufast`
   alone: `zubin/rw.h` (typed reads and writes at any alignment and byte order),
   `zubin/cursor.h` (checked sequential reads), `zubin/buf.h` (a buffer with ownership
-  flags, a hard cap and checked growth), `zubin/layout.h` (the specification parser and
+  flags, a hard cap and checked growth, adopting and detaching `malloc` blocks, and the
+  public checked size arithmetic `zb_size_add()` and `zb_size_mul()`), `zubin/layout.h` (the specification parser and
   the field-major unpack and pack kernels), and `zubin-r.h` (a buffer owned by an R
-  external pointer). Source compatibility within major version 1; see the `c-api` article
+  external pointer). Every header but `zubin-r.h` may be used from any thread, as long as
+  no two threads share a buffer or cursor (#26). Source compatibility within major version 1; see the `c-api` article
   on the package website and "Using zubin from C" in the README.
 * `zubin-r.h` also points R's serialization at these containers: `zb_serialize()` into a
   buffer, `zb_unserialize()` from a cursor, and `zb_serialize_to_sink()` through any sink,

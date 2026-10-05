@@ -433,7 +433,8 @@ SEXP zubin_test_buf_misc(void)
 {
     const char *names[] = {"add_overflow", "mul_overflow", "mul_zero", "alloc_over_max",
                            "reserve_overflow", "grow_rule", "put_raw_empty", "detach",
-                           "detach_borrowed", "release_twice", "n_overflow", "fill_to_max", "max_cap", ""};
+                           "detach_borrowed", "release_twice", "n_overflow", "fill_to_max", "max_cap",
+                           "size_public", "adopt_detach", "adopt_invalid", "adopt_grow", ""};
     SEXP out = PROTECT(Rf_mkNamed(LGLSXP, names));
     int *ok = LOGICAL(out);
     size_t r = 0;
@@ -498,6 +499,48 @@ SEXP zubin_test_buf_misc(void)
     zb_put_u8(&b, 1);
     ok[12] = ok[12] && zb_buf_reserve(&b, ZB_BUF_MAX_CAP) == ZB_ERR_MEMORY && b.len == 1;
     zb_buf_release(&b);
+
+    /* the public names of the checked arithmetic (#26) */
+    r = 7;
+    ok[13] = zb_size_add((size_t)-1, 1, &r) == ZB_ERR_MEMORY && r == 7 &&
+             zb_size_add(2, 3, &r) == ZB_OK && r == 5 &&
+             zb_size_mul((size_t)-1 / 2 + 1, 2, &r) == ZB_ERR_MEMORY && r == 5 &&
+             zb_size_mul(6, 7, &r) == ZB_OK && r == 42;
+
+    /* adopt is the inverse of detach: the same pointer comes back */
+    {
+        uint8_t *block = (uint8_t *)malloc(64), *back = NULL;
+        size_t blen = 0;
+        ok[14] = block && zb_buf_adopt(&b, block, 10, 64, 0) == ZB_OK &&
+                 b.data == block && b.len == 10 && b.cap == 64 &&
+                 (b.flags & (ZB_BUF_OWNED | ZB_BUF_GROWABLE)) == (ZB_BUF_OWNED | ZB_BUF_GROWABLE) &&
+                 zb_buf_detach(&b, &back, &blen) == ZB_OK && back == block && blen == 10 &&
+                 b.data == NULL;
+        free(back ? back : block);
+    }
+
+    /* an adopt that cannot hold takes nothing over */
+    {
+        uint8_t *block = (uint8_t *)malloc(16);
+        ok[15] = zb_buf_adopt(&b, block, 17, 16, 0) == ZB_ERR_INVALID && b.data == NULL &&
+                 b.flags == 0 &&
+                 zb_buf_adopt(&b, block, 8, 16, 12) == ZB_ERR_INVALID &&
+                 zb_buf_adopt(&b, NULL, 0, 8, 0) == ZB_ERR_INVALID &&
+                 zb_buf_adopt(&b, NULL, 0, 0, 0) == ZB_OK;
+        zb_buf_release(&b);
+        free(block);   /* still the caller's */
+    }
+
+    /* an adopted block grows by realloc, keeps its bytes, and is freed on release */
+    {
+        uint8_t *block = (uint8_t *)malloc(4);
+        if (block) memcpy(block, "abcd", 4);
+        ok[16] = block && zb_buf_adopt(&b, block, 4, 4, 0) == ZB_OK &&
+                 zb_put_zeros(&b, 1000) == ZB_OK && b.len == 1004 && b.cap >= 1004 &&
+                 memcmp(b.data, "abcd", 4) == 0;
+        zb_buf_release(&b);
+        ok[16] = ok[16] && b.data == NULL;
+    }
 
     UNPROTECT(1);
     return out;

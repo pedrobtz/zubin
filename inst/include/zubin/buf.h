@@ -19,7 +19,7 @@
  *
  * This is the only zubin header that allocates, and it does so only through
  * malloc, realloc and free. There is no bare size arithmetic: every sum and
- * product goes through zb_int_add() and zb_int_mul(), which refuse to wrap.
+ * product goes through zb_size_add() and zb_size_mul(), which refuse to wrap.
  * On any failure the buffer is unchanged, apart from ZB_BUF_HIT_LIMIT, which
  * records whether the last failed growth hit the cap (ZB_ERR_LIMIT) or the
  * allocator (ZB_ERR_MEMORY).
@@ -32,6 +32,12 @@
  *     zb_put_{f16,bf16,f64}{le,be}          (double)
  *     zb_put_f32{le,be}                      (float)
  *     zb_put_u8_n(b, const uint8_t *v, n) ... zb_put_f64be_n(b, const double *v, n)
+ *
+ * Threads: every function here is pure, or reads and writes only the
+ * buffer, cursor or arrays it is passed; no zubin header holds static or
+ * global state (tools/check-headers refuses a static object under zubin/).
+ * Any function may be called from any thread, as long as no two threads use
+ * one buffer, cursor or output array at the same time (design 15).
  */
 #ifndef ZUBIN_BUF_H
 #define ZUBIN_BUF_H
@@ -67,19 +73,28 @@ typedef struct zb_buf {
 
 /* ---- checked size arithmetic ------------------------------------------------ */
 
-ZB_INLINE zb_status zb_int_add(size_t a, size_t b, size_t *out)
+/* a + b into *out, or ZB_ERR_MEMORY (and *out untouched) when it would wrap.
+   With zb_size_mul, the only size arithmetic a consumer should write: every
+   count, length, offset and sum read from a file goes through one of the
+   two before it sizes an allocation or a seek. */
+ZB_INLINE zb_status zb_size_add(size_t a, size_t b, size_t *out)
 {
     if (a > (size_t)-1 - b) return ZB_ERR_MEMORY;
     *out = a + b;
     return ZB_OK;
 }
 
-ZB_INLINE zb_status zb_int_mul(size_t a, size_t b, size_t *out)
+/* a * b into *out, or ZB_ERR_MEMORY (and *out untouched) when it would wrap. */
+ZB_INLINE zb_status zb_size_mul(size_t a, size_t b, size_t *out)
 {
     if (a != 0 && b > (size_t)-1 / a) return ZB_ERR_MEMORY;
     *out = a * b;
     return ZB_OK;
 }
+
+/* The internal names, kept for the code that uses them. */
+ZB_INLINE zb_status zb_int_add(size_t a, size_t b, size_t *out) { return zb_size_add(a, b, out); }
+ZB_INLINE zb_status zb_int_mul(size_t a, size_t b, size_t *out) { return zb_size_mul(a, b, out); }
 
 /* The capacity to grow `cap` to so that it holds `need` bytes: double below
    ZB_BUF_DOUBLING_LIMIT, half again from it, never below need or
@@ -167,6 +182,29 @@ ZB_INLINE void zb_buf_reset(zb_buf *b)
     b->len = 0;
 }
 
+/* Takes ownership of a block the caller allocated with malloc() (or got back
+   from zb_buf_detach()): the buffer holds len bytes of its cap, may grow to
+   max (0: unlimited), is OWNED | GROWABLE, and frees the block with free() on
+   release. The exact inverse of zb_buf_detach(): detaching again returns the
+   same pointer. ZB_ERR_INVALID, and nothing taken over (the block is still
+   the caller's), when len > cap, cap > max with max set, cap > ZB_BUF_MAX_CAP,
+   or data is NULL with cap nonzero; b is then as zb_buf_init() leaves it. */
+ZB_INLINE zb_status zb_buf_adopt(zb_buf *b, uint8_t *data, size_t len, size_t cap, size_t max)
+{
+    zb_buf_init(b);
+    if (len > cap || (max && cap > max) || cap > ZB_BUF_MAX_CAP || (!data && cap)) {
+        return ZB_ERR_INVALID;
+    }
+    b->data = data;
+    b->len = len;
+    b->cap = cap;
+    b->max = max;
+    b->flags = ZB_BUF_OWNED | ZB_BUF_GROWABLE;
+    b->release = zb_int_release_malloc;
+    b->owner = data;
+    return ZB_OK;
+}
+
 /* Hands the malloc block to the caller, who frees it with free(); b is then
    zeroed. *data is NULL when the buffer never had storage. ZB_ERR_INVALID
    for a buffer that is not owned and growable. */
@@ -222,10 +260,11 @@ ZB_INLINE zb_status zb_buf_reserve(zb_buf *b, size_t extra)
    For n = 0 the result is never NULL but must not be written through. */
 ZB_INLINE uint8_t *zb_put_raw(zb_buf *b, size_t n)
 {
-    static uint8_t empty;
     uint8_t *slot;
     if (zb_buf_reserve(b, n)) return NULL;
-    if (!b->data) return &empty;   /* n == 0 on a buffer with no storage */
+    /* n == 0 on a buffer with no storage: any non-NULL pointer will do, and
+       one into the struct keeps the header free of static state */
+    if (!b->data) return (uint8_t *)b;
     slot = b->data + b->len;
     b->len += n;
     return slot;
