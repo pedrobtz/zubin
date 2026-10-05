@@ -81,6 +81,6 @@ bin_unpack(y, pts)
 bin_unpack(y, pts, as = "list")$xy
 }
 \seealso{
-\code{\link[=bin_decode]{bin_decode()}} for one field read as a vector; \code{bin_pack()} for
+\code{\link[=bin_decode]{bin_decode()}} for one field read as a vector; \code{\link[=bin_pack]{bin_pack()}} for
 the inverse.
 }

@@ -9,23 +9,30 @@ bin_put(b, x, type = NULL, endian = c("little", "big", "native"))
 \arguments{
 \item{b}{A builder from \code{\link[=bin_builder]{bin_builder()}}.}
 
-\item{x}{A raw vector, or a character vector with \code{type}.}
+\item{x}{A raw vector; or a vector to encode as \code{type}.}
 
-\item{type}{\code{NULL} for raw input; \code{"z"} or \code{"s<n>"} for character input.}
+\item{type}{\code{NULL} for raw input; one type token of \code{\link[=bin_layout]{bin_layout()}}
+otherwise; or \code{"z"} for NUL-terminated strings.}
 
-\item{endian}{Byte order, for typed appends.}
+\item{endian}{Byte order of a typed append: \code{"little"}, \code{"big"} or
+\code{"native"}.}
 }
 \value{
 \code{b}, invisibly, so appends can be chained.
 }
 \description{
 Appends \code{x} to the end of the builder \code{b}. A raw vector is appended as it
-is. A character vector is appended with \code{type = "z"}, each string's UTF-8
-bytes followed by a NUL, or with \code{type = "s<n>"}, each string's UTF-8 bytes
-padded with NULs to exactly \code{n} bytes, the fixed-string field of a
-layout. Nothing is appended unless every element can be: an \code{NA}
-is a \code{zubin_na_error}, and a string longer than \code{n} bytes is a
-\code{zubin_range_error} carrying the 0-based \code{index} of the first one.
+is (\code{type = NULL}). Any other vector needs a \code{type}, so that a double is
+never silently eight bytes: a numeric, logical or \code{integer64} vector is
+encoded as \code{\link[=bin_encode]{bin_encode()}} would encode it (\code{"u32"}, \code{"f64"}, \code{"bool"}, ...),
+in \code{endian} order, written straight into the builder; a list of raw
+vectors as \code{"b<n>"}. A character vector is appended with \code{type = "z"},
+each string's UTF-8 bytes followed by a NUL, or with \code{type = "s<n>"}, each
+string's UTF-8 bytes padded with NULs to exactly \code{n} bytes, the
+fixed-string field of \code{\link[=bin_layout]{bin_layout()}}. Nothing is appended unless every
+element can be: an \code{NA} is a \code{zubin_na_error}, and a value that does not
+fit its type is a \code{zubin_range_error}, each carrying the 0-based \code{index}
+of the first one.
 }
 \details{
 Appending past the builder's \code{max} is a \code{zubin_limit_error} carrying
@@ -36,6 +43,7 @@ interrupted append leaves the builder unchanged too.
 \examples{
 b <- bin_builder()
 bin_put(b, c("RIFF", "WAVE"), type = "s4")
+bin_put(b, c(1, 65535), type = "u16", endian = "big")
 bin_put(b, "a C string", type = "z")
 bin_take(b)
 }

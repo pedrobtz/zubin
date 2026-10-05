@@ -489,7 +489,7 @@ model in the reading direction, and the golden vectors proven on a big-endian ho
 
 ## Stage 5 — Pack and encode · M
 
-**Status:** not started.
+**Status:** done (#9).
 
 **Goal:** the inverse kernels with range and NA checks, `bin_pack()`, `bin_encode()` and
 typed `bin_put()`, and the round-trip properties that make every later change cheap to
@@ -523,6 +523,24 @@ trust.
   finding; valgrind reports no uninitialised byte in packed output.
 
 **Not this stage:** any new field type.
+
+**What actually happened**
+
+- Every pack kernel takes `allow_na`, not only `zb_pack_i32`: R's NA markers reach `i32`
+  from a double column and `i64` from an integer64 one as well (design §11.5).
+- `zb_pack_f64` writes every numeric type, integers included, because R's doubles carry most
+  integers; it checks the range before casting, since casting an out-of-range double is
+  undefined.
+- In the C glue, `zb_field.count` for `b` and `s` is the byte width, not an element count;
+  both the pack glue and typed `bin_put()` tripped on it before the first test passed. The
+  R table already says `count = 1` for them, which is why the C name confused the C author.
+- Typed `bin_put()` uses the pack kernels in place, chunked by 64 MiB with an interrupt
+  check between chunks, and commits `len` only at the end; on failure nothing is appended.
+- `fuzz_buf` keeps a shadow copy of the buffer by plain `memcpy` and checks the bytes,
+  `len <= cap <= max` and `ZB_BUF_HIT_LIMIT` after every step. Its first crash was the
+  harness's own mistake (a refused reserve checked against the append size).
+- `bin_pack()` accepts the data frame `bin_unpack()` returns, array fields as `name.k`
+  columns included, so `expect_roundtrip()` checks both directions in both shapes.
 
 ---
 

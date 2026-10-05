@@ -487,3 +487,148 @@ SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP strid
     UNPROTECT(1);
     return out;
 }
+
+/* ---- pack (design 11.5, 13.3-13.5) -------------------------------------- */
+
+/* Writes one field of n records from an R column: integer or logical
+   through zb_pack_i32, double through zb_pack_f64 (or zb_pack_i64 when it
+   carries integer64 bits), character into s<n> (UTF-8, NUL-padded), and a
+   list of raw vectors into b<n>. The column has n * count elements, which
+   R arranged. The one pack path: bin_pack(), bin_encode() and typed
+   bin_put() all come here. */
+static zb_status pack_field(uint8_t *base, size_t n, size_t stride, const zb_field *f,
+                            SEXP col, int is64, int allow_na, size_t *bad)
+{
+    size_t i, elems = f->type == ZB_BYTES || f->type == ZB_STR ? 1 : f->count;
+    if ((size_t)XLENGTH(col) != n * elems) return ZB_ERR_INVALID;
+    switch (TYPEOF(col)) {
+    case INTSXP:
+        return zb_pack_i32(base, n, stride, f, INTEGER(col), allow_na, bad);
+    case LGLSXP:
+        return zb_pack_i32(base, n, stride, f, LOGICAL(col), allow_na, bad);
+    case REALSXP:
+        if (is64) return zb_pack_i64(base, n, stride, f, (const int64_t *)(const void *)REAL(col), allow_na, bad);
+        return zb_pack_f64(base, n, stride, f, REAL(col), allow_na, bad);
+    case STRSXP: {
+        const void *vmax = vmaxget();
+        if (f->type != ZB_STR) return ZB_ERR_INVALID;
+        for (i = 0; i < n; i++) {
+            SEXP s = STRING_ELT(col, (R_xlen_t)i);
+            const char *c;
+            size_t len;
+            uint8_t *p = base + i * stride + f->offset;
+            if (s == NA_STRING) { *bad = i; return ZB_ERR_NA; }
+            c = Rf_translateCharUTF8(s);
+            len = strlen(c);
+            if (len > f->size) { vmaxset(vmax); *bad = i; return ZB_ERR_RANGE; }
+            memcpy(p, c, len);
+            memset(p + len, 0, f->size - len);
+            vmaxset(vmax);
+        }
+        return ZB_OK;
+    }
+    case VECSXP:
+        if (f->type != ZB_BYTES) return ZB_ERR_INVALID;
+        for (i = 0; i < n; i++) {
+            SEXP r = VECTOR_ELT(col, (R_xlen_t)i);
+            if (TYPEOF(r) != RAWSXP) { *bad = i; return ZB_ERR_INVALID; }
+            if ((size_t)XLENGTH(r) != f->size) { *bad = i; return ZB_ERR_RANGE; }
+            memcpy(base + i * stride + f->offset, RAW(r), f->size);
+        }
+        return ZB_OK;
+    default:
+        return ZB_ERR_INVALID;
+    }
+}
+
+/* n records of the layout `spec` from `cols`, one column per value field in
+   layout order (is64 flags the integer64 ones). The result is one
+   exact-size raw vector, zeroed first so padding and alignment gaps are
+   zeros and no byte is uninitialised; then each field is written. On
+   failure, a status with the field's position and the record index. */
+SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_na)
+{
+    zb_layout l;
+    size_t err = 0, nrec, total;
+    uint32_t j, c = 0;
+    int na_ok = Rf_asLogical(allow_na) == TRUE;
+    zb_status st;
+    SEXP out;
+    st = zubin_int_parse(spec, 0, Rf_asLogical(align) == TRUE, 0, &l, &err);
+    if (st) return zubin_int_status(st, -1);
+    if (TYPEOF(cols) != VECSXP || TYPEOF(is64) != LGLSXP || XLENGTH(is64) != XLENGTH(cols) ||
+        zubin_int_size(n, &nrec)) return zubin_int_status(ZB_ERR_INVALID, -1);
+    if (zb_int_mul(nrec, l.size, &total) || total > (size_t)R_XLEN_T_MAX)
+        return zubin_int_status(ZB_ERR_MEMORY, -1);
+    out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t)total));
+    if (total) memset(RAW(out), 0, total);
+    for (j = 0; j < l.nfields; j++) {
+        const zb_field *f = &l.fields[j];
+        size_t bad = 0;
+        if (f->type == ZB_PAD) continue;
+        if (c >= (uint32_t)XLENGTH(cols)) {
+            UNPROTECT(1);
+            return zubin_int_status(ZB_ERR_INVALID, -1);
+        }
+        if (c) R_CheckUserInterrupt();
+        st = pack_field(total ? RAW(out) : NULL, nrec, l.size, f, VECTOR_ELT(cols, c),
+                        LOGICAL(is64)[c] == TRUE, na_ok, &bad);
+        if (st) {
+            UNPROTECT(1);
+            return zubin_int_failure(zb_status_string(st), (R_xlen_t)bad, (int)j);
+        }
+        c++;
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* Appends a column encoded as the one-field layout `spec` to a builder.
+   The space is reserved first and len advances only after the last chunk
+   is written, with an interrupt check every 64 MiB in between, so neither
+   an error nor an interrupt changes the builder. */
+SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
+{
+    zb_buf *b = zb_r_buf_get(ptr);
+    zb_layout l;
+    size_t err = 0, n, total, done = 0, chunk;
+    zb_status st;
+    if (!b) return zubin_int_status(ZB_ERR_INVALID, -1);
+    st = zubin_int_parse(spec, 0, 0, 0, &l, &err);
+    if (st || l.nfields != 1 || l.fields[0].type == ZB_PAD ||
+        (l.fields[0].type != ZB_BYTES && l.fields[0].type != ZB_STR && l.fields[0].count != 1))
+        return zubin_int_status(ZB_ERR_INVALID, -1);
+    n = (size_t)XLENGTH(col);
+    if (zb_int_mul(n, l.size, &total)) return zubin_int_status(ZB_ERR_MEMORY, -1);
+    st = zb_buf_reserve(b, total);
+    if (st) return zubin_int_status(st, -1);
+    chunk = ZUBIN_INTERRUPT_BYTES / l.size;
+    if (!chunk) chunk = 1;
+    while (done < n) {
+        size_t m = n - done < chunk ? n - done : chunk, bad = 0;
+        uint8_t *slot = b->data + b->len + done * l.size;
+        SEXP part = col;
+        if (done) R_CheckUserInterrupt();
+        /* a chunk of the column: offset the kernel's source by `done` */
+        switch (TYPEOF(col)) {
+        case INTSXP: st = zb_pack_i32(slot, m, l.size, &l.fields[0], INTEGER(col) + done, 0, &bad); break;
+        case LGLSXP: st = zb_pack_i32(slot, m, l.size, &l.fields[0], LOGICAL(col) + done, 0, &bad); break;
+        case REALSXP:
+            if (Rf_asLogical(is64) == TRUE)
+                st = zb_pack_i64(slot, m, l.size, &l.fields[0], (const int64_t *)(const void *)REAL(col) + done, 0, &bad);
+            else
+                st = zb_pack_f64(slot, m, l.size, &l.fields[0], REAL(col) + done, 0, &bad);
+            break;
+        default:
+            /* strings and byte lists go through pack_field whole */
+            if (done) { st = ZB_ERR_INVALID; break; }
+            st = pack_field(slot, n, l.size, &l.fields[0], part, 0, 0, &bad);
+            m = n;
+            break;
+        }
+        if (st) return zubin_int_failure(zb_status_string(st), (R_xlen_t)(done + bad), 0);
+        done += m;
+    }
+    b->len += total;
+    return R_NilValue;
+}

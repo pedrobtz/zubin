@@ -477,4 +477,181 @@ ZB_INLINE zb_status zb_unpack_bytes(const uint8_t *base, size_t n, size_t stride
     return ZB_OK;
 }
 
+/* ---- pack kernels (design 11.5) ------------------------------------------------- */
+
+/* The inverses of the unpack kernels: each writes one field of n records,
+   `stride` apart from base, from one typed column (column-major for an
+   array field). The caller has checked that every record lies inside the
+   buffer, and zeroes it first if padding and alignment gaps must be zero
+   (zb_pack_zeros does one field). A value that does not fit is ZB_ERR_RANGE
+   and a missing value ZB_ERR_NA, with the first offending record's index in
+   *bad; what was written by then is unspecified. A field of a type the
+   kernel does not write is ZB_ERR_INVALID.
+
+   The missing-value markers are R's: INT32_MIN in an int32_t column, any
+   NaN in a double column written to an integer type, and INT64_MIN in an
+   int64_t column. allow_na lets INT32_MIN through to an i32 field (and NaN
+   becomes INT32_MIN there), and INT64_MIN through to an i64 field
+   (design 14.3). */
+
+/* int32_t into u8 i8 u16 i16 i32 bool; bool takes 0 and 1. */
+ZB_INLINE zb_status zb_pack_i32(uint8_t *base, size_t n, size_t stride, const zb_field *f,
+                                const int32_t *src, int allow_na, size_t *bad)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i;
+    int be = f->big_endian;
+    int32_t lo, hi;
+    switch (f->type) {
+    case ZB_U8: lo = 0; hi = 255; break;
+    case ZB_I8: lo = -128; hi = 127; break;
+    case ZB_U16: lo = 0; hi = 65535; break;
+    case ZB_I16: lo = -32768; hi = 32767; break;
+    case ZB_I32: lo = INT32_MIN; hi = INT32_MAX; break;
+    case ZB_BOOL: lo = 0; hi = 1; break;
+    default: return ZB_ERR_INVALID;
+    }
+    for (k = 0; k < f->count; k++) {
+        const int32_t *s = src + (size_t)k * n;
+        for (i = 0; i < n; i++) {
+            uint8_t *p = base + i * stride + f->offset + (size_t)k * w;
+            int32_t v = s[i];
+            if (v == INT32_MIN && !(allow_na && f->type == ZB_I32)) { *bad = i; return ZB_ERR_NA; }
+            if (v < lo || v > hi) { *bad = i; return ZB_ERR_RANGE; }
+            switch (f->type) {
+            case ZB_U8: case ZB_BOOL: zb_wr_u8(p, (uint8_t)v); break;
+            case ZB_I8:  zb_wr_i8(p, (int8_t)v); break;
+            case ZB_U16: if (be) zb_wr_u16be(p, (uint16_t)v); else zb_wr_u16le(p, (uint16_t)v); break;
+            case ZB_I16: if (be) zb_wr_i16be(p, (int16_t)v); else zb_wr_i16le(p, (int16_t)v); break;
+            default:     if (be) zb_wr_i32be(p, v); else zb_wr_i32le(p, v); break;
+            }
+        }
+    }
+    return ZB_OK;
+}
+
+/* double into every numeric type. The floating types round to nearest even
+   (a NaN stays NaN; R's NA payload survives only f64). The integer types
+   take whole values in range: a fraction or an infinity is ZB_ERR_RANGE, a
+   NaN is ZB_ERR_NA (INT32_MIN in an i32 field with allow_na). */
+ZB_INLINE zb_status zb_pack_f64(uint8_t *base, size_t n, size_t stride, const zb_field *f,
+                                const double *src, int allow_na, size_t *bad)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i;
+    int be = f->big_endian;
+    double lo = 0, hi = 0;
+    switch (f->type) {
+    case ZB_U8:  hi = 255; break;
+    case ZB_I8:  lo = -128; hi = 127; break;
+    case ZB_U16: hi = 65535; break;
+    case ZB_I16: lo = -32768; hi = 32767; break;
+    case ZB_U32: hi = 4294967295.0; break;
+    case ZB_I32: lo = -2147483648.0; hi = 2147483647.0; break;
+    case ZB_U64: hi = 18446744073709551616.0; break;   /* 2^64, exclusive */
+    case ZB_I64: lo = -9223372036854775808.0; hi = 9223372036854775808.0; break;
+    case ZB_F16: case ZB_BF16: case ZB_F32: case ZB_F64: break;
+    default: return ZB_ERR_INVALID;
+    }
+    for (k = 0; k < f->count; k++) {
+        const double *s = src + (size_t)k * n;
+        for (i = 0; i < n; i++) {
+            uint8_t *p = base + i * stride + f->offset + (size_t)k * w;
+            double v = s[i];
+            switch (f->type) {
+            case ZB_F16:  if (be) zb_wr_f16be(p, v);  else zb_wr_f16le(p, v);  continue;
+            case ZB_BF16: if (be) zb_wr_bf16be(p, v); else zb_wr_bf16le(p, v); continue;
+            case ZB_F32: {
+                float x = zb_int_f64_to_f32(v);
+                if (be) zb_wr_f32be(p, x); else zb_wr_f32le(p, x);
+                continue;
+            }
+            case ZB_F64:  if (be) zb_wr_f64be(p, v);  else zb_wr_f64le(p, v);  continue;
+            default: break;
+            }
+            if (v != v) {
+                if (allow_na && f->type == ZB_I32) {
+                    if (be) zb_wr_i32be(p, INT32_MIN); else zb_wr_i32le(p, INT32_MIN);
+                    continue;
+                }
+                *bad = i;
+                return ZB_ERR_NA;
+            }
+            /* An infinity, or out of range, before any cast (casting an
+               out-of-range double is undefined). 2^63 and 2^64 are exact
+               doubles and the 64-bit upper bounds are exclusive; the cast
+               back then tells a fraction from a whole number. */
+            if (v - v != 0 || v < lo ||
+                (f->type == ZB_U64 || f->type == ZB_I64 ? v >= hi : v > hi)) {
+                *bad = i;
+                return ZB_ERR_RANGE;
+            }
+            if (f->type == ZB_U64) {
+                uint64_t u = (uint64_t)v;
+                if ((double)u != v) { *bad = i; return ZB_ERR_RANGE; }
+                if (be) zb_wr_u64be(p, u); else zb_wr_u64le(p, u);
+                continue;
+            }
+            if (f->type == ZB_I64) {
+                int64_t x = (int64_t)v;
+                if ((double)x != v) { *bad = i; return ZB_ERR_RANGE; }
+                if (be) zb_wr_i64be(p, x); else zb_wr_i64le(p, x);
+                continue;
+            }
+            {
+                int64_t x = (int64_t)v;
+                if ((double)x != v) { *bad = i; return ZB_ERR_RANGE; }
+                switch (f->type) {
+                case ZB_U8:  zb_wr_u8(p, (uint8_t)x); break;
+                case ZB_I8:  zb_wr_i8(p, (int8_t)x); break;
+                case ZB_U16: if (be) zb_wr_u16be(p, (uint16_t)x); else zb_wr_u16le(p, (uint16_t)x); break;
+                case ZB_I16: if (be) zb_wr_i16be(p, (int16_t)x); else zb_wr_i16le(p, (int16_t)x); break;
+                case ZB_U32: if (be) zb_wr_u32be(p, (uint32_t)x); else zb_wr_u32le(p, (uint32_t)x); break;
+                default:     if (be) zb_wr_i32be(p, (int32_t)x); else zb_wr_i32le(p, (int32_t)x); break;
+                }
+            }
+        }
+    }
+    return ZB_OK;
+}
+
+/* int64_t into i64 and u64 (u64 takes no negative value). INT64_MIN is
+   ZB_ERR_NA, except into i64 with allow_na. */
+ZB_INLINE zb_status zb_pack_i64(uint8_t *base, size_t n, size_t stride, const zb_field *f,
+                                const int64_t *src, int allow_na, size_t *bad)
+{
+    uint32_t k;
+    size_t i;
+    int be = f->big_endian;
+    if (f->type != ZB_I64 && f->type != ZB_U64) return ZB_ERR_INVALID;
+    for (k = 0; k < f->count; k++) {
+        const int64_t *s = src + (size_t)k * n;
+        for (i = 0; i < n; i++) {
+            uint8_t *p = base + i * stride + f->offset + (size_t)k * 8;
+            int64_t v = s[i];
+            if (v == INT64_MIN && !(allow_na && f->type == ZB_I64)) { *bad = i; return ZB_ERR_NA; }
+            if (f->type == ZB_U64 && v < 0) { *bad = i; return ZB_ERR_RANGE; }
+            if (be) zb_wr_i64be(p, v); else zb_wr_i64le(p, v);
+        }
+    }
+    return ZB_OK;
+}
+
+/* b and s: record i's field bytes from src + i * size. */
+ZB_INLINE zb_status zb_pack_bytes(uint8_t *base, size_t n, size_t stride, const zb_field *f,
+                                  const uint8_t *src)
+{
+    size_t i;
+    if (f->type != ZB_BYTES && f->type != ZB_STR) return ZB_ERR_INVALID;
+    for (i = 0; i < n; i++) memcpy(base + i * stride + f->offset, src + i * f->size, f->size);
+    return ZB_OK;
+}
+
+/* Zeroes the field's bytes in every record: padding, or a gap. Any type. */
+ZB_INLINE void zb_pack_zeros(uint8_t *base, size_t n, size_t stride, const zb_field *f)
+{
+    size_t i;
+    for (i = 0; i < n; i++) memset(base + i * stride + f->offset, 0, f->size);
+}
+
 #endif /* ZUBIN_LAYOUT_H */

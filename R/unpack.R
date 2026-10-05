@@ -39,7 +39,7 @@
 #' @param encoding How `s<n>` bytes are marked: `"UTF-8"` (validated),
 #'   `"latin1"` or `"bytes"` (any bytes).
 #' @return A data frame with one row per record, or a named list of columns.
-#' @seealso [bin_decode()] for one field read as a vector; `bin_pack()` for
+#' @seealso [bin_decode()] for one field read as a vector; [bin_pack()] for
 #'   the inverse.
 #' @export
 #' @examples
@@ -72,7 +72,7 @@ bin_unpack <- function(x, layout, offset = 0, n = NULL, stride = NULL,
 #' vector `x`, starting at the 0-based byte `offset`: `bin_decode(x, "u32",
 #' offset = 4)` is a header field, `bin_decode(x, "f32", offset = 64, n =
 #' 1e6)` is a column. It is [readBin()] generalised to every width and both
-#' byte orders, exact or an error; `bin_encode()` is its inverse. Offsets are
+#' byte orders, exact or an error; [bin_encode()] is its inverse. Offsets are
 #' 0-based.
 #'
 #' @inheritParams bin_unpack
