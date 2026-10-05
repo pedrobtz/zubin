@@ -274,9 +274,11 @@ SEXP zubin_layout_parse(SEXP spec, SEXP big, SEXP align)
     const char *base;
     st = zubin_int_parse(spec, Rf_asLogical(big) == TRUE, Rf_asLogical(align) == TRUE, 0, &l, &err);
     if (st) {
+        SEXP pos;
         out = PROTECT(zubin_int_status(st, -1));
-        Rf_setAttrib(out, Rf_install("position"), Rf_ScalarReal((double)err));
-        UNPROTECT(1);
+        pos = PROTECT(Rf_ScalarReal((double)err));
+        Rf_setAttrib(out, Rf_install("position"), pos);
+        UNPROTECT(2);
         return out;
     }
     base = CHAR(STRING_ELT(spec, 0));
