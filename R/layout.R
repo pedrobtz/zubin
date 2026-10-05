@@ -31,20 +31,35 @@
 #' `position`, the 0-based byte position of the problem in the string.
 #'
 #' @section Types:
-#' \tabular{lll}{
-#'   **Spec** \tab **Bytes** \tab **R type** \cr
-#'   `u8 i8 u16 i16` \tab 1--2 \tab integer \cr
-#'   `i32` \tab 4 \tab integer; -2^31 is `NA` \cr
-#'   `u32` \tab 4 \tab double \cr
-#'   `i64 u64` \tab 8 \tab double, exact to 2^53, or `integer64` \cr
-#'   `f16 bf16` \tab 2 \tab double \cr
-#'   `f32 f64` \tab 4, 8 \tab double \cr
-#'   `bool` \tab 1 \tab logical \cr
-#'   `b<n>` \tab n \tab a list of raw vectors \cr
-#'   `s<n>` \tab n \tab character, up to the first NUL \cr
-#'   `x<n>` \tab n \tab not a value: padding \cr
-#'   `t[k]` \tab k x width \tab a matrix of k columns \cr
+#' The type model, in both directions ([bin_unpack()] and [bin_decode()]
+#' read; [bin_pack()], [bin_encode()] and [bin_put()] write):
+#'
+#' \tabular{llll}{
+#'   **Spec** \tab **Bytes** \tab **Read as** \tab **Written from** \cr
+#'   `u8 i8 u16 i16` \tab 1--2 \tab integer \tab integer, whole double, logical \cr
+#'   `i32` \tab 4 \tab integer; -2^31 is an error unless `na = "allow"` \tab
+#'     integer, whole double; `NA` only with `na = "allow"` \cr
+#'   `u32` \tab 4 \tab double \tab integer, whole double \cr
+#'   `i64 u64` \tab 8 \tab double, an error above 2^53 in magnitude; or
+#'     `integer64` (`int64 = "integer64"`), an error for `u64` from 2^63 \tab
+#'     integer, whole double, `integer64` \cr
+#'   `f16 bf16` \tab 2 \tab double \tab numeric, rounded to nearest even \cr
+#'   `f32 f64` \tab 4, 8 \tab double \tab numeric; `NA` survives `f64` and is
+#'     a NaN in the others \cr
+#'   `bool` \tab 1 \tab logical; any non-zero byte is `TRUE` \tab logical, not
+#'     `NA` \cr
+#'   `b<n>` \tab n \tab a list of raw vectors \tab a list of raw vectors of
+#'     exactly n bytes \cr
+#'   `s<n>` \tab n \tab character: the bytes before the first NUL, as UTF-8
+#'     \tab character of at most n UTF-8 bytes, NUL-padded \cr
+#'   `x<n>` \tab n \tab not returned \tab not given; written as zeros \cr
+#'   `t[k]` \tab k x width \tab a matrix of k columns (`name.1` ... `name.k` in
+#'     a data frame) \tab a matrix of k columns, or one record's k values \cr
 #' }
+#'
+#' A value that does not fit is a `zubin_range_error`, and an `NA` with no
+#' bytes a `zubin_na_error`; nothing is truncated, wrapped or rounded into an
+#' integer. See [zubin-conditions].
 #'
 #' @section Alignment:
 #' With `align = FALSE` fields are packed at consecutive offsets. With

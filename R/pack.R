@@ -143,11 +143,9 @@ pack_columns <- function(layout, cols, na, field_names = NULL, call = sys.call(-
       cols[[i]] <- recycle_rows(cols[[i]], counts[i], n)
     }
   }
+  # C reads each column's type and length only, so attributes (dim, the
+  # integer64 class) stay: stripping them would copy every column.
   is64 <- vapply(cols, inherits, logical(1), "integer64")
-  cols <- lapply(cols, function(x) {
-    attributes(x) <- NULL
-    x
-  })
   res <- .Call(zubin_pack, layout$spec, layout$align > 1L, unname(cols), unname(is64),
                as.double(n), na == "allow")
   if (is_status(res)) pack_fail(res, layout, field_names, call)
@@ -188,11 +186,12 @@ pack_value <- function(x, type, count, name, call) {
     {
       small <- type %in% c("u8", "i8", "u16", "i16", "i32")
       if (is.logical(x) && !type %in% c("u8", "i8", "u16", "i16")) wrong()
+      # converted only when needed: even a no-op storage.mode<- copies
       if (small && (is.integer(x) || is.logical(x))) {
-        storage.mode(x) <- "integer"
+        if (!is.integer(x)) storage.mode(x) <- "integer"
         x
       } else {
-        storage.mode(x) <- "double"
+        if (!is.double(x)) storage.mode(x) <- "double"
         x
       }
     }

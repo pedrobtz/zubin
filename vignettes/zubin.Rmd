@@ -1,0 +1,162 @@
+---
+title: "Structured binary data with zubin"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Structured binary data with zubin}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(zubin)
+```
+
+Binary formats are described in their specifications as tables of fields: a name, a type, a
+width, an offset. zubin lets you write that table down once, as a *layout*, and then read or
+write any number of records in one call. Offsets are 0-based throughout, as in every
+specification.
+
+## Layouts
+
+A layout is a string of fields, `name:type`, with an optional byte order prefix: `<` little,
+`>` big, `=` the host's.
+
+```{r}
+wav <- bin_layout("<riff:s4 size:u32 wave:s4 fmt:s4 fmt_size:u32 format:u16 channels:u16
+                   rate:u32 byte_rate:u32 block_align:u16 bits:u16 data:s4 data_size:u32")
+wav
+bin_size(wav)
+```
+
+The types are the integers `u8` to `i64`, the floats `f16`, `bf16`, `f32` and `f64`, `bool`,
+fixed bytes `b<n>` and fixed strings `s<n>`, padding `x<n>`, and arrays of the numeric types,
+`f32[3]`. A field can override the prefix with `.le` or `.be`.
+
+| Spec | Bytes | R type on unpack | On pack, accepts |
+|---|---|---|---|
+| `u8 i8 u16 i16` | 1–2 | integer | integer, whole double, logical |
+| `i32` | 4 | integer; −2^31 is an error unless `na = "allow"` | integer, whole double |
+| `u32` | 4 | double | integer, whole double |
+| `i64 u64` | 8 | double, exact to 2^53, or `integer64` | integer, whole double, `integer64` |
+| `f16 bf16 f32 f64` | 2–8 | double | numeric, rounded to nearest even |
+| `bool` | 1 | logical | logical |
+| `b<n>` | n | list of raw | list of raw, each n bytes |
+| `s<n>` | n | character, up to the first NUL | character of at most n UTF-8 bytes |
+| `x<n>` | n | not returned | not given; written as zeros |
+| `t[k]` | k × width | matrix of k columns | matrix of k columns |
+
+Nothing is ever rounded into an integer, wrapped or truncated: a value that does not fit its
+field is an error naming the field and the record.
+
+## Writing and reading a WAV file
+
+`bin_encode()` turns a vector into bytes of one type, here one second of a 440 Hz tone as
+16-bit samples, and `bin_pack()` writes one header record from named values.
+
+```{r}
+samples <- bin_encode(round(32767 * sin(2 * pi * 440 * seq(0, 1, by = 1 / 8000))), "i16")
+hdr <- bin_pack(wav, riff = "RIFF", size = 36 + length(samples), wave = "WAVE",
+                fmt = "fmt ", fmt_size = 16, format = 1, channels = 1, rate = 8000,
+                byte_rate = 16000, block_align = 2, bits = 16, data = "data",
+                data_size = length(samples))
+path <- tempfile(fileext = ".wav")
+writeBin(c(hdr, samples), path)
+```
+
+Reading it back is the same two steps in reverse: the header as a one-row data frame, then
+the samples from the byte after it.
+
+```{r}
+x <- readBin(path, "raw", file.size(path))
+h <- bin_unpack(x, wav, n = 1)
+h[, c("channels", "rate", "bits", "data_size")]
+pcm <- bin_decode(x, "i16", offset = bin_size(wav), n = h$data_size / 2)
+head(pcm)
+bin_hexdump(x, n = 48)
+```
+
+## Records, a builder, and big-endian data
+
+A file of records behind a header, built with a byte builder, which grows without copying
+everything on each append:
+
+```{r}
+hdr <- bin_layout(">magic:u32 version:u16 count:u32")
+rec <- bin_layout(">id:u32 ts:i64 price:f64 qty:i32 side:u8 x3")
+trades <- data.frame(id = 1:4, ts = 1.7e12 + c(0, 15, 40, 41),
+                     price = c(101.5, 101.25, 101.75, 101.5),
+                     qty = c(100L, 50L, 75L, 10L), side = c(1L, 2L, 1L, 2L))
+
+b <- bin_builder()
+bin_put(b, bin_pack(hdr, magic = 0xCAFEBABE, version = 1, count = nrow(trades)))
+bin_put(b, bin_pack(rec, trades))
+b
+path <- tempfile()
+writeBin(bin_take(b), path)
+```
+
+```{r}
+x <- readBin(path, "raw", file.size(path))
+h <- bin_unpack(x, hdr, n = 1)
+h$magic == 0xCAFEBABE
+bin_unpack(x, rec, offset = bin_size(hdr), n = h$count)
+```
+
+`bin_put()` also encodes vectors directly, so a writer that does not have whole records at
+hand appends field by field: `bin_put(b, x, type = "f32", endian = "big")`. Strings append as
+C strings (`type = "z"`) or fixed fields (`type = "s16"`).
+
+## C structs
+
+With `align = TRUE` each field is placed at a multiple of its own width and the record is
+padded to the widest, as a C compiler lays out a struct on 64-bit targets. A
+`struct { uint8_t a; uint32_t b; uint16_t c; }` written with `fwrite()`:
+
+```{r}
+s <- bin_layout("=a:u8 b:u32 c:u16", align = TRUE)
+s$fields
+bin_size(s)
+```
+
+## Arrays and 64-bit integers
+
+Array fields are matrices in list mode and expand to `name.1`, `name.2`, ... in a data frame:
+
+```{r}
+pts <- bin_layout("<id:u16 xyz:f32[3]")
+x <- bin_pack(pts, id = 1:2, xyz = matrix(c(0, 1, 2, 3, 4, 5), 2))
+bin_unpack(x, pts)
+bin_unpack(x, pts, as = "list")$xyz
+```
+
+A 64-bit integer reads as a double when it is exactly representable, and is an error when it
+is not; `int64 = "integer64"` returns the bits as the bit64 package's class instead:
+
+```{r}
+big <- bin_encode(2^53, "u64")
+bin_decode(big, "u64")
+try(bin_decode(bin_encode(2^53 + 2, "u64"), "u64"))
+```
+
+## Finding where two files differ
+
+```{r}
+a <- bin_pack(rec, trades)
+b <- a
+b[c(9, 50)] <- as.raw(0)
+bin_diff(a, b)
+```
+
+## Errors
+
+Every error zubin raises inherits `zubin_error` and has a class saying what went wrong, with
+the details as fields, so code can catch it by kind:
+
+```{r}
+e <- tryCatch(bin_encode(c(1, 300), "u8"), zubin_range_error = function(e) e)
+c(e$index, class(e)[1])
+```

@@ -87,14 +87,17 @@ bin_builder <- function(reserve = 0, max = Inf) {
 #' bin_put(b, "a C string", type = "z")
 #' bin_take(b)
 bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
+  # the common case, appending raw bytes, first and with the fewest checks:
+  # C re-checks the builder and the type
+  if (is.null(type) && is.raw(x)) {
+    res <- .Call(zubin_builder_put_raw, b, x)
+    if (!is.null(res)) builder_fail(res, check_builder(b), length(x), x)
+    return(invisible(b))
+  }
   ptr <- check_builder(b)
   endian <- match.arg(endian)
   if (is.null(type)) {
-    if (!is.raw(x)) {
-      invalid_argument("`x` must be a raw vector when `type` is NULL.", arg = "x")
-    }
-    res <- .Call(zubin_builder_put_raw, ptr, x)
-    n <- length(x)
+    invalid_argument("`x` must be a raw vector when `type` is NULL.", arg = "x")
   } else {
     if (!is.character(type) || length(type) != 1L || is.na(type)) {
       invalid_argument("`type` must be NULL or a single type token.", arg = "type")
@@ -105,7 +108,6 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
       layout <- type_layout(type, endian)
       col <- pack_value(x, layout$fields$type, 1L, "x", sys.call())
       is64 <- inherits(col, "integer64")
-      attributes(col) <- NULL
       res <- .Call(zubin_builder_put_typed, ptr, layout$spec, col, is64)
       n <- length(col) * bin_size(layout)
     } else {
@@ -120,14 +122,18 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
   invisible(b)
 }
 
-# "z" is -1; "s<n>" is n; anything else is NULL.
+# "z" is -1; "s<n>" is n; anything else is NULL. No regular expression: this
+# runs on every typed bin_put(), and the allocation-failure sweep found R's
+# regex engine segfaulting when an allocation inside grepl() fails.
 string_width <- function(type) {
   if (identical(type, "z")) {
     return(-1L)
   }
-  if (grepl("^s[0-9]+$", type)) {
-    w <- suppressWarnings(as.numeric(substring(type, 2L)))
-    if (!is.na(w) && w >= 1 && w <= .Machine$integer.max) {
+  if (startsWith(type, "s")) {
+    digits <- substring(type, 2L)
+    w <- suppressWarnings(as.numeric(digits))
+    if (!is.na(w) && w >= 1 && w <= .Machine$integer.max && w == floor(w) &&
+          identical(digits, format(w, scientific = FALSE))) {
       return(as.integer(w))
     }
   }
