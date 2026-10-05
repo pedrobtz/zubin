@@ -6,9 +6,10 @@
 # short runs add up: ten minutes a target on pull requests and pushes, an
 # hour nightly, and a dispatched run takes its budget as an input.
 #
-# The headers include zufast's, which is not on CRAN until Stage 9:
-# github-packages checks it out for the include path. The serialize and sink
-# targets exercise zubin-r.h, so they embed R (embed-r).
+# The headers include zufast's: github-packages checks out the tag of the
+# version on CRAN for the include path, so the fuzzers build against what
+# CRAN ships, not zufast's main. The serialize and sink targets exercise
+# zubin-r.h, so they embed R (embed-r).
 on:
   push:
     branches: [main, master]
@@ -38,6 +39,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: pedrobtz/zufast
+          ref: 0.1.0
           path: .zufast
       - name: Install clang with libFuzzer
         run: |
@@ -63,7 +65,7 @@ jobs:
       # serialize and sink (issue #25) exercise zubin-r.h, so R is embedded
       sources: tools/fuzz/support.c ${{ (matrix.target == 'serialize' || matrix.target == 'sink') && 'tools/fuzz/rfuzz.c' || '' }}
       embed-r: ${{ matrix.target == 'serialize' || matrix.target == 'sink' }}
-      github-packages: pedrobtz/zufast
+      github-packages: pedrobtz/zufast@0.1.0
       # UBSan must stop the run, not print and carry on
       cflags: -g -O1 -fno-omit-frame-pointer -fno-sanitize-recover=undefined -Iinst/include -I.github-packages/zufast/inst/include -Itools/fuzz
       seed-corpus: tools/fuzz/seeds/${{ matrix.target }}

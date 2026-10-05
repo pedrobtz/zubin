@@ -699,11 +699,9 @@ matches the code.
 
 ## Stage 9 — Release 0.1.0 · S
 
-**Status:** prepared, waiting for zufast on CRAN (checked 2026-10-05: not there). The branch
-`stage-9-release` holds the release commit: `Version: 0.1.0` with `version.h` and the NEWS
-heading, no `Remotes:`, the CRAN install in the README, and rchk and the arch legs
-resolving zufast from CRAN. Rebase it on `main`, open its PR with `full-ci`, and once
-every leg is green (that run is the win-builder and macbuilder result), submit.
+**Status:** ready to submit. zufast 0.1.0 reached CRAN (checked 2026-10-22), the
+pre-release review (#31) is addressed, and the release commit is green on every leg. What
+remains is the maintainer's: submit, then the post-acceptance steps below.
 
 **Entry:** zufast 0.1.0 is on CRAN.
 
