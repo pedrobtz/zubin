@@ -35,8 +35,9 @@ commit.
 
 ## Current state
 
-Stages 0–8 are done; Stage 10 (serialisation streams, 0.2.0, #25) is in its PR, built
-while Stage 9 waits for zufast on CRAN. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
+Stages 0–8 are done; Stage 10 (serialisation streams, #25) and Stage 11 (#26's
+small items) go into 0.1.0 too, by the maintainer's decision of 2026-10-05; Stage 9 releases
+after them, once zufast is on CRAN. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
 (layout.h: types, spec parser, unpack and pack kernels), plus `zubin-r.h`. Gates:
 `abi.yaml`, `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml` (`fuzz_layout`,
 `fuzz_unpack`, `fuzz_buf`), `arch.yaml` (i386, musl, s390x). R API: `bin_info()`,

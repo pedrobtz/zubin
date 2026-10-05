@@ -131,7 +131,7 @@ step; both remain available to reproduce a CRAN failure.
 | 7 — The consumer fixture and the C contract | M | 5 | `tools/zubintest`, `consumer.yaml`, the README recipe, the C-API article |
 | 8 — Hardening, documentation, benchmarks | M | 6, 7 | vignette, WORDLIST, cran-comments, benchmarks, full gates |
 | 9 — Release 0.1.0 | S | 8, and zufast on CRAN | the submission |
-| 10 — Serialisation streams (0.2.0) | M | 8 | `zb_serialize`, `zb_unserialize`, `zb_serialize_to_sink`; `bin_serialize()`, `bin_unserialize()`, `bin_hash_object()` |
+| 10 — Serialisation streams | M | 8 | `zb_serialize`, `zb_unserialize`, `zb_serialize_to_sink`; `bin_serialize()`, `bin_unserialize()`, `bin_hash_object()` |
 
 Stage 6 is off the critical path and can be done in any spare sitting after Stage 1.
 
@@ -723,11 +723,11 @@ every leg is green (that run is the win-builder and macbuilder result), submit.
 
 ## Stage 10 — Serialisation streams · M
 
-**Status:** done (#25), for 0.2.0. Merged to `main` only on the user's confirmation, because
-#25's own gate, rdz#2's decision item 1, was unticked when the work started.
+**Status:** done (#25). Planned for 0.2.0 behind rdz's decision; the maintainer moved it, with
+everything else rdz needs, into 0.1.0 on 2026-10-05 (#26), which also lifted #25's gate
+(rdz#2's decision item 1). Stage 9's release now follows Stages 10 and 11.
 
-**Goal:** R's own serialisation pointed at zubin's containers, the item next.md held for
-rdz's C rewrite: a builder or any sink as the out-stream, a cursor as the in-stream, and a
+**Goal:** R's own serialisation pointed at zubin's containers, for rdz's C rewrite: a builder or any sink as the out-stream, a cursor as the in-stream, and a
 version-stable object hash streamed through zufast's hasher (design §12.1, §13.9).
 
 **Do**
@@ -792,7 +792,7 @@ version-stable object hash streamed through zufast's hasher (design §12.1, §13
 ## Explicitly not in 0.1.0
 
 Variable-length fields, a cursor-style reader from R, byte search and splitting, views,
-memory mapping, connections, serialisation streams and object hashing, the nanoarrow
+memory mapping, connections, the nanoarrow
 bridge, bitfields, `blob` and `float` outputs, a `bigint` for `u64`, zero-copy
 `bin_take()`. Each is in [next.md](next.md) with the trigger that admits it. None is made
 harder by shipping 0.1.0 first: every one is an addition to the headers and a new function
