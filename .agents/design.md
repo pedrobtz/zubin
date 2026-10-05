@@ -966,8 +966,9 @@ gctorture and a blocking rchk; `arch.yaml` runs the suite on i386, musl and s390
 | 1 M `bin_put()` calls of 100 bytes | `c()` accumulation; `rawConnection(raw(0), "w")` | linear; dominated by `.Call` overhead |
 | `bin_hexdump()` of 1 MiB | `sprintf("%02x")` over `as.integer()` | not a bottleneck in a test suite |
 
-Measured results, and the one target not met (pack, 12% behind `writeBin()` per field),
-are in `.agents/benchmarks.md`.
+Measured results are in `.agents/benchmarks.md`: every target is met on Linux x86-64
+(unpack and pack 8–10× faster than base R per field); on macOS arm64 pack is 12% behind
+`writeBin()`, a cost of first-touching fresh pages there.
 
 ## 18. v0.1.0: deliverables and acceptance criteria
 

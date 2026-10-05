@@ -672,8 +672,8 @@ matches the code.
   now 0.69 µs. `bin_pack()` was 40% slower than `writeBin()` per field: stripping
   attributes from each column (`attributes(x) <- NULL`) copied every column, `storage.mode<-`
   copied even when the type was already right, and `zb_pack_f64()` decided the type per
-  value. With all three fixed it is 12% behind, bound by first-touch page faults and four
-  write passes; `.agents/benchmarks.md` says so rather than claiming the target.
+  value. With all three fixed it is 12% behind on macOS, bound by first-touch page faults,
+  and 8× ahead on the Linux runner; `.agents/benchmarks.md` has both.
 - r-actions grew `github-packages` (v1.20.0) for zubin's sake (Stages 2 and 3), and every
   r-actions workflow here is now pinned to that release by commit, `R-CMD-check.yaml`
   excepted (`@v1`, as the roadmap's CI section says).
