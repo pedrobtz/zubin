@@ -6,6 +6,7 @@
 #include <math.h>
 
 #include "zubin_r.h"
+#include <zufast/hash.h>
 
 long zubin_int_live_buffers = 0;
 
@@ -726,4 +727,95 @@ SEXP zubin_diff(SEXP a, SEXP b, SEXP n)
     }
     UNPROTECT(1);
     return out;
+}
+
+/* ---- serialization streams (Stage 10) --------------------------------------- */
+
+static void count_sink(void *state, const void *p, size_t n)
+{
+    (void)p;
+    *(size_t *)state += n;
+}
+
+/* Appends x's serialization to the builder. On ZB_ERR_LIMIT or
+   ZB_ERR_MEMORY the status carries `size`, what the builder would have
+   held, measured by serializing again into a counter: the failure path pays
+   for it, the success path does not. */
+SEXP zubin_serialize(SEXP ptr, SEXP x, SEXP version, SEXP xdr, SEXP refhook)
+{
+    zb_buf *b = zb_r_buf_get(ptr);
+    int v = Rf_asInteger(version), x_dr = Rf_asLogical(xdr) == TRUE;
+    zb_status st;
+    if (!b) return zubin_int_status(ZB_ERR_INVALID, -1);
+    st = zb_serialize(x, b, v, x_dr, refhook);
+    if (st == ZB_ERR_LIMIT || st == ZB_ERR_MEMORY) {
+        size_t need = 0;
+        SEXP out, size;
+        zb_r_int_serialize(x, count_sink, &need, v, x_dr, 0, refhook);
+        out = PROTECT(zubin_int_status(st, -1));
+        size = PROTECT(Rf_ScalarReal((double)b->len + (double)need));
+        Rf_setAttrib(out, Rf_install("size"), size);
+        UNPROTECT(2);
+        return out;
+    }
+    return st ? zubin_int_status(st, -1) : R_NilValue;
+}
+
+/* One object from the stream that starts at `offset` in x, or ZB_ERR_EOF
+   when the stream runs out. */
+SEXP zubin_unserialize(SEXP x, SEXP offset, SEXP refhook)
+{
+    size_t off, len;
+    zb_cur c;
+    zb_status st;
+    SEXP out;
+    if (TYPEOF(x) != RAWSXP || zubin_int_size(offset, &off)) return zubin_int_status(ZB_ERR_INVALID, -1);
+    len = (size_t)XLENGTH(x);
+    if (off > len) return zubin_int_status(ZB_ERR_EOF, -1);
+    zb_cur_init(&c, len ? RAW(x) : NULL, len);
+    zb_cur_seek(&c, off);
+    out = PROTECT(zb_unserialize(&c, refhook, &st));
+    if (st) {
+        UNPROTECT(1);
+        return zubin_int_status(st, -1);
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+static void hash_sink(void *state, const void *p, size_t n)
+{
+    zuf_hasher_update((zuf_hasher *)state, p, n);
+}
+
+static void hex64_be(char *dst, uint64_t v)
+{
+    static const char digits[] = "0123456789abcdef";
+    int i;
+    for (i = 15; i >= 0; i--) {
+        dst[i] = digits[v & 15];
+        v >>= 4;
+    }
+}
+
+/* XXH3 of x's serialization with the header skipped, streamed through the
+   hasher: nothing is allocated, and the digest does not depend on the R
+   version. The hasher lives on the stack, so a longjmp out of R_Serialize
+   leaves nothing behind. Hex as zufast's fast_hash() writes it. */
+SEXP zubin_hash_object(SEXP x, SEXP bits, SEXP version, SEXP seed)
+{
+    zuf_hasher h;
+    char buf[32];
+    int b = Rf_asInteger(bits);
+    zuf_hasher_init(&h, (uint64_t)Rf_asReal(seed));
+    zb_serialize_to_sink(x, hash_sink, &h, Rf_asInteger(version), 1, 1);
+    if (b == 64) {
+        hex64_be(buf, zuf_hasher_digest64(&h));
+        return Rf_ScalarString(Rf_mkCharLen(buf, 16));
+    } else {
+        zuf_digest128 d = zuf_hasher_digest128(&h);
+        hex64_be(buf, d.high);
+        hex64_be(buf + 16, d.low);
+        return Rf_ScalarString(Rf_mkCharLen(buf, 32));
+    }
 }

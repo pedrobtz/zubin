@@ -38,6 +38,9 @@ SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_
 SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64);
 SEXP zubin_hexdump(SEXP x, SEXP offset, SEXP n, SEXP width);
 SEXP zubin_diff(SEXP a, SEXP b, SEXP n);
+SEXP zubin_serialize(SEXP ptr, SEXP x, SEXP version, SEXP xdr, SEXP refhook);
+SEXP zubin_unserialize(SEXP x, SEXP offset, SEXP refhook);
+SEXP zubin_hash_object(SEXP x, SEXP bits, SEXP version, SEXP seed);
 
 /* zubin_test.c */
 SEXP zubin_test_status_string(SEXP codes);
@@ -55,5 +58,8 @@ SEXP zubin_test_put_loop(SEXP chunk, SEXP times);
 SEXP zubin_test_layout(SEXP spec, SEXP big, SEXP align, SEXP max_fields);
 SEXP zubin_test_struct_offsets(void);
 SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride);
+SEXP zubin_test_sink(SEXP x, SEXP version, SEXP xdr, SEXP skip, SEXP chunk);
+SEXP zubin_test_serialize_owned(SEXP x, SEXP refhook);
+SEXP zubin_test_unserialize_cursor(SEXP bytes, SEXP offset);
 
 #endif /* ZUBIN_R_H */

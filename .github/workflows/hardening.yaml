@@ -7,7 +7,8 @@
 # hour nightly, and a dispatched run takes its budget as an input.
 #
 # The headers include zufast's, which is not on CRAN until Stage 9:
-# github-packages checks it out for the include path.
+# github-packages checks it out for the include path. The serialize and sink
+# targets exercise zubin-r.h, so they embed R (embed-r).
 on:
   push:
     branches: [main, master]
@@ -44,6 +45,8 @@ jobs:
           sudo apt-get install -y -q clang
           v=$(clang -dumpversion | cut -d. -f1)
           sudo apt-get install -y -q "libclang-rt-$v-dev" || true
+      # serialize and sink embed R
+      - uses: r-lib/actions/setup-r@v2
       - name: Every canary crashes
         env:
           ZUFAST_INCLUDE: ${{ github.workspace }}/.zufast/inst/include
@@ -53,11 +56,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [layout, unpack, buf]
-    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@26e45df7fdb1d57c083bad840b1dadc7ac78565b # v1.20.0
+        target: [layout, unpack, buf, serialize, sink]
+    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@6d3805680b2a84ecddb1fafc9994509659d0d89b # feat/fuzz-embed-r
     with:
       harness: tools/fuzz/fuzz_${{ matrix.target }}.c
-      sources: tools/fuzz/support.c
+      # serialize and sink (issue #25) exercise zubin-r.h, so R is embedded
+      sources: tools/fuzz/support.c ${{ (matrix.target == 'serialize' || matrix.target == 'sink') && 'tools/fuzz/rfuzz.c' || '' }}
+      embed-r: ${{ matrix.target == 'serialize' || matrix.target == 'sink' }}
       github-packages: pedrobtz/zufast
       # UBSan must stop the run, not print and carry on
       cflags: -g -O1 -fno-omit-frame-pointer -fno-sanitize-recover=undefined -Iinst/include -I.github-packages/zufast/inst/include -Itools/fuzz

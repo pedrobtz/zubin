@@ -6,4 +6,5 @@
 SEXP zt_unpack(SEXP spec, SEXP x);    /* layout.c */
 SEXP zt_header(SEXP x);               /* cursor.c */
 SEXP zt_build(SEXP values, SEXP tail); /* buffer.c */
+SEXP zt_serial(SEXP x, SEXP cut);      /* serial.c */
 #endif

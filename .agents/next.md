@@ -23,7 +23,6 @@ Nothing here is promised. The rules:
 | Release | Contents | Trigger | Needs |
 |---|---|---|---|
 | **0.2.0** | variable-length fields; the cursor-style reader from R; the Python `struct` translator | a format with length-prefixed or NUL-terminated fields that someone is reading in R (ISO 8583, SBE var data, copybook `OCCURS DEPENDING ON`); or rdz's C rewrite | 0.1.0 |
-| **0.2.x or 0.3.0** | R serialisation into a builder, unserialisation from an offset, a version-stable object hash | **rdz decides to rewrite in C** (§3.2) | 0.1.0 |
 | **0.3.0** | zero-copy views, typed reinterpretation views, byte search and splitting over them, zero-copy `bin_take()` | a reader that holds a file larger than it wants to copy (zucsv; rdz's selective reads) | 0.1.0 |
 | **0.4.0** | memory-mapped files; custom connections over views and builders | the same reader, past memory; connection-only consumers (`read.csv`, `readRDS`) over a view | 0.3.0 |
 | **when asked** | nanoarrow bridge; bitfields; `blob` and `float` outputs; a `bigint` for `u64`; the POD-in-`RAWSXP` helper; explicit offsets and unions in the grammar | one named consumer each | varies |
@@ -65,48 +64,6 @@ C unions need; both are refused by the 0.1.0 parser with a message naming this f
 
 **Consumers.** ISO 8583 (`LLVAR`, `LLLVAR`), SBE var-data, copybooks, Postgres binary
 `COPY`, and every chunked container.
-
-## 0.2.x or 0.3.0 — Serialisation streams, conditional on rdz
-
-**What.** Draft 1's §5.5 and §6.7, unchanged in substance:
-
-```c
-void  zb_serialize(SEXP x, zb_buf *b, int version, int xdr, SEXP refhook);     /* R_Serialize into a builder */
-SEXP  zb_unserialize(zb_cur *c, SEXP refhook);                                 /* R_Unserialize from any bytes */
-typedef void (*zb_sink_fn)(void *state, const void *p, size_t n);
-void  zb_serialize_to_sink(SEXP x, zb_sink_fn fn, void *state, int version, int xdr, int skip_header);
-```
-
-```r
-bin_serialize(x, b, version = 3L, xdr = TRUE)        # into a builder, no intermediate raw
-bin_unserialize(x, offset = 0)                       # from a raw vector or view, at an offset
-bin_hash_object(x, algo = "xxh3_64", version = 2L)   # streamed, header skipped, stable across R versions
-```
-
-`skip_header` drops the serialisation header (format, versions, native encoding in v3) so
-the hash is stable across R versions: the `digest(skip = "auto")` trick done while
-streaming, through `zuf_hasher_*`. These live in `zubin-r.h`, since they are SEXP glue.
-
-**Why conditional.** rdz (`../rdz`) is a Rust container whose generic payload is one R
-serialisation v3 XDR stream, today allocated whole, with "stream R serialisation callbacks
-through the block path" on its own pre-0.1.0 list. If rdz is rewritten in C, that sink is
-the first thing it needs from zubin and the one thing nothing else in the family provides.
-Without that decision there is no consumer: `serialize(x, NULL)` and `digest()` exist, and a
-C API with a fixture consumer is the mistake the siblings' reviews warn about. The decision
-is rdz's; this item waits for it.
-
-**API status.** `R_InitOutPStream`, `R_InitInPStream`, `R_Serialize` and `R_Unserialize`
-are exported from `Rinternals.h` and are not on R 4.6.1's `tools:::nonAPI` list (checked
-2026-10-04; design decision 10). Re-check against the current R-devel at the stage that
-uses them.
-
-**What rdz in C would need, in order.** Every header and directory entry of its container
-format is a fixed little-endian layout (0.1.0: `bin_layout` and the kernels); the forward
-writing pass is a capped `zb_buf` (0.1.0); bounded reading is `zb_cur` (0.1.0); CRC32 is a
-zufast addition on rdz's request (zufast §25 lists CRC32C; rdz uses IEEE CRC32); the
-fallback stream is this item; selective reads of blocks are the views of 0.3.0 and the
-mapping of 0.4.0; its native block codecs (bitplanes, run ends, sparse patches) are rdz's
-own, as they should be.
 
 ## 0.3.0 — Views
 
@@ -199,7 +156,7 @@ what decides the order of the ladder above.
 
 | Package or idea | Source | Needs from zubin | Earliest | Notes |
 |---|---|---|---|---|
-| **rdz in C** | design §3.2 | layouts, builder, cursor (0.1.0); serialisation sink; views and mmap for selective reads | 0.1.0 for the container; sink item for the fallback | The largest candidate consumer; its decision drives the sink item |
+| **rdz in C** | design §3.2 | layouts, builder, cursor, the serialisation sink (all 0.1.0, #26); views and mmap for selective reads | 0.1.0, then 0.3.0 and 0.4.0 for selective reads | The largest candidate consumer; what it needs is in 0.1.0 (#26) |
 | COBOL copybooks | domains §1.1 | fixed layouts with `align`, `OCCURS` as arrays (0.1.0); `OCCURS DEPENDING ON` (0.2.0); `REDEFINES` (explicit offsets) | 0.2.0 | EBCDIC tables and packed decimal belong to the copybook package or zufast; `decimal` exists for exact values |
 | ISO 8583 | domains §1.2 | cursor reader, `p*` fields | 0.2.0 | bitmap walk is `rawToBits()` |
 | SBE / ITCH decoders | domains §2.1 | fixed layouts, type-byte dispatch (0.1.0); groups and var data (0.2.0); mmap (0.4.0) | 0.1.0 for ITCH | a schema compiler from SBE XML through `zuxml` |

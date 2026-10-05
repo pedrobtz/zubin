@@ -6,6 +6,7 @@ static const R_CallMethodDef calls[] = {
     {"zt_unpack", (DL_FUNC) &zt_unpack, 2},
     {"zt_header", (DL_FUNC) &zt_header, 1},
     {"zt_build", (DL_FUNC) &zt_build, 2},
+    {"zt_serial", (DL_FUNC) &zt_serial, 2},
     {NULL, NULL, 0}
 };
 
