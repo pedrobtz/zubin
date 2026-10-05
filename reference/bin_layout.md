@@ -70,20 +70,35 @@ position among the fields that are not padding. `t[k]` is an array of
 
 ## Types
 
-|                 |           |                                       |
-|-----------------|-----------|---------------------------------------|
-| **Spec**        | **Bytes** | **R type**                            |
-| `u8 i8 u16 i16` | 1–2       | integer                               |
-| `i32`           | 4         | integer; -2^31 is `NA`                |
-| `u32`           | 4         | double                                |
-| `i64 u64`       | 8         | double, exact to 2^53, or `integer64` |
-| `f16 bf16`      | 2         | double                                |
-| `f32 f64`       | 4, 8      | double                                |
-| `bool`          | 1         | logical                               |
-| `b<n>`          | n         | a list of raw vectors                 |
-| `s<n>`          | n         | character, up to the first NUL        |
-| `x<n>`          | n         | not a value: padding                  |
-| `t[k]`          | k x width | a matrix of k columns                 |
+The type model, in both directions
+([`bin_unpack()`](https://pedrobtz.github.io/zubin/reference/bin_unpack.md)
+and
+[`bin_decode()`](https://pedrobtz.github.io/zubin/reference/bin_decode.md)
+read;
+[`bin_pack()`](https://pedrobtz.github.io/zubin/reference/bin_pack.md),
+[`bin_encode()`](https://pedrobtz.github.io/zubin/reference/bin_encode.md)
+and [`bin_put()`](https://pedrobtz.github.io/zubin/reference/bin_put.md)
+write):
+
+|  |  |  |  |
+|----|----|----|----|
+| **Spec** | **Bytes** | **Read as** | **Written from** |
+| `u8 i8 u16 i16` | 1–2 | integer | integer, whole double, logical |
+| `i32` | 4 | integer; -2^31 is an error unless `na = "allow"` | integer, whole double; `NA` only with `na = "allow"` |
+| `u32` | 4 | double | integer, whole double |
+| `i64 u64` | 8 | double, an error above 2^53 in magnitude; or `integer64` (`int64 = "integer64"`), an error for `u64` from 2^63 | integer, whole double, `integer64` |
+| `f16 bf16` | 2 | double | numeric, rounded to nearest even |
+| `f32 f64` | 4, 8 | double | numeric; `NA` survives `f64` and is a NaN in the others |
+| `bool` | 1 | logical; any non-zero byte is `TRUE` | logical, not `NA` |
+| `b<n>` | n | a list of raw vectors | a list of raw vectors of exactly n bytes |
+| `s<n>` | n | character: the bytes before the first NUL, as UTF-8 | character of at most n UTF-8 bytes, NUL-padded |
+| `x<n>` | n | not returned | not given; written as zeros |
+| `t[k]` | k x width | a matrix of k columns (`name.1` ... `name.k` in a data frame) | a matrix of k columns, or one record's k values |
+
+A value that does not fit is a `zubin_range_error`, and an `NA` with no
+bytes a `zubin_na_error`; nothing is truncated, wrapped or rounded into
+an integer. See
+[zubin-conditions](https://pedrobtz.github.io/zubin/reference/zubin-conditions.md).
 
 ## Alignment
 

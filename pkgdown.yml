@@ -3,7 +3,8 @@ pkgdown: 2.2.1
 pkgdown_sha: ~
 articles:
   articles/c-api: c-api.html
-last_built: 2026-10-05T04:52Z
+  zubin: zubin.html
+last_built: 2026-10-05T05:21Z
 urls:
   reference: https://pedrobtz.github.io/zubin/reference
   article: https://pedrobtz.github.io/zubin/articles

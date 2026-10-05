@@ -15,7 +15,8 @@
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/zubin.html">Get started</a></li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/c-api.html">The C API</a></li>
@@ -38,9 +39,23 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.0.9000" id="zubin-0009000">zubin 0.0.0.9000<a class="anchor" aria-label="anchor" href="#zubin-0009000"></a></h2>
-<ul><li>Development version. Nothing is released yet; see <code>.agents/roadmap.md</code>.</li>
+<p>The development version of the first release, 0.1.0 (this heading becomes <code># zubin 0.1.0</code> when it is submitted).</p>
+<div class="section level3">
+<h3 id="r-0-0-0-9000">R<a class="anchor" aria-label="anchor" href="#r-0-0-0-9000"></a></h3>
+<ul><li>Fourteen functions, prefixed <code>bin_</code>: <code><a href="../reference/bin_layout.html">bin_layout()</a></code> describes a fixed-size binary record in a one-line specification (integers of 8 to 64 bits, <code>f16</code>, <code>bf16</code>, <code>f32</code>, <code>f64</code>, <code>bool</code>, fixed bytes and strings, padding, arrays, either byte order, C struct alignment); <code><a href="../reference/bin_unpack.html">bin_unpack()</a></code> and <code><a href="../reference/bin_pack.html">bin_pack()</a></code> read and write any number of records in one call; <code><a href="../reference/bin_decode.html">bin_decode()</a></code> and <code><a href="../reference/bin_encode.html">bin_encode()</a></code> convert whole vectors to and from bytes of one type; <code><a href="../reference/bin_builder.html">bin_builder()</a></code>, <code><a href="../reference/bin_put.html">bin_put()</a></code>, <code><a href="../reference/bin_builder.html">bin_reserve()</a></code>, <code><a href="../reference/bin_builder.html">bin_reset()</a></code> and <code><a href="../reference/bin_builder.html">bin_take()</a></code> append to a growable byte buffer with a hard cap; <code><a href="../reference/bin_size.html">bin_size()</a></code>; <code><a href="../reference/bin_hexdump.html">bin_hexdump()</a></code> and <code><a href="../reference/bin_hexdump.html">bin_diff()</a></code>; and <code><a href="../reference/bin_info.html">bin_info()</a></code>.</li>
+<li>Nothing is silently wrong: a value that does not fit its field, an <code>NA</code> with no bytes, a 64-bit integer that a double cannot hold exactly, and a string that is not UTF-8 are each a classed error naming the field and the 0-based record (<code>?zubin-conditions</code>).</li>
 </ul></div>
-  </main></div>
+<div class="section level3">
+<h3 id="c-0-0-0-9000">C<a class="anchor" aria-label="anchor" href="#c-0-0-0-9000"></a></h3>
+<ul><li>A header-only C99 library under <code>inst/include</code>, used through <code>LinkingTo: zubin, zufast</code> alone: <code>zubin/rw.h</code> (typed reads and writes at any alignment and byte order), <code>zubin/cursor.h</code> (checked sequential reads), <code>zubin/buf.h</code> (a buffer with ownership flags, a hard cap and checked growth), <code>zubin/layout.h</code> (the specification parser and the field-major unpack and pack kernels), and <code>zubin-r.h</code> (a buffer owned by an R external pointer). Source compatibility within major version 1; see the <code>c-api</code> article on the package website and “Using zubin from C” in the README.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="not-in-this-release-0-0-0-9000">Not in this release<a class="anchor" aria-label="anchor" href="#not-in-this-release-0-0-0-9000"></a></h3>
+<p>Variable-length fields, a cursor-style reader from R, byte search and splitting, zero-copy views, memory-mapped files, connections, serialisation, bitfields and the nanoarrow bridge are planned, each with the condition that admits it, in <code>.agents/next.md</code> in the source repository.</p>
+</div>
+</div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

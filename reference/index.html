@@ -15,7 +15,8 @@
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/zubin.html">Get started</a></li>
+<li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/c-api.html">The C API</a></li>
@@ -36,7 +37,76 @@
     </div>
 
     <div class="section level2">
-      <h2 id="all-functions">All functions<a class="anchor" aria-label="anchor" href="#all-functions"></a></h2>
+      <h2 id="layouts">Layouts<a class="anchor" aria-label="anchor" href="#layouts"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="bin_layout.html">bin_layout()</a></code>
+
+        </dt>
+        <dd>Describe a binary record</dd>
+
+        <dt>
+
+          <code><a href="bin_size.html">bin_size()</a></code>
+
+        </dt>
+        <dd>The size of a builder or a layout, in bytes</dd>
+      </dl></div><div class="section level2">
+      <h2 id="records">Records<a class="anchor" aria-label="anchor" href="#records"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="bin_unpack.html">bin_unpack()</a></code>
+
+        </dt>
+        <dd>Read records from bytes</dd>
+
+        <dt>
+
+          <code><a href="bin_pack.html">bin_pack()</a></code>
+
+        </dt>
+        <dd>Write records to bytes</dd>
+      </dl></div><div class="section level2">
+      <h2 id="codecs">Codecs<a class="anchor" aria-label="anchor" href="#codecs"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="bin_decode.html">bin_decode()</a></code>
+
+        </dt>
+        <dd>Read a vector of one type from bytes</dd>
+
+        <dt>
+
+          <code><a href="bin_encode.html">bin_encode()</a></code>
+
+        </dt>
+        <dd>Write a vector of one type to bytes</dd>
+      </dl></div><div class="section level2">
+      <h2 id="the-builder">The builder<a class="anchor" aria-label="anchor" href="#the-builder"></a></h2>
 
 
 
@@ -54,26 +124,37 @@
 
         <dt>
 
-          <code><a href="bin_decode.html">bin_decode()</a></code>
+          <code><a href="bin_put.html">bin_put()</a></code>
 
         </dt>
-        <dd>Read a vector of one type from bytes</dd>
+        <dd>Append bytes or strings to a builder</dd>
+      </dl></div><div class="section level2">
+      <h2 id="inspection">Inspection<a class="anchor" aria-label="anchor" href="#inspection"></a></h2>
 
-        <dt>
 
-          <code><a href="bin_encode.html">bin_encode()</a></code>
 
-        </dt>
-        <dd>Write a vector of one type to bytes</dd>
+      <dl></dl></div><div class="section level2">
 
-        <dt>
+
+
+
+      <dl><dt>
 
           <code><a href="bin_hexdump.html">bin_hexdump()</a></code> <code><a href="bin_hexdump.html">bin_diff()</a></code>
 
         </dt>
         <dd>Show bytes as a hex dump, and find where two raw vectors differ</dd>
+      </dl></div><div class="section level2">
+      <h2 id="the-package">The package<a class="anchor" aria-label="anchor" href="#the-package"></a></h2>
 
-        <dt>
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
 
           <code><a href="bin_info.html">bin_info()</a></code>
 
@@ -82,40 +163,20 @@
 
         <dt>
 
-          <code><a href="bin_layout.html">bin_layout()</a></code>
+          <code><a href="zubin-conditions.html">zubin-conditions</a></code>
 
         </dt>
-        <dd>Describe a binary record</dd>
+        <dd>Conditions raised by zubin</dd>
 
         <dt>
 
-          <code><a href="bin_pack.html">bin_pack()</a></code>
+          <code><a href="zubin-package.html">zubin</a></code> <code><a href="zubin-package.html">zubin-package</a></code>
 
         </dt>
-        <dd>Write records to bytes</dd>
-
-        <dt>
-
-          <code><a href="bin_put.html">bin_put()</a></code>
-
-        </dt>
-        <dd>Append bytes or strings to a builder</dd>
-
-        <dt>
-
-          <code><a href="bin_size.html">bin_size()</a></code>
-
-        </dt>
-        <dd>The size of a builder or a layout, in bytes</dd>
-
-        <dt>
-
-          <code><a href="bin_unpack.html">bin_unpack()</a></code>
-
-        </dt>
-        <dd>Read records from bytes</dd>
+        <dd>zubin: Read and Write Structured Binary Data</dd>
       </dl></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

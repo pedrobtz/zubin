@@ -21,7 +21,8 @@ byte order of each field, the record's size, and its alignment. Offsets are
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/zubin.html">Get started</a></li>
+<li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/c-api.html">The C API</a></li>
@@ -113,7 +114,17 @@ elements, for the numeric types and <code>bool</code> only (write <code>b24</cod
     <h2 id="types">Types<a class="anchor" aria-label="anchor" href="#types"></a></h2>
 
 
-<table class="table table"><tr><td><strong>Spec</strong></td><td><strong>Bytes</strong></td><td><strong>R type</strong></td></tr><tr><td><code>u8 i8 u16 i16</code></td><td>1–2</td><td>integer</td></tr><tr><td><code>i32</code></td><td>4</td><td>integer; -2^31 is <code>NA</code></td></tr><tr><td><code>u32</code></td><td>4</td><td>double</td></tr><tr><td><code>i64 u64</code></td><td>8</td><td>double, exact to 2^53, or <code>integer64</code></td></tr><tr><td><code>f16 bf16</code></td><td>2</td><td>double</td></tr><tr><td><code>f32 f64</code></td><td>4, 8</td><td>double</td></tr><tr><td><code>bool</code></td><td>1</td><td>logical</td></tr><tr><td><code>b&lt;n&gt;</code></td><td>n</td><td>a list of raw vectors</td></tr><tr><td><code>s&lt;n&gt;</code></td><td>n</td><td>character, up to the first NUL</td></tr><tr><td><code>x&lt;n&gt;</code></td><td>n</td><td>not a value: padding</td></tr><tr><td><code>t[k]</code></td><td>k x width</td><td>a matrix of k columns</td></tr></table></div>
+<p>The type model, in both directions (<code><a href="bin_unpack.html">bin_unpack()</a></code> and <code><a href="bin_decode.html">bin_decode()</a></code>
+read; <code><a href="bin_pack.html">bin_pack()</a></code>, <code><a href="bin_encode.html">bin_encode()</a></code> and <code><a href="bin_put.html">bin_put()</a></code> write):</p>
+<table class="table table"><tr><td><strong>Spec</strong></td><td><strong>Bytes</strong></td><td><strong>Read as</strong></td><td><strong>Written from</strong></td></tr><tr><td><code>u8 i8 u16 i16</code></td><td>1–2</td><td>integer</td><td>integer, whole double, logical</td></tr><tr><td><code>i32</code></td><td>4</td><td>integer; -2^31 is an error unless <code>na = "allow"</code></td><td>integer, whole double; <code>NA</code> only with <code>na = "allow"</code></td></tr><tr><td><code>u32</code></td><td>4</td><td>double</td><td>integer, whole double</td></tr><tr><td><code>i64 u64</code></td><td>8</td><td>double, an error above 2^53 in magnitude; or
+<code>integer64</code> (<code>int64 = "integer64"</code>), an error for <code>u64</code> from 2^63</td><td>integer, whole double, <code>integer64</code></td></tr><tr><td><code>f16 bf16</code></td><td>2</td><td>double</td><td>numeric, rounded to nearest even</td></tr><tr><td><code>f32 f64</code></td><td>4, 8</td><td>double</td><td>numeric; <code>NA</code> survives <code>f64</code> and is
+a NaN in the others</td></tr><tr><td><code>bool</code></td><td>1</td><td>logical; any non-zero byte is <code>TRUE</code></td><td>logical, not
+<code>NA</code></td></tr><tr><td><code>b&lt;n&gt;</code></td><td>n</td><td>a list of raw vectors</td><td>a list of raw vectors of
+exactly n bytes</td></tr><tr><td><code>s&lt;n&gt;</code></td><td>n</td><td>character: the bytes before the first NUL, as UTF-8</td><td>character of at most n UTF-8 bytes, NUL-padded</td></tr><tr><td><code>x&lt;n&gt;</code></td><td>n</td><td>not returned</td><td>not given; written as zeros</td></tr><tr><td><code>t[k]</code></td><td>k x width</td><td>a matrix of k columns (<code>name.1</code> ... <code>name.k</code> in
+a data frame)</td><td>a matrix of k columns, or one record's k values</td></tr></table><p>A value that does not fit is a <code>zubin_range_error</code>, and an <code>NA</code> with no
+bytes a <code>zubin_na_error</code>; nothing is truncated, wrapped or rounded into an
+integer. See <a href="zubin-conditions.html">zubin-conditions</a>.</p>
+    </div>
     <div class="section level2">
     <h2 id="alignment">Alignment<a class="anchor" aria-label="anchor" href="#alignment"></a></h2>
 
