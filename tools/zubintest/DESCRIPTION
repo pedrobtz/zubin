@@ -1,0 +1,12 @@
+Package: zubintest
+Title: Consumer Fixture for 'zubin'
+Version: 0.0.1
+Authors@R: person("Pedro", "Baltazar", , "pedrobtz@gmail.com", role = c("aut", "cre"))
+Description: A package in the shape every 'zubin' consumer has: it uses the
+    'zubin' headers through 'LinkingTo' alone, with no 'Imports', and must
+    keep working with 'zubin' uninstalled. Not for release.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LinkingTo: zubin, zufast
+Suggests: testthat (>= 3.0.0)
+Config/testthat/edition: 3

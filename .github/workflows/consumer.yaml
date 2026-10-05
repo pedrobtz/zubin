@@ -1,0 +1,90 @@
+# Design 16.5: tools/zubintest is a package in the shape every consumer has
+# (LinkingTo: zubin, zufast, no Imports, nothing in NAMESPACE but useDynLib,
+# two translation units including <zubin.h> and one including <zubin-r.h>).
+# The README's recipe must equal it line for line; then install zufast,
+# zubin and the fixture, check the fixture with no compiled-code NOTE, run
+# its tests, assert its shared object defines no global zb_ or zuf_ symbol,
+# and uninstall zubin and zufast to prove the fixture still loads and passes.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+name: consumer
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  fixture:
+    runs-on: ${{ matrix.os }}
+    name: fixture (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      _R_CHECK_CRAN_INCOMING_: false
+      _R_CHECK_SYSTEM_CLOCK_: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: The README recipe is the fixture
+        shell: bash
+        run: tools/check-recipe
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      # zufast comes from the Remotes field of zubin's DESCRIPTION until it is
+      # on CRAN (Stage 9).
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          dependencies: '"hard"'
+          extra-packages: any::testthat
+
+      - name: Install zubin, then the fixture
+        shell: bash
+        run: |
+          R CMD INSTALL .
+          R CMD INSTALL tools/zubintest
+
+      - name: R CMD check the fixture
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/fixture" && cd "$RUNNER_TEMP/fixture"
+          R CMD build "$GITHUB_WORKSPACE/tools/zubintest"
+          R CMD check --as-cran --no-manual zubintest_*.tar.gz || true
+          log=zubintest.Rcheck/00check.log
+          cat "$log"
+          grep -q 'checking compiled code ... OK' "$log" || { echo "::error::compiled-code check not OK"; exit 1; }
+          if grep -qE '^Status: .*(ERROR|WARNING)' "$log"; then echo "::error::fixture check failed"; exit 1; fi
+
+      - name: Run the fixture's tests
+        shell: bash
+        working-directory: tools/zubintest/tests
+        run: Rscript testthat.R
+
+      - name: No global zb_ or zuf_ symbol in the fixture
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          so=$(Rscript -e 'cat(system.file("libs", package = "zubintest"))')/zubintest.so
+          if [ "$RUNNER_OS" = macOS ]; then syms=$(nm -gU "$so" | awk '{print $NF}' | sed 's/^_//'); else syms=$(nm -D --defined-only "$so" | awk '{print $NF}'); fi
+          echo "$syms"
+          bad=$(echo "$syms" | grep -E '^(zb_|ZB_|zuf_|ZUF_)' || true)
+          [ -z "$bad" ] || { echo "::error::global symbols: $bad"; exit 1; }
+          echo "$syms" | grep -qx R_init_zubintest
+
+      - name: Uninstall zubin and zufast; the fixture still loads and passes
+        shell: bash
+        working-directory: tools/zubintest/tests
+        run: |
+          Rscript -e 'for (p in c("zubin", "zufast")) remove.packages(p, lib = dirname(find.package(p)))'
+          Rscript -e 'stopifnot(!requireNamespace("zubin", quietly = TRUE), !requireNamespace("zufast", quietly = TRUE)); library(zubintest)'
+          Rscript testthat.R

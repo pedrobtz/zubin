@@ -1,0 +1,27 @@
+#!/bin/sh
+# Roadmap Stage 7: the README's "Using zubin from C" recipe and the fixture
+# package tools/zubintest agree line for line. Each fenced block that follows
+# a `<!-- recipe: FILE -->` marker must equal FILE in the fixture (or, for
+# `DESCRIPTION LinkingTo`, the fixture's LinkingTo line). Run from the root.
+set -eu
+fail=0
+blocks=$(grep -c '^<!-- recipe: ' README.md)
+[ "$blocks" -ge 5 ] || { echo "FAIL: only $blocks recipe blocks in README.md"; exit 1; }
+for target in $(grep '^<!-- recipe: ' README.md | sed 's/^<!-- recipe: //; s/ -->$//; s/ /:/'); do
+    marker="<!-- recipe: $(echo "$target" | tr ':' ' ') -->"
+    block=$(awk -v m="$marker" '
+        $0 == m { found = 1; next }
+        found && /^```/ { if (inside) exit; inside = 1; next }
+        found && inside { print }
+    ' README.md)
+    case "$target" in
+        DESCRIPTION:LinkingTo) want=$(grep '^LinkingTo' tools/zubintest/DESCRIPTION) ;;
+        *) want=$(cat "tools/zubintest/$target") ;;
+    esac
+    if [ "$block" = "$want" ]; then
+        echo "ok   $target"
+    else
+        echo "FAIL $target: the README block differs from the fixture"; fail=1
+    fi
+done
+[ "$fail" -eq 0 ] && echo "recipe agrees with the fixture" || exit 1

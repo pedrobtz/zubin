@@ -580,7 +580,7 @@ test that shows bytes.
 
 ## Stage 7 — The consumer fixture and the C contract · M
 
-**Status:** not started.
+**Status:** done (#11).
 
 **Goal:** the header-only delivery is proven by a package in the exact shape every consumer
 will have, with and without zubin installed, on three operating systems.
@@ -606,6 +606,20 @@ will have, with and without zubin installed, on three operating systems.
 - `consumer.yaml` green on Linux, macOS and Windows, including the zubin-uninstalled step.
 - The README recipe and the fixture's `DESCRIPTION`, `NAMESPACE` and `Makevars` agree
   line for line.
+
+**What actually happened**
+
+- "Agree line for line" is a gate, not a promise: the README marks each recipe block with
+  `<!-- recipe: FILE -->`, and `tools/check-recipe` (first step of `consumer.yaml`) compares
+  each block with the fixture's file, and was seen to fail on a planted edit. The README
+  quotes two whole fixture sources, `cursor.c` and `buffer.c`, as its C examples.
+- The `c-api` article reads its C from the fixture at build time instead of carrying copies.
+- The fixture has three translation units: `layout.c` and `cursor.c` include `<zubin.h>`
+  (so a non-`static` symbol would collide), `buffer.c` includes `<zubin-r.h>`. Its
+  `buffer.c` raises with `Rf_error()` while a buffer is live, which is the case the R glue
+  exists for.
+- `consumer.yaml` uninstalls zufast as well as zubin before the last run: neither is needed
+  at run time, and only removing both proves it.
 
 ---
 
