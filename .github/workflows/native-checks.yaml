@@ -30,10 +30,15 @@ jobs:
   lto:
     uses: pedrobtz/r-actions/.github/workflows/lto.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
 
+  # Quick (step 500) on every pull request, the full-ci label included, and
+  # step 20 on main (roadmap, CI table): at step 20 the suite takes over an
+  # hour, which is a price for a merge, not for each push. The exhaustive
+  # sweeps skip here (ZUBIN_SKIP_HEAVY); they test values, not protection.
   gctorture:
     uses: pedrobtz/r-actions/.github/workflows/gctorture.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
     with:
-      profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
+      profile: ${{ github.event_name == 'pull_request' && 'quick' || 'full' }}
+      timeout-minutes: 240
       env: |
         ZUBIN_SKIP_HEAVY=true
 

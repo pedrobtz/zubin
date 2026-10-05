@@ -8,6 +8,7 @@ test_that("a mixed record reads back field by field", {
 })
 
 test_that("every truncation point fails at the right field and leaves the cursor unchanged", {
+  skip_heavy()
   x <- mixed_bytes()
   ends <- cumsum(mixed_widths)
   for (k in 0:(length(x) - 1L)) {
@@ -28,6 +29,7 @@ test_that("every truncation point fails at the right field and leaves the cursor
 })
 
 test_that("every type at every position reads or refuses without moving", {
+  skip_heavy()
   for (len in 0:9) {
     x <- as.raw(seq_len(len))
     for (type in rw_types) {
