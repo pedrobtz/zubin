@@ -1,5 +1,6 @@
 # Changelog
 
-## zubin (development version)
+## zubin 0.0.0.9000
 
-- Initial CRAN submission.
+- Development version. Nothing is released yet; see
+  `.agents/roadmap.md`.

@@ -1,4 +1,4 @@
 # License
 
     YEAR: 2026
-    COPYRIGHT HOLDER: zubin authors
+    COPYRIGHT HOLDER: Pedro Baltazar
