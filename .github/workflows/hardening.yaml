@@ -1,0 +1,83 @@
+# Design 16.6: the headers compiled into libFuzzer targets with ASan and
+# UBSan, no R in the picture. tools/run-fuzz first builds each target's
+# canary and requires it to crash on tools/fuzz/canary.input, which proves
+# the instrumentation is live; then it fuzzes the target from its seeds and
+# a corpus cached between runs, so short runs add up: ten minutes a target on
+# pull requests and pushes, an hour nightly, and a dispatched run takes its
+# budget as an input.
+#
+# Bespoke rather than r-actions' fuzz.yml: the headers include zufast's, and
+# the reusable workflow has no step that could fetch them.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to fuzz each target (the job times out at 150 minutes)
+        type: number
+        default: 3600
+
+name: hardening
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [layout]
+    env:
+      SECONDS_BUDGET: ${{ github.event_name == 'workflow_dispatch' && inputs.seconds || github.event_name == 'schedule' && 3600 || 600 }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: pedrobtz/zufast
+          path: .zufast
+      - name: Install clang with libFuzzer
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang
+          v=$(clang -dumpversion | cut -d. -f1)
+          sudo apt-get install -y -q "libclang-rt-$v-dev" || true
+          clang --version
+      - name: Restore the corpus
+        uses: actions/cache/restore@v6
+        with:
+          path: .corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Canary, then fuzz
+        env:
+          ZUFAST_INCLUDE: ${{ github.workspace }}/.zufast/inst/include
+          CORPUS_DIR: ${{ github.workspace }}/.corpus
+          ARTIFACTS: ${{ github.workspace }}/.artifacts
+        run: |
+          echo "corpus before: $(ls .corpus/${{ matrix.target }} 2>/dev/null | wc -l) inputs"
+          FUZZ_SECONDS="$SECONDS_BUDGET" tools/run-fuzz ${{ matrix.target }}
+          echo "corpus after: $(ls .corpus/${{ matrix.target }} | wc -l) inputs"
+      - name: Save the corpus
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: .corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+      - name: Upload any crashing input
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-${{ matrix.target }}-findings
+          path: .artifacts/
+          if-no-files-found: ignore

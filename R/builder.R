@@ -153,7 +153,7 @@ bin_take <- function(b) {
 #'
 #' @param x A `zubin_builder` or a `zubin_layout`.
 #' @param ... Unused.
-#' @return A double for a builder.
+#' @return A double for a builder; an integer for a layout.
 #' @export
 #' @examples
 #' b <- bin_builder()

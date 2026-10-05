@@ -538,3 +538,108 @@ SEXP zubin_test_put_loop(SEXP chunk, SEXP times)
     UNPROTECT(1);
     return Rf_ScalarReal((double)i);
 }
+
+/* ---- layout.h -------------------------------------------------------------- */
+
+/* zb_layout_parse() as C sees it: the raw field table (count is the byte
+   width for b, s and x), the record size and alignment, or the status and
+   error position. max_fields 0 sizes the array with zb_layout_count_fields(). */
+SEXP zubin_test_layout(SEXP spec, SEXP big, SEXP align, SEXP max_fields)
+{
+    const char *names[] = {"status", "position", "type", "type_name", "width", "count", "size",
+                           "offset", "big", "name", "nfields", "record_size", "align",
+                           "count_bound", ""};
+    zb_layout l;
+    size_t err = 0;
+    uint32_t i, mf = (uint32_t)Rf_asInteger(max_fields);
+    zb_status st;
+    const char *s = CHAR(STRING_ELT(spec, 0));
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names));
+    l.nfields = 0;
+    st = zubin_int_parse(spec, Rf_asLogical(big) == TRUE, Rf_asLogical(align) == TRUE, mf, &l, &err);
+    SET_VECTOR_ELT(out, 0, Rf_mkString(zb_status_string(st)));
+    SET_VECTOR_ELT(out, 1, Rf_ScalarReal(st ? (double)err : NA_REAL));
+    SET_VECTOR_ELT(out, 13, Rf_ScalarReal((double)zb_layout_count_fields(s, strlen(s))));
+    if (!st) {
+        SEXP type = Rf_allocVector(INTSXP, l.nfields), tname, width, count, size, offset, bigs, name;
+        SET_VECTOR_ELT(out, 2, type);
+        tname = Rf_allocVector(STRSXP, l.nfields);  SET_VECTOR_ELT(out, 3, tname);
+        width = Rf_allocVector(INTSXP, l.nfields);  SET_VECTOR_ELT(out, 4, width);
+        count = Rf_allocVector(INTSXP, l.nfields);  SET_VECTOR_ELT(out, 5, count);
+        size = Rf_allocVector(INTSXP, l.nfields);   SET_VECTOR_ELT(out, 6, size);
+        offset = Rf_allocVector(INTSXP, l.nfields); SET_VECTOR_ELT(out, 7, offset);
+        bigs = Rf_allocVector(INTSXP, l.nfields);   SET_VECTOR_ELT(out, 8, bigs);
+        name = Rf_allocVector(STRSXP, l.nfields);   SET_VECTOR_ELT(out, 9, name);
+        for (i = 0; i < l.nfields; i++) {
+            const zb_field *f = &l.fields[i];
+            INTEGER(type)[i] = (int)f->type;
+            SET_STRING_ELT(tname, i, Rf_mkChar(zb_type_name(f->type)));
+            INTEGER(width)[i] = (int)zb_type_width(f->type);
+            INTEGER(count)[i] = (int)f->count;
+            INTEGER(size)[i] = (int)f->size;
+            INTEGER(offset)[i] = (int)f->offset;
+            INTEGER(bigs)[i] = f->big_endian;
+            SET_STRING_ELT(name, i, f->name ? Rf_mkCharLen(f->name, (int)f->name_len) : NA_STRING);
+        }
+        SET_VECTOR_ELT(out, 10, Rf_ScalarInteger((int)l.nfields));
+        SET_VECTOR_ELT(out, 11, Rf_ScalarInteger((int)l.size));
+        SET_VECTOR_ELT(out, 12, Rf_ScalarInteger((int)l.align));
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* The oracle for align = TRUE (design 11.4): structs compiled here, by the
+   same compiler as the package, each with the spec that should describe it.
+   Returns, per struct, the spec, offsetof() of each member and sizeof(). */
+#include <stddef.h>
+
+struct zb_s1  { uint8_t a; uint32_t b; uint16_t c; };
+struct zb_s2  { uint8_t a; double b; uint8_t c; };
+struct zb_s3  { uint16_t a; uint8_t b; int64_t c; int8_t d; };
+struct zb_s4  { float xyz[3]; uint8_t rgb[3]; };
+struct zb_s5  { char name[5]; int32_t id; char tag[3]; };
+struct zb_s6  { uint8_t flag; uint16_t h[2]; uint8_t g; };
+struct zb_s7  { int64_t ts; double price; int32_t qty; uint8_t side; };
+struct zb_s8  { uint8_t a; uint8_t b; uint8_t c; };
+struct zb_s9  { uint32_t a; uint8_t b; };
+struct zb_s10 { uint8_t a; uint64_t b[2]; uint16_t c; };
+struct zb_s11 { uint8_t raw[7]; uint16_t v; };
+struct zb_s12 { int16_t a; float b; uint8_t c; double d; uint8_t e; };
+
+#define ZB_OFFS(...) { __VA_ARGS__ }
+typedef struct { const char *spec; int n; size_t off[6]; size_t size; int has8; } zb_struct_case;
+
+SEXP zubin_test_struct_offsets(void)
+{
+    const zb_struct_case cases[] = {
+        {"a:u8 b:u32 c:u16", 3, ZB_OFFS(offsetof(struct zb_s1, a), offsetof(struct zb_s1, b), offsetof(struct zb_s1, c)), sizeof(struct zb_s1), 0},
+        {"a:u8 b:f64 c:u8", 3, ZB_OFFS(offsetof(struct zb_s2, a), offsetof(struct zb_s2, b), offsetof(struct zb_s2, c)), sizeof(struct zb_s2), 1},
+        {"a:u16 b:u8 c:i64 d:i8", 4, ZB_OFFS(offsetof(struct zb_s3, a), offsetof(struct zb_s3, b), offsetof(struct zb_s3, c), offsetof(struct zb_s3, d)), sizeof(struct zb_s3), 1},
+        {"xyz:f32[3] rgb:u8[3]", 2, ZB_OFFS(offsetof(struct zb_s4, xyz), offsetof(struct zb_s4, rgb)), sizeof(struct zb_s4), 0},
+        {"name:s5 id:i32 tag:b3", 3, ZB_OFFS(offsetof(struct zb_s5, name), offsetof(struct zb_s5, id), offsetof(struct zb_s5, tag)), sizeof(struct zb_s5), 0},
+        {"flag:bool h:f16[2] g:u8", 3, ZB_OFFS(offsetof(struct zb_s6, flag), offsetof(struct zb_s6, h), offsetof(struct zb_s6, g)), sizeof(struct zb_s6), 0},
+        {"ts:i64 price:f64 qty:i32 side:u8", 4, ZB_OFFS(offsetof(struct zb_s7, ts), offsetof(struct zb_s7, price), offsetof(struct zb_s7, qty), offsetof(struct zb_s7, side)), sizeof(struct zb_s7), 1},
+        {"a:u8 b:u8 c:u8", 3, ZB_OFFS(offsetof(struct zb_s8, a), offsetof(struct zb_s8, b), offsetof(struct zb_s8, c)), sizeof(struct zb_s8), 0},
+        {"a:u32 b:u8", 2, ZB_OFFS(offsetof(struct zb_s9, a), offsetof(struct zb_s9, b)), sizeof(struct zb_s9), 0},
+        {"a:u8 b:u64[2] c:u16", 3, ZB_OFFS(offsetof(struct zb_s10, a), offsetof(struct zb_s10, b), offsetof(struct zb_s10, c)), sizeof(struct zb_s10), 1},
+        {"raw:b7 v:bf16", 2, ZB_OFFS(offsetof(struct zb_s11, raw), offsetof(struct zb_s11, v)), sizeof(struct zb_s11), 0},
+        {"a:i16 b:f32 c:u8 d:f64 e:u8", 5, ZB_OFFS(offsetof(struct zb_s12, a), offsetof(struct zb_s12, b), offsetof(struct zb_s12, c), offsetof(struct zb_s12, d), offsetof(struct zb_s12, e)), sizeof(struct zb_s12), 1},
+    };
+    const int ncase = (int)(sizeof cases / sizeof cases[0]);
+    const char *names[] = {"spec", "offsets", "size", "has8", ""};
+    int i, j;
+    SEXP out = PROTECT(Rf_allocVector(VECSXP, ncase));
+    for (i = 0; i < ncase; i++) {
+        SEXP one = Rf_mkNamed(VECSXP, names), offs;
+        SET_VECTOR_ELT(out, i, one);
+        SET_VECTOR_ELT(one, 0, Rf_mkString(cases[i].spec));
+        offs = Rf_allocVector(INTSXP, cases[i].n);
+        SET_VECTOR_ELT(one, 1, offs);
+        for (j = 0; j < cases[i].n; j++) INTEGER(offs)[j] = (int)cases[i].off[j];
+        SET_VECTOR_ELT(one, 2, Rf_ScalarInteger((int)cases[i].size));
+        SET_VECTOR_ELT(one, 3, Rf_ScalarLogical(cases[i].has8));
+    }
+    UNPROTECT(1);
+    return out;
+}

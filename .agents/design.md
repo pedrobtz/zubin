@@ -476,7 +476,7 @@ type    := "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64"
 order   := "le" | "be"                          per-field override; multi-byte types only
 name    := [A-Za-z_] [A-Za-z0-9_.]*             unique within a layout; unnamed fields are V1, V2, ...
 count, width := decimal, 1 .. 2^31-1
-sep     := whitespace | ","
+sep     := whitespace | [ whitespace ] "," [ whitespace ]
 ```
 
 Examples:
@@ -491,7 +491,9 @@ Examples:
 Rules the parser enforces, each with a `ZB_ERR_SPEC` and a byte position: unknown type;
 array suffix on `b`, `s` or `x` (write `b24`, not `b8[3]`); order suffix on a one-byte type
 or on `b`/`s`/`x`; a zero width or count; a duplicate name; a name on a padding field; a
-total size over 2^31 − 1; more fields than the caller's array holds (`ZB_ERR_LIMIT`).
+total size over 2^31 − 1; more fields than the caller's array holds (`ZB_ERR_LIMIT`). Also,
+from Stage 3: an empty spec, an empty field (`u8,,u8`), a leading or trailing comma, and any
+character after a field that is not a separator. A count of 1 (`u8[1]`) is a scalar.
 
 Mnemonic widths rather than Python `struct` letters (decision 12): `u32` is read by anyone,
 `I` is not, and a translator for Python specs is a thirty-line function that can come when
@@ -505,7 +507,12 @@ static inline zb_status zb_layout_parse(const char *spec, size_t n,
                                         zb_field *fields, uint32_t max_fields,
                                         zb_layout *out, size_t *err_pos);
 static inline uint32_t  zb_layout_count_fields(const char *spec, size_t n);   /* upper bound: separators + 1 */
+static inline uint32_t  zb_type_width(zb_type t);       /* element width: 1, 2, 4, 8; 1 for b, s, x */
+static inline const char *zb_type_name(zb_type t);      /* "u32", "bf16", "b", ...; never NULL */
+#define ZB_LAYOUT_MAX 0x7FFFFFFF                        /* the largest record, count or width */
 ```
+
+On failure `*out` is unchanged and the field array's contents are unspecified.
 
 The caller supplies the field array (on the stack, or `R_alloc` in the R glue), so the
 header allocates nothing and a layout is a plain value. Names are borrowed pointers into
@@ -517,9 +524,12 @@ its own copy of the spec and of every derived field (§13.2).
 With `align = 0` fields are packed at consecutive offsets. With `align = 1` each field is
 placed at the next multiple of its natural alignment, which is the element width for
 numeric types (1, 2, 4 or 8), 1 for `b`, `s`, `x` and `bool`, and the record size is
-rounded up to the largest field alignment. This is the System V rule GCC and clang apply to
-a C struct on every target R supports, so a `struct` dumped with `fwrite()` reads back with
-`align = TRUE`. Explicit `x` padding and `align` compose: padding is a field of alignment 1.
+rounded up to the largest field alignment. This is the rule GCC and clang apply to a C
+struct on every 64-bit target R supports (x86-64 and AArch64 on Linux, macOS and Windows), so
+a `struct` dumped with `fwrite()` there reads back with `align = TRUE`. **32-bit x86 is the
+exception** (found at Stage 3): its System V ABI aligns `double` and 64-bit integers to 4
+inside a struct, so such a struct needs explicit `x` padding; the oracle test skips those
+cases on a 32-bit build and `?bin_layout` says so. Explicit `x` padding and `align` compose: padding is a field of alignment 1.
 
 ### 11.5 Unpack and pack kernels
 
@@ -619,7 +629,13 @@ suffix overrides both. A `zubin_layout` passed as `spec` is returned unchanged.
 The result is a classed list, not an external pointer: `spec` (the normalised string),
 `fields` (a data frame of `name`, `type`, `count`, `size`, `offset`, `endian`), `size`,
 `align`. It serialises, copies, prints as a table, and is rebuilt into `zb_field[]` by every
-`.Call` in microseconds. Methods: `print`, `format`, `length` (fields), `names`,
+`.Call` in microseconds, by re-parsing `spec` with `align > 1`. `spec` is canonical: the
+declared byte order as a prefix, every value field named, an order suffix only where a field
+differs, and it re-parses to the identical layout. In the `fields` table `count` is the
+number of array elements (1 for a scalar and for `b`, `s`, `x`, whose width is their
+`size`), and `endian` is `NA` for one-byte types. `length()` and `names()` cover the fields
+that carry values, so padding is excluded. Unnamed value fields are `V1`, `V2`, … by their
+position among value fields, and a default name that equals an explicit one is a spec error. Methods: `print`, `format`, `length` (fields), `names`,
 `as.data.frame` (the field table), and `bin_size(l)`.
 
 ### 13.3 Unpack and pack

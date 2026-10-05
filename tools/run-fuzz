@@ -1,0 +1,52 @@
+#!/bin/sh
+# Design 16.6: build each libFuzzer target in tools/fuzz with ASan and UBSan,
+# check that its canary build crashes on tools/fuzz/canary.input, then fuzz
+# it for FUZZ_SECONDS (default 30) from its seed corpus, or from CORPUS_DIR/<target>
+# when set (CI keeps a corpus there between runs). Needs clang with
+# libFuzzer, and zufast's headers (ZUFAST_INCLUDE, or an installed zufast).
+# Run from the package root.
+#
+#   tools/run-fuzz [target ...]     targets: layout (later: unpack, buf)
+set -eu
+
+CC=${CC:-clang}
+SECONDS_PER_TARGET=${FUZZ_SECONDS:-30}
+TARGETS=${*:-layout}
+if [ -z "${ZUFAST_INCLUDE:-}" ]; then
+    ZUFAST_INCLUDE=$(Rscript -e 'cat(system.file("include", package = "zufast"))' 2>/dev/null || true)
+fi
+[ -f "$ZUFAST_INCLUDE/zufast.h" ] || { echo "zufast headers not found: set ZUFAST_INCLUDE"; exit 1; }
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+FLAGS="-g -O1 -fno-omit-frame-pointer -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined -Iinst/include -I$ZUFAST_INCLUDE -Itools/fuzz"
+
+status=0
+for t in $TARGETS; do
+    src=tools/fuzz/fuzz_$t.c
+    # The exit status is the canary binary's own, captured directly, never a
+    # pipe's: a crash must be seen as a crash.
+    $CC $FLAGS -DZB_FUZZ_CANARY "$src" tools/fuzz/support.c -o "$TMP/canary_$t"
+    if "$TMP/canary_$t" tools/fuzz/canary.input >"$TMP/canary_$t.log" 2>&1; then
+        echo "FAIL $t: the canary build did not crash on the canary input"
+        status=1
+        continue
+    fi
+    grep -q 'AddressSanitizer' "$TMP/canary_$t.log" || { echo "FAIL $t: the canary crash was not ASan's"; status=1; continue; }
+    echo "ok $t: canary crashed under ASan"
+
+    $CC $FLAGS "$src" tools/fuzz/support.c -o "$TMP/fuzz_$t"
+    corpus=${CORPUS_DIR:+$CORPUS_DIR/$t}
+    corpus=${corpus:-$TMP/corpus_$t}
+    mkdir -p "$corpus"
+    cp tools/fuzz/seeds/$t/* "$corpus/"
+    mkdir -p "${ARTIFACTS:-$TMP}"
+    if "$TMP/fuzz_$t" -max_total_time="$SECONDS_PER_TARGET" -print_final_stats=1 -max_len=4096 \
+            -artifact_prefix="${ARTIFACTS:-$TMP}/" "$corpus" >"$TMP/fuzz_$t.log" 2>&1; then
+        echo "ok $t: $(grep -o 'stat::number_of_executed_units: *[0-9]*' "$TMP/fuzz_$t.log" | grep -o '[0-9]*$') executions, no finding"
+    else
+        echo "FAIL $t: finding"
+        tail -40 "$TMP/fuzz_$t.log"
+        status=1
+    fi
+done
+exit $status

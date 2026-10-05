@@ -19,6 +19,7 @@
 #include "zubin/rw.h"
 #include "zubin/buf.h"
 #include "zubin/cursor.h"
+#include "zubin/layout.h"
 #include <zufast/utf8.h>
 
 #endif /* ZUBIN_H */
