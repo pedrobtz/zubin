@@ -416,7 +416,7 @@ day it exists, and exposed as the `zubin_layout` object.
 
 ## Stage 4 — Unpack and decode · L
 
-**Status:** not started.
+**Status:** done (#8).
 
 **Goal:** the field-major kernels, `bin_unpack()` and `bin_decode()`, the whole §13.1 type
 model in the reading direction, and the golden vectors proven on a big-endian host.
@@ -457,6 +457,33 @@ model in the reading direction, and the golden vectors proven on a big-endian ho
 - Sanitizers, valgrind and rchk clean over the new code; the interrupt test passes.
 
 **Not this stage:** writing.
+
+**What actually happened**
+
+- Every unpack kernel returns a status, and the `i32` kernel gained `*bad`: a C consumer that
+  dispatches a field to the wrong kernel is told, and the R glue needs the first offending
+  record to name it. Design §11.5 has the signatures.
+- −2^63 read as `integer64` is an error unless `na = "allow"` (design §14.3), the decision
+  Stage 1 deferred.
+- The golden vectors are generated once by a script outside the repository, with Python's
+  `struct` and `zlib.crc32` as an encoder independent of R and of zubin, and committed as
+  data; the test only reads them. Expected values are R expressions, and two had to be
+  written exactly (`-2^1000`, `2^-24`, `2^-1074`): R's parser on macOS arm64 turns some
+  decimal literals into a neighbouring double, zucbor's finding again.
+- A failed field is reported by its position in the layout, not by name, because an unnamed
+  field has no name in C; R names it from the layout.
+- `arch.yaml` cannot use r-actions' dependency resolution for zufast either: each leg
+  downloads zufast's `main` tarball from GitHub and installs it, which needed
+  `ca-certificates` in the images.
+- The s390x leg's first run: all 34 golden vectors decoded identically on the big-endian
+  host, and it caught one test comparing little-endian output with `writeBin()`'s default,
+  which is the *native* order. The i386 leg (R 4.2) caught three portability bugs in tests:
+  `DLLInfo` has no `forceSymbols` before R 4.3, `sample()` cannot hold the whole `int`
+  range on a 32-bit build, and `rawToChar()` gives a native string that the check's C
+  locale cannot translate to UTF-8. `arch.yaml` sets `_R_CHECK_TESTS_NLINES_=0` so a failing
+  leg shows its whole test output.
+- The interrupt test interrupts an unpack of 64 string fields over 200 000 records (one
+  interrupt check per field, never inside a kernel), then unpacks the same input in full.
 
 ---
 

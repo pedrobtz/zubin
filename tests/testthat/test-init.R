@@ -2,7 +2,8 @@ test_that("the shared object is loaded with registered routines only", {
   dll <- getLoadedDLLs()[["zubin"]]
   expect_s3_class(dll, "DLLInfo")
   expect_false(dll[["dynamicLookup"]])
-  expect_true(dll[["forceSymbols"]])
+  # DLLInfo has carried forceSymbols since R 4.3
+  if (!is.null(dll[["forceSymbols"]])) expect_true(dll[["forceSymbols"]])
 })
 
 test_that("conditions inherit zubin_error and carry only the function name", {

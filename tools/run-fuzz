@@ -6,14 +6,14 @@
 # libFuzzer, and zufast's headers (ZUFAST_INCLUDE, or an installed zufast).
 # Run from the package root.
 #
-#   tools/run-fuzz [target ...]     targets: layout (later: unpack, buf)
+#   tools/run-fuzz [target ...]     targets: layout unpack
 #   CANARY_ONLY=1 tools/run-fuzz    only prove each canary crashes (CI runs the
 #                                   fuzzing itself through r-actions' fuzz.yml)
 set -eu
 
 CC=${CC:-clang}
 SECONDS_PER_TARGET=${FUZZ_SECONDS:-30}
-TARGETS=${*:-layout}
+TARGETS=${*:-layout unpack}
 if [ -z "${ZUFAST_INCLUDE:-}" ]; then
     ZUFAST_INCLUDE=$(Rscript -e 'cat(system.file("include", package = "zufast"))' 2>/dev/null || true)
 fi

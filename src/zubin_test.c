@@ -643,3 +643,71 @@ SEXP zubin_test_struct_offsets(void)
     UNPROTECT(1);
     return out;
 }
+
+/* Each kernel driven directly over `bytes`: n records (every whole one when
+   n < 0), `stride` apart (the record size when stride < 0), with no R glue
+   in between. Per value field: the kernel's output as C sees it (int32,
+   double, int64 bits in a double, or raw bytes) and its status and *bad;
+   for i32 the strict (allow_na = 0) run's status, for i64/u64 also the
+   exact-double kernel's output. */
+SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
+{
+    const char *names[] = {"type", "values", "status", "bad", "values2", "status2", "bad2", ""};
+    zb_layout l;
+    size_t err = 0, rs, nrec, len = (size_t)XLENGTH(bytes);
+    uint32_t j;
+    zb_status st = zubin_int_parse(spec, 0, 0, 0, &l, &err);
+    const uint8_t *base = len ? RAW(bytes) : NULL;
+    SEXP out;
+    if (st) Rf_error("bad spec");
+    rs = Rf_asReal(stride) < 0 ? l.size : (size_t)Rf_asReal(stride);
+    if (Rf_asReal(n) < 0) nrec = len < l.size ? 0 : (len - l.size) / rs + 1;
+    else nrec = (size_t)Rf_asReal(n);
+    if (nrec && (nrec - 1) * rs + l.size > len) Rf_error("records do not fit");
+    out = PROTECT(Rf_allocVector(VECSXP, l.nfields));
+    for (j = 0; j < l.nfields; j++) {
+        const zb_field *f = &l.fields[j];
+        size_t m = nrec * f->count, bad = (size_t)-1, bad2 = (size_t)-1;
+        zb_status s1 = ZB_OK, s2 = ZB_OK;
+        SEXP one = Rf_mkNamed(VECSXP, names), v = R_NilValue, v2 = R_NilValue;
+        SET_VECTOR_ELT(out, j, one);
+        SET_VECTOR_ELT(one, 0, Rf_mkString(zb_type_name(f->type)));
+        switch (f->type) {
+        case ZB_U8: case ZB_I8: case ZB_U16: case ZB_I16: case ZB_I32: case ZB_BOOL:
+            v = Rf_allocVector(INTSXP, (R_xlen_t)m);
+            SET_VECTOR_ELT(one, 1, v);
+            s1 = zb_unpack_i32(base, nrec, rs, f, INTEGER(v), 1, &bad);
+            {
+                int32_t *tmp = (int32_t *)R_alloc(m ? m : 1, sizeof(int32_t));
+                s2 = zb_unpack_i32(base, nrec, rs, f, tmp, 0, &bad2);
+            }
+            break;
+        case ZB_U32: case ZB_F16: case ZB_BF16: case ZB_F32: case ZB_F64:
+            v = Rf_allocVector(REALSXP, (R_xlen_t)m);
+            SET_VECTOR_ELT(one, 1, v);
+            s1 = zb_unpack_f64(base, nrec, rs, f, REAL(v));
+            break;
+        case ZB_I64: case ZB_U64:
+            v = Rf_allocVector(REALSXP, (R_xlen_t)m);
+            SET_VECTOR_ELT(one, 1, v);
+            s1 = zb_unpack_i64(base, nrec, rs, f, (int64_t *)(void *)REAL(v), &bad);
+            v2 = Rf_allocVector(REALSXP, (R_xlen_t)m);
+            SET_VECTOR_ELT(one, 4, v2);
+            s2 = zb_unpack_f64x(base, nrec, rs, f, REAL(v2), &bad2);
+            break;
+        case ZB_BYTES: case ZB_STR:
+            v = Rf_allocVector(RAWSXP, (R_xlen_t)(nrec * f->size));
+            SET_VECTOR_ELT(one, 1, v);
+            s1 = zb_unpack_bytes(base, nrec, rs, f, RAW(v));
+            break;
+        default:
+            break;
+        }
+        SET_VECTOR_ELT(one, 2, Rf_mkString(zb_status_string(s1)));
+        SET_VECTOR_ELT(one, 3, Rf_ScalarReal(bad == (size_t)-1 ? NA_REAL : (double)bad));
+        SET_VECTOR_ELT(one, 5, Rf_mkString(zb_status_string(s2)));
+        SET_VECTOR_ELT(one, 6, Rf_ScalarReal(bad2 == (size_t)-1 ? NA_REAL : (double)bad2));
+    }
+    UNPROTECT(1);
+    return out;
+}

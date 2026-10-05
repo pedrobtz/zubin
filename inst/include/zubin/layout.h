@@ -306,4 +306,175 @@ ZB_INLINE zb_status zb_layout_parse(const char *spec, size_t n,
     return ZB_OK;
 }
 
+/* ---- unpack kernels (design 11.5) ---------------------------------------------- */
+
+/* Each kernel reads one field of n records, the first at base and the rest
+   every `stride` bytes, into one typed column. Fields are processed
+   field-major: one strided loop per field, which the compiler vectorises.
+   Array fields (count > 1) are written column-major: element k of record i
+   lands at dst[k * n + i], which is R's matrix layout. The caller has
+   checked that every record lies inside its buffer; the kernels do not
+   bounds-check and never allocate.
+
+   A kernel that can refuse a value returns its status and writes the index
+   of the first record holding one to *bad; what it wrote to dst is then
+   unspecified. A field of the wrong type for the kernel is ZB_ERR_INVALID. */
+
+/* The element of record i at array position k. */
+#define ZB_INT_ELEM(base, i, stride, f, k, w) \
+    ((base) + (i) * (stride) + (f)->offset + (size_t)(k) * (w))
+
+/* u8 i8 u16 i16 i32 bool into int32_t. bool reads 1 for any non-zero byte.
+   An i32 of -2^31 is ZB_ERR_RANGE unless allow_na, because it is R's
+   NA_integer_ and a file holding it would otherwise acquire a missing value
+   silently (design 14.3). */
+ZB_INLINE zb_status zb_unpack_i32(const uint8_t *base, size_t n, size_t stride,
+                                  const zb_field *f, int32_t *dst, int allow_na, size_t *bad)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i, first = n;
+    int be = f->big_endian;
+    switch (f->type) {
+    case ZB_U8: case ZB_I8: case ZB_BOOL: case ZB_U16: case ZB_I16: case ZB_I32: break;
+    default: return ZB_ERR_INVALID;
+    }
+    for (k = 0; k < f->count; k++) {
+        int32_t *d = dst + (size_t)k * n;
+        switch (f->type) {
+        case ZB_U8:
+            for (i = 0; i < n; i++) d[i] = zb_rd_u8(ZB_INT_ELEM(base, i, stride, f, k, w));
+            break;
+        case ZB_I8:
+            for (i = 0; i < n; i++) d[i] = zb_rd_i8(ZB_INT_ELEM(base, i, stride, f, k, w));
+            break;
+        case ZB_BOOL:
+            for (i = 0; i < n; i++) d[i] = zb_rd_u8(ZB_INT_ELEM(base, i, stride, f, k, w)) != 0;
+            break;
+        case ZB_U16:
+            if (be) for (i = 0; i < n; i++) d[i] = zb_rd_u16be(ZB_INT_ELEM(base, i, stride, f, k, w));
+            else    for (i = 0; i < n; i++) d[i] = zb_rd_u16le(ZB_INT_ELEM(base, i, stride, f, k, w));
+            break;
+        case ZB_I16:
+            if (be) for (i = 0; i < n; i++) d[i] = zb_rd_i16be(ZB_INT_ELEM(base, i, stride, f, k, w));
+            else    for (i = 0; i < n; i++) d[i] = zb_rd_i16le(ZB_INT_ELEM(base, i, stride, f, k, w));
+            break;
+        default:   /* ZB_I32 */
+            if (be) for (i = 0; i < n; i++) d[i] = zb_rd_i32be(ZB_INT_ELEM(base, i, stride, f, k, w));
+            else    for (i = 0; i < n; i++) d[i] = zb_rd_i32le(ZB_INT_ELEM(base, i, stride, f, k, w));
+            if (!allow_na) {
+                for (i = 0; i < first; i++) {
+                    if (d[i] == INT32_MIN) { first = i; break; }
+                }
+            }
+            break;
+        }
+    }
+    if (first < n) {
+        *bad = first;
+        return ZB_ERR_RANGE;
+    }
+    return ZB_OK;
+}
+
+/* u32 f16 bf16 f32 f64 into double: every value is exact. */
+ZB_INLINE zb_status zb_unpack_f64(const uint8_t *base, size_t n, size_t stride,
+                                  const zb_field *f, double *dst)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i;
+    int be = f->big_endian;
+    switch (f->type) {
+    case ZB_U32: case ZB_F16: case ZB_BF16: case ZB_F32: case ZB_F64: break;
+    default: return ZB_ERR_INVALID;
+    }
+    for (k = 0; k < f->count; k++) {
+        double *d = dst + (size_t)k * n;
+#define ZB_INT_LOOP(rd) for (i = 0; i < n; i++) d[i] = (double)rd(ZB_INT_ELEM(base, i, stride, f, k, w))
+        switch (f->type) {
+        case ZB_U32:  if (be) ZB_INT_LOOP(zb_rd_u32be);  else ZB_INT_LOOP(zb_rd_u32le);  break;
+        case ZB_F16:  if (be) ZB_INT_LOOP(zb_rd_f16be);  else ZB_INT_LOOP(zb_rd_f16le);  break;
+        case ZB_BF16: if (be) ZB_INT_LOOP(zb_rd_bf16be); else ZB_INT_LOOP(zb_rd_bf16le); break;
+        case ZB_F32:  if (be) ZB_INT_LOOP(zb_rd_f32be);  else ZB_INT_LOOP(zb_rd_f32le);  break;
+        default:      if (be) ZB_INT_LOOP(zb_rd_f64be);  else ZB_INT_LOOP(zb_rd_f64le);  break;
+        }
+#undef ZB_INT_LOOP
+    }
+    return ZB_OK;
+}
+
+/* i64 into int64_t; u64 too while it is below 2^63, ZB_ERR_RANGE from it. */
+ZB_INLINE zb_status zb_unpack_i64(const uint8_t *base, size_t n, size_t stride,
+                                  const zb_field *f, int64_t *dst, size_t *bad)
+{
+    uint32_t k;
+    size_t i, first = n;
+    int be = f->big_endian;
+    if (f->type != ZB_I64 && f->type != ZB_U64) return ZB_ERR_INVALID;
+    for (k = 0; k < f->count; k++) {
+        int64_t *d = dst + (size_t)k * n;
+        if (f->type == ZB_I64) {
+            if (be) for (i = 0; i < n; i++) d[i] = zb_rd_i64be(ZB_INT_ELEM(base, i, stride, f, k, 8));
+            else    for (i = 0; i < n; i++) d[i] = zb_rd_i64le(ZB_INT_ELEM(base, i, stride, f, k, 8));
+        } else {
+            for (i = 0; i < n; i++) {
+                const uint8_t *p = ZB_INT_ELEM(base, i, stride, f, k, 8);
+                uint64_t u = be ? zb_rd_u64be(p) : zb_rd_u64le(p);
+                if (u > (uint64_t)INT64_MAX) {
+                    if (i < first) first = i;
+                    break;
+                }
+                d[i] = (int64_t)u;
+            }
+        }
+    }
+    if (first < n) {
+        *bad = first;
+        return ZB_ERR_RANGE;
+    }
+    return ZB_OK;
+}
+
+/* i64 u64 into double, exactly: a value above 2^53 in magnitude is
+   ZB_ERR_RANGE rather than rounded (design 14.4). */
+ZB_INLINE zb_status zb_unpack_f64x(const uint8_t *base, size_t n, size_t stride,
+                                   const zb_field *f, double *dst, size_t *bad)
+{
+    const uint64_t lim = (uint64_t)1 << 53;
+    uint32_t k;
+    size_t i, first = n;
+    int be = f->big_endian;
+    if (f->type != ZB_I64 && f->type != ZB_U64) return ZB_ERR_INVALID;
+    for (k = 0; k < f->count; k++) {
+        double *d = dst + (size_t)k * n;
+        for (i = 0; i < n; i++) {
+            const uint8_t *p = ZB_INT_ELEM(base, i, stride, f, k, 8);
+            uint64_t u = be ? zb_rd_u64be(p) : zb_rd_u64le(p);
+            if (f->type == ZB_I64) {
+                int64_t v = zb_int_u64_i64(u);
+                uint64_t mag = v < 0 ? (uint64_t)0 - u : u;
+                if (mag > lim) { if (i < first) first = i; break; }
+                d[i] = (double)v;
+            } else {
+                if (u > lim) { if (i < first) first = i; break; }
+                d[i] = (double)u;
+            }
+        }
+    }
+    if (first < n) {
+        *bad = first;
+        return ZB_ERR_RANGE;
+    }
+    return ZB_OK;
+}
+
+/* b and s: each record's field bytes, contiguous, record i at dst + i * size. */
+ZB_INLINE zb_status zb_unpack_bytes(const uint8_t *base, size_t n, size_t stride,
+                                    const zb_field *f, uint8_t *dst)
+{
+    size_t i;
+    if (f->type != ZB_BYTES && f->type != ZB_STR) return ZB_ERR_INVALID;
+    for (i = 0; i < n; i++) memcpy(dst + i * f->size, base + i * stride + f->offset, f->size);
+    return ZB_OK;
+}
+
 #endif /* ZUBIN_LAYOUT_H */

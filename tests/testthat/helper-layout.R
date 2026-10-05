@@ -30,3 +30,18 @@ format_layouts <- list(
   itch_add_order = ">type:s1 locate:u16 tracking:u16 ts:b6 ref:u64 side:s1 shares:u32
                     stock:s8 price:u32"
 )
+
+# The golden vectors (design 16.4), read as text so nothing is converted.
+golden <- function() {
+  utils::read.delim(test_path("fixtures", "golden.tsv"), colClasses = "character",
+                    quote = "", comment.char = "")
+}
+
+kernel <- function(x, spec, n = -1, stride = -1) {
+  .Call(zubin_test_unpack_kernel, x, spec, as.double(n), as.double(stride))
+}
+
+# Little-endian bytes of doubles, integers and 64-bit patterns, for building
+# inputs in tests.
+le_f64 <- function(x) writeBin(as.double(x), raw(), size = 8L, endian = "little")
+le_i32 <- function(x) writeBin(as.integer(x), raw(), size = 4L, endian = "little")

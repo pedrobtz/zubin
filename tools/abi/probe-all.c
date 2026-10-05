@@ -133,6 +133,25 @@ int zb_probe_all(void)
         acc += (int)fields[0].count + (int)fields[0].offset + (int)fields[0].big_endian +
                (int)fields[0].name_len + (fields[0].name ? 1 : 0);
     }
+    {
+        static const char spec[] = "a:u8 b:u32 c:i64 d:s2";
+        zb_field fields[4];
+        zb_layout l;
+        size_t pos = 0, bad = 0;
+        int32_t i32[2];
+        double f64[2];
+        int64_t i64[2];
+        uint8_t bytes[4];
+        memset(&l, 0, sizeof l);
+        memset(fields, 0, sizeof fields);
+        if (zb_layout_parse(spec, sizeof spec - 1, 0, 0, fields, 4, &l, &pos) == ZB_OK && l.size <= sizeof buf) {
+            acc += (int)zb_unpack_i32(buf, 1, l.size, &fields[0], i32, 0, &bad);
+            acc += (int)zb_unpack_f64(buf, 1, l.size, &fields[1], f64);
+            acc += (int)zb_unpack_i64(buf, 1, l.size, &fields[2], i64, &bad);
+            acc += (int)zb_unpack_f64x(buf, 1, l.size, &fields[2], f64, &bad);
+            acc += (int)zb_unpack_bytes(buf, 1, l.size, &fields[3], bytes);
+        }
+    }
 
     /* zufast/utf8.h, re-exported by the umbrella */
     acc += zuf_utf8_valid((const char *)buf, sizeof buf);

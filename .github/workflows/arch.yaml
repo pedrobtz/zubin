@@ -1,0 +1,47 @@
+# The suite on architectures the check matrix never reaches (r-actions
+# arch.yml): 32-bit i386 and musl, both native on an x86-64 runner, and
+# s390x under QEMU, the one big-endian leg. For zubin it is load-bearing
+# (design 15): the golden vectors must decode to the same values there.
+#
+# Debian's R packages supply testthat and withr on the Debian legs; Alpine
+# builds them from source. zufast (LinkingTo) is not on CRAN until Stage 9,
+# so each leg downloads its main branch from GitHub and installs it first.
+# The vignette is ignored: whether it builds is R-CMD-check's question.
+on:
+  schedule:
+    - cron: "17 5 * * 2"
+  workflow_dispatch:
+  pull_request:
+    paths: [.github/workflows/arch.yaml]
+
+name: arch
+
+permissions:
+  contents: read
+
+jobs:
+  arch:
+    uses: pedrobtz/r-actions/.github/workflows/arch.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
+    with:
+      targets: >-
+        [{"name": "i386", "platform": "linux/386",
+          "image": "i386/debian:bookworm",
+          "setup": "apt-get update && apt-get install -y --no-install-recommends r-base-dev r-cran-testthat r-cran-withr ca-certificates locales && echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen"},
+         {"name": "musl", "platform": "linux/amd64",
+          "image": "alpine:3.21",
+          "setup": "apk add --no-cache R R-dev R-doc build-base linux-headers libuv-dev ca-certificates"},
+         {"name": "s390x", "platform": "linux/s390x",
+          "image": "s390x/debian:bookworm",
+          "setup": "apt-get update && apt-get install -y --no-install-recommends r-base-dev r-cran-testthat r-cran-withr ca-certificates locales && echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen"}]
+      # _R_CHECK_TESTS_NLINES_=0: R CMD check shows a failing suite's whole
+      # output, not its last 13 lines; these legs are where that matters.
+      install-dependencies: >-
+        mkdir -p ~/.R && echo _R_CHECK_TESTS_NLINES_=0 > ~/.R/check.Renviron
+        && Rscript -e 'for (p in c("testthat", "withr")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, repos = "https://cloud.r-project.org")'
+        && Rscript -e 'download.file("https://github.com/pedrobtz/zufast/archive/refs/heads/main.tar.gz", "/tmp/zufast.tar.gz", mode = "wb")'
+        && mkdir -p /tmp/zufast && tar -xzf /tmp/zufast.tar.gz -C /tmp/zufast --strip-components 1
+        && R CMD INSTALL /tmp/zufast
+      check-args: --no-manual --ignore-vignettes
+      error-on: warning
+      require-tests: true
+      timeout-minutes: 180

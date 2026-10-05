@@ -32,8 +32,9 @@ test_that("readers agree with readBin() for every width and order base R has", {
 
 test_that("writers agree with writeBin() for every width and order base R has", {
   withr::local_seed(20261006)
+  # not sample() over the whole range: a 32-bit build cannot hold it
   i32 <- c(NA, -.Machine$integer.max, -1L, 0L, 1L, .Machine$integer.max,
-           sample(-.Machine$integer.max:.Machine$integer.max, 200L))
+           as.integer(round(stats::runif(200L, -.Machine$integer.max, .Machine$integer.max))))
   dbl <- c(0, -0, 1, -1, 0.1, 1 / 3, pi, -2.5e-310, 1e300, -1e-300, Inf, -Inf, NaN, NA,
            3.4028234663852886e38, -3.4028234663852886e38, 1e39,
            stats::rnorm(200L, sd = 1e6))
@@ -139,5 +140,5 @@ test_that("doubles beyond the float range narrow by rounding, not by undefined b
                    bytes(rep(c("ff ff 7f 7f", "00 00 80 7f"), each = 3L)))
   expect_identical(rw_write("f32", "le", -x),
                    bytes(rep(c("ff ff 7f ff", "00 00 80 ff"), each = 3L)))
-  expect_identical(rw_write("f32", "le", x), writeBin(x, raw(), size = 4L))
+  expect_identical(rw_write("f32", "le", x), writeBin(x, raw(), size = 4L, endian = "little"))
 })
