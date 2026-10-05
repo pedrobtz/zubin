@@ -38,6 +38,14 @@
   [`bin_diff()`](https://pedrobtz.github.io/zubin/reference/bin_hexdump.md)
   : Show bytes as a hex dump, and find where two raw vectors differ
 
+## Serialization
+
+- [`bin_serialize()`](https://pedrobtz.github.io/zubin/reference/bin_serialize.md)
+  [`bin_unserialize()`](https://pedrobtz.github.io/zubin/reference/bin_serialize.md)
+  : Serialize R objects into a builder, and back from bytes at an offset
+- [`bin_hash_object()`](https://pedrobtz.github.io/zubin/reference/bin_hash_object.md)
+  : A content fingerprint of an R object
+
 ## The package
 
 - [`bin_info()`](https://pedrobtz.github.io/zubin/reference/bin_info.md)
