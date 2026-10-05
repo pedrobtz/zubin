@@ -1,0 +1,56 @@
+# Design 16.6: the package under UBSan, ASan, valgrind, LTO, gctorture and a
+# blocking rchk, plus static analyzers. Quick on each push to a pull request,
+# full after merge; the full-ci label runs the full set on a pull request.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+name: native-checks
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  sanitizers:
+    uses: pedrobtz/r-actions/.github/workflows/sanitizers.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
+    with:
+      asan: true
+      profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
+
+  valgrind:
+    uses: pedrobtz/r-actions/.github/workflows/valgrind.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
+    with:
+      profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
+
+  lto:
+    uses: pedrobtz/r-actions/.github/workflows/lto.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
+
+  # Quick (step 500) on every pull request, the full-ci label included, and
+  # step 20 on main (roadmap, CI table): at step 20 the suite takes over an
+  # hour, which is a price for a merge, not for each push. The exhaustive
+  # sweeps skip here (ZUBIN_SKIP_HEAVY); they test values, not protection.
+  gctorture:
+    uses: pedrobtz/r-actions/.github/workflows/gctorture.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
+    with:
+      profile: ${{ github.event_name == 'pull_request' && 'quick' || 'full' }}
+      timeout-minutes: 240
+      env: |
+        ZUBIN_SKIP_HEAVY=true
+
+  analyzers:
+    uses: pedrobtz/r-actions/.github/workflows/analyzers.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
+
+  # zufast (LinkingTo) is on neither CRAN nor Bioconductor until Stage 9, and
+  # those are all the rchk image installs from: github-packages installs it
+  # into the image first. Drop that input once zufast is on CRAN.
+  rchk:
+    uses: pedrobtz/r-actions/.github/workflows/rchk.yml@2677abce7451ed039a46f7b75d93cc9a6cb5622d # feat/github-packages
+    with:
+      fail-on-findings: true
+      github-packages: |
+        pedrobtz/zufast

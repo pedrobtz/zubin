@@ -9,6 +9,13 @@
         acc += (int)buf[(width)];                                \
     } while (0)
 
+#define PUT(name, ctype)                                         \
+    do {                                                         \
+        ctype v[2] = {1, 2};                                     \
+        acc += (int)zb_put_##name(&b, v[0]);                     \
+        acc += (int)zb_put_##name##_n(&b, v, 2);                 \
+    } while (0)
+
 #define CUR(name, ctype)                                         \
     do {                                                         \
         ctype v;                                                 \
@@ -72,6 +79,40 @@ int zb_probe_all(void)
         CUR(bf16le, double);    CUR(bf16be, double);
         CUR(f32le, float);      CUR(f32be, float);
         CUR(f64le, double);     CUR(f64be, double);
+    }
+
+    /* buf.h */
+    {
+        zb_buf b;
+        uint8_t *data = NULL, *slot;
+        size_t len = 0, r = 0;
+        zb_buf_init(&b);
+        acc += (int)zb_buf_alloc(&b, 16, 1024);
+        acc += (int)zb_buf_reserve(&b, 32);
+        acc += (int)zb_put_bytes(&b, buf, 4);
+        acc += (int)zb_put_zeros(&b, 4);
+        slot = zb_put_raw(&b, 2);
+        if (slot) slot[0] = slot[1] = 0;
+        PUT(u8, uint8_t);       PUT(i8, int8_t);
+        PUT(u16le, uint16_t);   PUT(u16be, uint16_t);
+        PUT(i16le, int16_t);    PUT(i16be, int16_t);
+        PUT(u32le, uint32_t);   PUT(u32be, uint32_t);
+        PUT(i32le, int32_t);    PUT(i32be, int32_t);
+        PUT(u64le, uint64_t);   PUT(u64be, uint64_t);
+        PUT(i64le, int64_t);    PUT(i64be, int64_t);
+        PUT(f16le, double);     PUT(f16be, double);
+        PUT(bf16le, double);    PUT(bf16be, double);
+        PUT(f32le, float);      PUT(f32be, float);
+        PUT(f64le, double);     PUT(f64be, double);
+        acc += (int)(b.flags & (ZB_BUF_OWNED | ZB_BUF_GROWABLE | ZB_BUF_HIT_LIMIT));
+        zb_buf_reset(&b);
+        acc += (int)zb_buf_detach(&b, &data, &len);
+        free(data);
+        zb_buf_release(&b);
+        zb_buf_borrow(&b, buf, sizeof buf);
+        zb_buf_release(&b);
+        acc += (int)zb_int_add(1, 2, &r) + (int)zb_int_mul(3, 4, &r) + (int)r;
+        acc += (int)(ZB_BUF_DOUBLING_LIMIT > ZB_BUF_MIN_CAP && ZB_BUF_MAX_CAP > ZB_BUF_MIN_CAP);
     }
 
     /* zufast/utf8.h, re-exported by the umbrella */

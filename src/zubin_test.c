@@ -3,7 +3,6 @@
    tests choose, and reports what the C saw. None is exported to R users. */
 #include <stdlib.h>
 
-#include <zubin.h>
 #include "zubin_r.h"
 
 /* ---- type tokens ---------------------------------------------------------- */
@@ -236,4 +235,306 @@ SEXP zubin_test_cursor(SEXP bytes, SEXP plan)
     }
     UNPROTECT(1);
     return out;
+}
+
+/* ---- buf.h and zubin-r.h ---------------------------------------------------- */
+
+SEXP zubin_test_live_buffers(void)
+{
+    return Rf_ScalarReal((double)zubin_int_live_buffers);
+}
+
+/* Appends `chunk` zero bytes at a time until the buffer holds `total`, and
+   returns every capacity it grew to, in order: the reallocation count is
+   its length. The buffer lives on the stack and nothing below can jump
+   until it is released. */
+SEXP zubin_test_buf_growth(SEXP chunk, SEXP total)
+{
+    size_t c, t, caps[128], ncap = 0, i;
+    zb_buf b;
+    zb_status st = ZB_OK;
+    SEXP out;
+    if (zubin_int_size(chunk, &c) || zubin_int_size(total, &t) || c == 0) Rf_error("bad sizes");
+    zb_buf_init(&b);
+    if ((st = zb_buf_alloc(&b, 0, 0))) return zubin_int_status(st, -1);
+    while (b.len < t) {
+        size_t before = b.cap;
+        if ((st = zb_put_zeros(&b, c))) break;
+        if (b.cap != before) {
+            if (ncap == sizeof caps / sizeof caps[0]) { st = ZB_ERR_LIMIT; break; }
+            caps[ncap++] = b.cap;
+        }
+    }
+    zb_buf_release(&b);
+    if (st) return zubin_int_status(st, -1);
+    out = Rf_allocVector(REALSXP, (R_xlen_t)ncap);
+    for (i = 0; i < ncap; i++) REAL(out)[i] = (double)caps[i];
+    return out;
+}
+
+/* A buffer allocated with (reserve, max), then one zb_put_bytes() per element
+   of `puts`, each of a recognisable pattern. Per put: status, len, cap and
+   whether ZB_BUF_HIT_LIMIT is set; and the final bytes. */
+SEXP zubin_test_buf_cap(SEXP reserve, SEXP max, SEXP puts)
+{
+    const char *names[] = {"alloc", "status", "len", "cap", "hit_limit", "bytes", ""};
+    size_t r, m, biggest = 0;
+    R_xlen_t i, n = XLENGTH(puts);
+    zb_status st;
+    zb_buf *b;
+    uint8_t *pattern;
+    SEXP ptr, out, status, len, cap, hit;
+    if (zubin_int_size(reserve, &r) || zubin_int_size(max, &m) || TYPEOF(puts) != REALSXP)
+        Rf_error("bad arguments");
+    for (i = 0; i < n; i++) {
+        size_t k;
+        if (zubin_int_size(Rf_ScalarReal(REAL(puts)[i]), &k)) Rf_error("bad put");
+        if (k > biggest) biggest = k;
+    }
+    out = PROTECT(Rf_mkNamed(VECSXP, names));
+    status = Rf_allocVector(INTSXP, n); SET_VECTOR_ELT(out, 1, status);
+    len = Rf_allocVector(REALSXP, n);   SET_VECTOR_ELT(out, 2, len);
+    cap = Rf_allocVector(REALSXP, n);   SET_VECTOR_ELT(out, 3, cap);
+    hit = Rf_allocVector(LGLSXP, n);    SET_VECTOR_ELT(out, 4, hit);
+    pattern = (uint8_t *)R_alloc(biggest ? biggest : 1, 1);
+    for (i = 0; i < (R_xlen_t)biggest; i++) pattern[i] = (uint8_t)(i % 251);
+    ptr = PROTECT(zb_r_buf_new(r, m, &st));
+    SET_VECTOR_ELT(out, 0, Rf_mkString(zb_status_string(st)));
+    if (st) {
+        UNPROTECT(2);
+        return out;
+    }
+    b = zb_r_buf_get(ptr);
+    for (i = 0; i < n; i++) {
+        INTEGER(status)[i] = (int)zb_put_bytes(b, pattern, (size_t)REAL(puts)[i]);
+        REAL(len)[i] = (double)b->len;
+        REAL(cap)[i] = (double)b->cap;
+        LOGICAL(hit)[i] = (b->flags & ZB_BUF_HIT_LIMIT) != 0;
+    }
+    SET_VECTOR_ELT(out, 5, zb_r_buf_to_raw(b));
+    zb_r_buf_free(ptr);
+    UNPROTECT(2);
+    return out;
+}
+
+/* Borrows a copy of `bytes`, resets it, and writes puts of 0xEE into it:
+   allowed up to its length, refused beyond. Per put: status and len; and
+   the borrowed memory afterwards. */
+SEXP zubin_test_buf_borrow(SEXP bytes, SEXP puts)
+{
+    const char *names[] = {"status", "len", "bytes", "released", ""};
+    R_xlen_t i, n = XLENGTH(puts);
+    uint8_t fill[64];
+    zb_buf b;
+    SEXP copy, out, status, len;
+    if (TYPEOF(bytes) != RAWSXP || TYPEOF(puts) != INTSXP) Rf_error("bad arguments");
+    memset(fill, 0xEE, sizeof fill);
+    out = PROTECT(Rf_mkNamed(VECSXP, names));
+    copy = Rf_duplicate(bytes);
+    SET_VECTOR_ELT(out, 2, copy);
+    status = Rf_allocVector(INTSXP, n); SET_VECTOR_ELT(out, 0, status);
+    len = Rf_allocVector(REALSXP, n);   SET_VECTOR_ELT(out, 1, len);
+    zb_r_buf_borrow(&b, copy);
+    zb_buf_reset(&b);
+    for (i = 0; i < n; i++) {
+        int k = INTEGER(puts)[i];
+        if (k < 0 || k > (int)sizeof fill) Rf_error("bad put");
+        INTEGER(status)[i] = (int)zb_put_bytes(&b, fill, (size_t)k);
+        REAL(len)[i] = (double)b.len;
+    }
+    /* releasing a borrowed buffer frees nothing and zeroes the struct */
+    zb_buf_release(&b);
+    SET_VECTOR_ELT(out, 3, Rf_ScalarLogical(b.data == NULL && b.cap == 0));
+    UNPROTECT(1);
+    return out;
+}
+
+/* Typed appends: zb_put_<type><endian> once per value, or the _n twin once
+   for all of them. `values` as for zubin_test_rw_write. */
+SEXP zubin_test_buf_put(SEXP type, SEXP endian, SEXP values, SEXP vectorised)
+{
+    int k = scalar_kind(type), be = scalar_big(endian), vec = Rf_asLogical(vectorised) == TRUE;
+    R_xlen_t i, n = XLENGTH(values);
+    zb_status st = ZB_OK;
+    zb_buf *b;
+    SEXP ptr, out;
+    if (TYPEOF(values) != (k_is_int(k) ? INTSXP : REALSXP)) Rf_error("`values` has the wrong type");
+    ptr = PROTECT(zb_r_buf_new(0, 0, &st));
+    if (st) Rf_error("allocation failed");
+    b = zb_r_buf_get(ptr);
+    if (!vec) {
+        for (i = 0; i < n && st == ZB_OK; i++) {
+            int iv = k_is_int(k) ? INTEGER(values)[i] : 0;
+            double dv = k_is_int(k) ? 0 : REAL(values)[i];
+            uint64_t u;
+            memcpy(&u, &dv, 8);
+            switch (k) {
+            case K_U8:   st = zb_put_u8(b, (uint8_t)iv); break;
+            case K_I8:   st = zb_put_i8(b, (int8_t)iv); break;
+            case K_U16:  st = be ? zb_put_u16be(b, (uint16_t)iv) : zb_put_u16le(b, (uint16_t)iv); break;
+            case K_I16:  st = be ? zb_put_i16be(b, (int16_t)iv) : zb_put_i16le(b, (int16_t)iv); break;
+            case K_U32:  st = be ? zb_put_u32be(b, (uint32_t)dv) : zb_put_u32le(b, (uint32_t)dv); break;
+            case K_I32:  st = be ? zb_put_i32be(b, iv) : zb_put_i32le(b, iv); break;
+            case K_U64:  st = be ? zb_put_u64be(b, u) : zb_put_u64le(b, u); break;
+            case K_I64:  { int64_t v; memcpy(&v, &u, 8);
+                           st = be ? zb_put_i64be(b, v) : zb_put_i64le(b, v); } break;
+            case K_F16:  st = be ? zb_put_f16be(b, dv) : zb_put_f16le(b, dv); break;
+            case K_BF16: st = be ? zb_put_bf16be(b, dv) : zb_put_bf16le(b, dv); break;
+            case K_F32:  { float f = zb_int_f64_to_f32(dv);
+                           st = be ? zb_put_f32be(b, f) : zb_put_f32le(b, f); } break;
+            case K_F64:  st = be ? zb_put_f64be(b, dv) : zb_put_f64le(b, dv); break;
+            }
+        }
+    } else {
+        size_t m = (size_t)n;
+        void *tmp = R_alloc(n ? (size_t)n : 1, 8);
+        for (i = 0; i < n; i++) {
+            int iv = k_is_int(k) ? INTEGER(values)[i] : 0;
+            double dv = k_is_int(k) ? 0 : REAL(values)[i];
+            switch (k) {
+            case K_U8:   ((uint8_t *)tmp)[i] = (uint8_t)iv; break;
+            case K_I8:   ((int8_t *)tmp)[i] = (int8_t)iv; break;
+            case K_U16:  ((uint16_t *)tmp)[i] = (uint16_t)iv; break;
+            case K_I16:  ((int16_t *)tmp)[i] = (int16_t)iv; break;
+            case K_U32:  ((uint32_t *)tmp)[i] = (uint32_t)dv; break;
+            case K_I32:  ((int32_t *)tmp)[i] = iv; break;
+            case K_U64: case K_I64: memcpy((uint64_t *)tmp + i, &dv, 8); break;
+            case K_F32:  ((float *)tmp)[i] = zb_int_f64_to_f32(dv); break;
+            default:     ((double *)tmp)[i] = dv; break;
+            }
+        }
+        switch (k) {
+        case K_U8:   st = zb_put_u8_n(b, (const uint8_t *)tmp, m); break;
+        case K_I8:   st = zb_put_i8_n(b, (const int8_t *)tmp, m); break;
+        case K_U16:  st = be ? zb_put_u16be_n(b, (const uint16_t *)tmp, m) : zb_put_u16le_n(b, (const uint16_t *)tmp, m); break;
+        case K_I16:  st = be ? zb_put_i16be_n(b, (const int16_t *)tmp, m) : zb_put_i16le_n(b, (const int16_t *)tmp, m); break;
+        case K_U32:  st = be ? zb_put_u32be_n(b, (const uint32_t *)tmp, m) : zb_put_u32le_n(b, (const uint32_t *)tmp, m); break;
+        case K_I32:  st = be ? zb_put_i32be_n(b, (const int32_t *)tmp, m) : zb_put_i32le_n(b, (const int32_t *)tmp, m); break;
+        case K_U64:  st = be ? zb_put_u64be_n(b, (const uint64_t *)tmp, m) : zb_put_u64le_n(b, (const uint64_t *)tmp, m); break;
+        case K_I64:  st = be ? zb_put_i64be_n(b, (const int64_t *)tmp, m) : zb_put_i64le_n(b, (const int64_t *)tmp, m); break;
+        case K_F16:  st = be ? zb_put_f16be_n(b, (const double *)tmp, m) : zb_put_f16le_n(b, (const double *)tmp, m); break;
+        case K_BF16: st = be ? zb_put_bf16be_n(b, (const double *)tmp, m) : zb_put_bf16le_n(b, (const double *)tmp, m); break;
+        case K_F32:  st = be ? zb_put_f32be_n(b, (const float *)tmp, m) : zb_put_f32le_n(b, (const float *)tmp, m); break;
+        case K_F64:  st = be ? zb_put_f64be_n(b, (const double *)tmp, m) : zb_put_f64le_n(b, (const double *)tmp, m); break;
+        }
+    }
+    if (st) {
+        UNPROTECT(1);
+        return zubin_int_status(st, -1);
+    }
+    out = PROTECT(zb_r_buf_to_raw(b));
+    zb_r_buf_free(ptr);
+    UNPROTECT(2);
+    return out;
+}
+
+/* The corners no R-level call reaches, each as a named TRUE when it holds. */
+SEXP zubin_test_buf_misc(void)
+{
+    const char *names[] = {"add_overflow", "mul_overflow", "mul_zero", "alloc_over_max",
+                           "reserve_overflow", "grow_rule", "put_raw_empty", "detach",
+                           "detach_borrowed", "release_twice", "n_overflow", "fill_to_max", "max_cap", ""};
+    SEXP out = PROTECT(Rf_mkNamed(LGLSXP, names));
+    int *ok = LOGICAL(out);
+    size_t r = 0;
+    zb_buf b;
+    uint8_t *data = NULL, *slot;
+    size_t len = 0, g1, g2, g3, g4;
+
+    ok[0] = zb_int_add((size_t)-1, 1, &r) == ZB_ERR_MEMORY && zb_int_add(1, 2, &r) == ZB_OK && r == 3;
+    ok[1] = zb_int_mul((size_t)-1 / 2 + 1, 2, &r) == ZB_ERR_MEMORY;
+    ok[2] = zb_int_mul(0, (size_t)-1, &r) == ZB_OK && r == 0;
+
+    ok[3] = zb_buf_alloc(&b, 10, 5) == ZB_ERR_LIMIT && b.data == NULL && b.flags == 0;
+
+    zb_buf_alloc(&b, 0, 0);
+    zb_put_u8(&b, 1);
+    ok[4] = zb_buf_reserve(&b, (size_t)-1) == ZB_ERR_MEMORY && b.len == 1 &&
+            !(b.flags & ZB_BUF_HIT_LIMIT);
+    zb_buf_release(&b);
+
+    zb_int_grow(0, 1, 0, &g1);
+    zb_int_grow(ZB_BUF_DOUBLING_LIMIT / 2, ZB_BUF_DOUBLING_LIMIT / 2 + 1, 0, &g2);
+    zb_int_grow(ZB_BUF_DOUBLING_LIMIT, ZB_BUF_DOUBLING_LIMIT + 1, 0, &g3);
+    zb_int_grow(1000, 1001, 1500, &g4);
+    ok[5] = g1 == ZB_BUF_MIN_CAP && g2 == ZB_BUF_DOUBLING_LIMIT &&
+            g3 == ZB_BUF_DOUBLING_LIMIT + ZB_BUF_DOUBLING_LIMIT / 2 && g4 == 1500;
+
+    zb_buf_alloc(&b, 0, 0);
+    slot = zb_put_raw(&b, 0);
+    ok[6] = slot != NULL && b.len == 0 && b.data == NULL;
+    zb_buf_release(&b);
+
+    zb_buf_alloc(&b, 0, 0);
+    zb_put_u32be(&b, 0x01020304u);
+    ok[7] = zb_buf_detach(&b, &data, &len) == ZB_OK && len == 4 && data && data[0] == 1 &&
+            data[3] == 4 && b.data == NULL && b.flags == 0;
+    free(data);
+
+    zb_buf_borrow(&b, "abc", 3);
+    ok[8] = zb_buf_detach(&b, &data, &len) == ZB_ERR_INVALID && b.len == 3;
+
+    zb_buf_alloc(&b, 16, 0);
+    zb_buf_release(&b);
+    zb_buf_release(&b);
+    ok[9] = b.data == NULL && b.flags == 0;
+
+    zb_buf_alloc(&b, 0, 0);
+    ok[10] = zb_put_u64le_n(&b, NULL, (size_t)-1 / 4) == ZB_ERR_MEMORY && b.len == 0;
+    zb_buf_release(&b);
+
+    /* the last growth is clamped to max, so the buffer fills to exactly it */
+    zb_buf_alloc(&b, 0, 1000);
+    while (zb_put_u8(&b, 7) == ZB_OK) {}
+    ok[11] = b.len == 1000 && b.cap == 1000 && (b.flags & ZB_BUF_HIT_LIMIT);
+    zb_buf_release(&b);
+
+    /* nothing is ever asked of the allocator above PTRDIFF_MAX */
+    zb_int_grow(ZB_BUF_DOUBLING_LIMIT * 2, ZB_BUF_MAX_CAP, 0, &g1);
+    ok[12] = zb_int_grow(0, ZB_BUF_MAX_CAP + 1, 0, &g2) == ZB_ERR_MEMORY &&
+             g1 == ZB_BUF_MAX_CAP &&
+             zb_buf_alloc(&b, ZB_BUF_MAX_CAP + 1, 0) == ZB_ERR_MEMORY && b.data == NULL;
+    zb_buf_alloc(&b, 0, 0);
+    zb_put_u8(&b, 1);
+    ok[12] = ok[12] && zb_buf_reserve(&b, ZB_BUF_MAX_CAP) == ZB_ERR_MEMORY && b.len == 1;
+    zb_buf_release(&b);
+
+    UNPROTECT(1);
+    return out;
+}
+
+/* A buffer owned by R, some bytes in it, then an error: the longjmp strands
+   it, and only its finalizer can free it. */
+SEXP zubin_test_put_then_error(void)
+{
+    zb_status st;
+    SEXP ptr = PROTECT(zb_r_buf_new(1024, 0, &st));
+    zb_buf *b = zb_r_buf_get(ptr);
+    if (b) zb_put_zeros(b, 1000);
+    Rf_error("zubin_test_put_then_error: the planned error");
+    UNPROTECT(1);
+    return R_NilValue;
+}
+
+/* `times` appends of `chunk` bytes into a buffer owned by R, with an
+   interrupt check after each and a reset whenever it passes 64 MiB: long
+   enough for setTimeLimit() to cut it short with the buffer live. */
+SEXP zubin_test_put_loop(SEXP chunk, SEXP times)
+{
+    size_t c, t, i;
+    zb_status st;
+    zb_buf *b;
+    SEXP ptr;
+    if (zubin_int_size(chunk, &c) || zubin_int_size(times, &t)) Rf_error("bad sizes");
+    ptr = PROTECT(zb_r_buf_new(0, 0, &st));
+    if (st) Rf_error("allocation failed");
+    b = zb_r_buf_get(ptr);
+    for (i = 0; i < t; i++) {
+        if (zb_put_zeros(b, c)) Rf_error("put failed");
+        if (b->len > ((size_t)64 << 20)) zb_buf_reset(b);
+        R_CheckUserInterrupt();
+    }
+    zb_r_buf_free(ptr);
+    UNPROTECT(1);
+    return Rf_ScalarReal((double)i);
 }

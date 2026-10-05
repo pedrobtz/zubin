@@ -33,12 +33,20 @@ commit.
 
 ## Current state
 
-Stages 0 and 1 are done. Layer 0 exists: `inst/include/zubin.h` and `zubin/{version,status,
-rw,cursor}.h`, compiled standalone by `tools/check-headers` (needs `ZUFAST_INCLUDE` or an
-installed zufast) and audited by `tools/run-symbol-audit`, both in `abi.yaml`. The only user
-function is `bin_info()`. `src/zubin_test.c` drives the headers from `tests/testthat/` via
-`zubin_test_*` entry points. `zufast` is resolved through `Remotes: pedrobtz/zufast@main`
-(removed at Stage 9, once zufast is on CRAN). Next: Stage 2, the buffer and the builder.
+Stages 0–2 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor}.h`, plus
+`zubin-r.h` (R glue: `zb_r_buf_new/get/free/borrow/to_raw`). Gates: `tools/check-headers`
+(needs `ZUFAST_INCLUDE` or an installed zufast, and R's headers for the `zubin-r.h` probe)
+and `tools/run-symbol-audit` in `abi.yaml`; `native-checks.yaml` (sanitizers, valgrind, LTO,
+gctorture, analyzers, and a blocking rchk with `github-packages: pedrobtz/zufast`). R API so far:
+`bin_info()`, `bin_builder()`, `bin_put()` (raw, `"z"`, `"s<n>"`), `bin_reserve()`,
+`bin_reset()`, `bin_take()`, `bin_size()`, `as.raw()`. `zufast` comes from
+`Remotes: pedrobtz/zufast@main` until Stage 9. Next: Stage 3, layouts and the spec parser.
+
+**The `.Call` convention:** an entry point that can fail returns, on failure, a
+`zubin_status`-classed string holding the `zb_status` enumerator name (attribute `index`
+when an element is at fault); R checks `is_status()` and raises through `zb_fail()`, which
+maps the name to a class with `zb_status_class`. C never calls `Rf_error()` except in the
+test harness.
 
 ## Commands
 
@@ -88,7 +96,9 @@ Allocation and errors:
 - On any failure the inputs are unchanged: a cursor that fails has not advanced, a buffer
   that fails holds what it held. Tests check this at every truncation point.
 - Heap state that must survive a longjmp is owned by R before the first call that can jump
-  (design §12): `zb_r_buf_new()` registers the finalizer before the buffer exists.
+  (design §12): `zb_r_buf_new()` registers the finalizer before the buffer exists. The
+  harness counts live buffers through the `ZB_INT_R_ON_NEW/FREE` hooks defined in
+  `src/zubin_r.h`; `test-lifetime.R` asserts the count returns to baseline after `gc()`.
 - C never raises below the outermost `.Call`; statuses map to condition classes by
   enumerator name in `R/conditions.R`, and the call is reduced to the function name.
 - Offsets are 0-based everywhere (§14.1). Byte order is never guessed (§14.2).

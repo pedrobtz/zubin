@@ -272,7 +272,7 @@ before any feature rides on it.
 
 ## Stage 2 — The buffer and the builder · M
 
-**Status:** not started.
+**Status:** done (#6).
 
 **Goal:** `zb_buf` with its ownership model, limits and checked growth, the R-owned
 variant in `zubin-r.h`, and the R builder over them; the heap discipline of §12 is in place
@@ -312,6 +312,43 @@ and proven before any kernel allocates.
 
 **Not this stage:** typed `bin_put(b, x, type = "u32")`, which shares the pack kernels and
 is Stage 5.
+
+**What actually happened**
+
+- `zb_r_buf_new()` gained a `zb_status *` out-parameter and returns `R_NilValue` on failure,
+  and `zb_r_buf_free()` was added for the eager release §12 describes but did not name: a
+  glue header that raised `Rf_error()` would break "C never raises" for every consumer.
+  Design §12 says so now. The external pointer is tagged `zubin_buf`, so `zb_r_buf_get()`
+  refuses a foreign one.
+- `zb_put_raw(b, 0)` returns a non-`NULL` dummy slot even on a buffer with no storage, so
+  `NULL` always means failure (design §9.4).
+- The `.Call` convention: an entry point that can fail returns, on failure, the status's
+  enumerator name as a `zubin_status`-classed string (with `index` when an element is at
+  fault), and `R/conditions.R` maps it by name. No status crosses as a number.
+- `bin_put()` reserves the whole append first and advances `len` only after the last
+  64 MiB chunk is copied, so an interrupt between chunks leaves the builder unchanged; the
+  slow test interrupts a 1 GiB append to show it.
+- The finalizer canary, run locally with `R_RegisterCFinalizerEx()` removed from
+  `zubin-r.h`: all three lifetime tests failed (live count 1, 2, 3 against 0, 1, 2), and
+  passed again with it restored. The PR records the output.
+- rchk: r-actions' `rchk.yml` could not install a `LinkingTo` dependency that is on neither
+  CRAN nor Bioconductor, since the rchk image resolves only those. A bespoke job proved the
+  fix (install zufast into the image's library, which lives in the mounted directory, with
+  the image's `R` passthrough), and it then went into r-actions as the `github-packages`
+  input of `rchk.yml` and `fuzz.yml`; zubin uses the reusable workflow, blocking on findings.
+  The input goes at Stage 9, when zufast is on CRAN.
+- CI found three things the local build could not. GCC's `-Walloc-size-larger-than`
+  proved a `realloc(SIZE_MAX)` reachable after overflow in `zb_int_grow()` (a WARNING on
+  every GCC leg, Windows included): growth is now bounded by `ZB_BUF_MAX_CAP`
+  (`PTRDIFF_MAX`) and refuses before asking. rchk found an unprotected result across
+  `zb_r_buf_free()` in the harness, because `zb_r_buf_get()` called `Rf_install()`; it now
+  compares the tag by name and allocates nothing, so consumers need not protect around it.
+  And it flagged `zubin_int_status()`'s unprotected `Rf_setAttrib()` arguments.
+- The first bespoke rchk run failed on "too many states" lines, which name R's own
+  functions rchk gives up on; the gate now parses findings as r-actions' `rchk.yml` does.
+- R's headers on 4.6 use a C23 fixed-underlying-type enum (`R_ext/Boolean.h`), so the
+  `zubin-r.h` probe compiles as gnu17 without `-Wpedantic`, in C and C++11; the `abi.yaml`
+  header jobs now set up R for it.
 
 ---
 

@@ -55,3 +55,35 @@ mixed_bytes <- function() {
     rw_write("bf16", "be", -2), rw_write("i8", "le", -7L), rw_write("i16", "be", -300L),
     bytes("00 00 01 00 00 00 00 00"), rw_write("i32", "le", -123456L))
 }
+
+# Drivers for the buf.h and zubin-r.h harness.
+live_buffers <- function() .Call(zubin_test_live_buffers)
+buf_growth <- function(chunk, total) .Call(zubin_test_buf_growth, as.double(chunk), as.double(total))
+buf_cap <- function(reserve, max, puts) .Call(zubin_test_buf_cap, as.double(reserve), as.double(max), as.double(puts))
+buf_borrow <- function(x, puts) .Call(zubin_test_buf_borrow, x, as.integer(puts))
+buf_put <- function(type, endian, values, vectorised) .Call(zubin_test_buf_put, type, endian, values, vectorised)
+
+# Values of the right R type for each harness type, for typed appends.
+rw_values <- function(type) {
+  switch(type,
+    u8 = c(0L, 1L, 127L, 255L), i8 = c(-128L, -1L, 0L, 127L),
+    u16 = c(0L, 1L, 65535L), i16 = c(-32768L, -1L, 32767L),
+    i32 = c(-.Machine$integer.max, -1L, 0L, .Machine$integer.max),
+    u32 = c(0, 1, 2^32 - 1),
+    u64 = , i64 = rw_read("i64", "le", bytes("01 00 00 00 00 00 00 80 ff ff ff ff ff ff ff ff")),
+    f16 = , bf16 = , f32 = , f64 = c(0, -0, 1.5, -2, 65504, Inf, -Inf)
+  )
+}
+
+# Run `f()` under an elapsed-time limit short enough to trip inside its
+# loop, whose R_CheckUserInterrupt() enforces setTimeLimit(). TRUE if it was
+# cut short. The limit is always lifted again: transient limits last until R
+# returns to top level, which inside a test run is never (zucrypt's helper).
+interrupted_by_time_limit <- function(f, limit) {
+  setTimeLimit(elapsed = limit, transient = TRUE)
+  on.exit(setTimeLimit(elapsed = Inf), add = TRUE)
+  tryCatch({
+    f()
+    FALSE
+  }, error = function(e) grepl("time limit", conditionMessage(e)))
+}

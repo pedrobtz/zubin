@@ -96,6 +96,7 @@ test_that("64-bit integers are exact at their extremes", {
 })
 
 test_that("f16 and bf16 decode every one of the 65 536 patterns exactly", {
+  skip_heavy()
   u <- 0:65535
   for (e in c("le", "be")) {
     x <- u16_bytes(u, e)

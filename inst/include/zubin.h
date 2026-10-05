@@ -17,6 +17,7 @@
 #include "zubin/version.h"
 #include "zubin/status.h"
 #include "zubin/rw.h"
+#include "zubin/buf.h"
 #include "zubin/cursor.h"
 #include <zufast/utf8.h>
 
