@@ -548,7 +548,7 @@ trust.
 
 ## Stage 6 — Hexdump and diff · S
 
-**Status:** not started.
+**Status:** done (#10).
 
 **Goal:** `bin_hexdump()` and `bin_diff()` (§13.6), used from here on in every example and
 test that shows bytes.
@@ -566,6 +566,15 @@ test that shows bytes.
 **Exit**
 
 - Snapshots green on all three operating systems (line endings included).
+
+**What actually happened**
+
+- Both formatters are C (`zubin_hexdump()`, `zubin_diff()`), writing each line into one
+  `R_alloc` buffer; offsets widen from 8 to 16 hex digits past 4 GiB.
+- `n` past the end shows what there is, as presentation should; an `offset` past the end
+  is still a `zubin_bounds_error`, as everywhere else. `bin_diff()` compares over the
+  common length and reports both lengths as attributes, so a prefix is zero rows and two
+  lengths.
 
 ---
 

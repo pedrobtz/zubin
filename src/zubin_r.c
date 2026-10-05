@@ -632,3 +632,88 @@ SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
     b->len += total;
     return R_NilValue;
 }
+
+/* ---- hexdump and diff (design 13.6) --------------------------------------- */
+
+/* xxd-style lines for n bytes of x from offset, `width` bytes a line:
+   the absolute offset in hex (8 digits, 16 past 4 GiB), the bytes in
+   two-byte groups, and the printable ASCII, '.' for the rest. */
+SEXP zubin_hexdump(SEXP x, SEXP offset, SEXP n, SEXP width)
+{
+    static const char digits[] = "0123456789abcdef";
+    size_t off, cnt, w, len = (size_t)XLENGTH(x), lines, i, end;
+    int odigits;
+    char *line;
+    SEXP out;
+    if (TYPEOF(x) != RAWSXP || zubin_int_size(offset, &off) || zubin_int_size(width, &w) ||
+        w == 0 || w > 256) return zubin_int_status(ZB_ERR_INVALID, -1);
+    if (off > len) return zubin_int_status(ZB_ERR_EOF, -1);
+    if (Rf_asReal(n) < 0) cnt = len - off;
+    else if (zubin_int_size(n, &cnt)) return zubin_int_status(ZB_ERR_INVALID, -1);
+    if (cnt > len - off) cnt = len - off;
+    end = off + cnt;
+    odigits = end > 0xFFFFFFFFu ? 16 : 8;
+    lines = (cnt + w - 1) / w;
+    /* offset, ": ", hex (2 per byte, a space per pair), two spaces, ASCII, NUL */
+    line = R_alloc((size_t)odigits + 2 + 3 * w + 2 + w + 1, 1);
+    out = PROTECT(Rf_allocVector(STRSXP, (R_xlen_t)lines));
+    for (i = 0; i < lines; i++) {
+        size_t start = off + i * w, k, m = end - start < w ? end - start : w;
+        char *p = line;
+        int d;
+        for (d = odigits - 1; d >= 0; d--) *p++ = digits[(start >> (4 * d)) & 15];
+        *p++ = ':';
+        *p++ = ' ';
+        for (k = 0; k < w; k++) {
+            if (k < m) {
+                uint8_t v = RAW(x)[start + k];
+                *p++ = digits[v >> 4];
+                *p++ = digits[v & 15];
+            } else {
+                *p++ = ' ';
+                *p++ = ' ';
+            }
+            if (k % 2 == 1 && k + 1 < w) *p++ = ' ';
+        }
+        *p++ = ' ';
+        *p++ = ' ';
+        for (k = 0; k < m; k++) {
+            uint8_t v = RAW(x)[start + k];
+            *p++ = v >= 0x20 && v < 0x7f ? (char)v : '.';
+        }
+        *p = 0;
+        SET_STRING_ELT(out, (R_xlen_t)i, Rf_mkCharCE(line, CE_UTF8));
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* The first n offsets at which a and b differ, over their common length,
+   with both bytes there. */
+SEXP zubin_diff(SEXP a, SEXP b, SEXP n)
+{
+    const char *names[] = {"offset", "a", "b", ""};
+    size_t la, lb, common, i, max, found = 0;
+    size_t *at;
+    SEXP out, off, va, vb;
+    if (TYPEOF(a) != RAWSXP || TYPEOF(b) != RAWSXP || zubin_int_size(n, &max))
+        return zubin_int_status(ZB_ERR_INVALID, -1);
+    la = (size_t)XLENGTH(a);
+    lb = (size_t)XLENGTH(b);
+    common = la < lb ? la : lb;
+    at = (size_t *)R_alloc(max ? max : 1, sizeof(size_t));
+    for (i = 0; i < common && found < max; i++) {
+        if (RAW(a)[i] != RAW(b)[i]) at[found++] = i;
+    }
+    out = PROTECT(Rf_mkNamed(VECSXP, names));
+    off = Rf_allocVector(REALSXP, (R_xlen_t)found); SET_VECTOR_ELT(out, 0, off);
+    va = Rf_allocVector(RAWSXP, (R_xlen_t)found);   SET_VECTOR_ELT(out, 1, va);
+    vb = Rf_allocVector(RAWSXP, (R_xlen_t)found);   SET_VECTOR_ELT(out, 2, vb);
+    for (i = 0; i < found; i++) {
+        REAL(off)[i] = (double)at[i];
+        RAW(va)[i] = RAW(a)[at[i]];
+        RAW(vb)[i] = RAW(b)[at[i]];
+    }
+    UNPROTECT(1);
+    return out;
+}

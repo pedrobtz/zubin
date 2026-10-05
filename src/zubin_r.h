@@ -36,6 +36,8 @@ SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP strid
                   SEXP int64, SEXP allow_na, SEXP encoding);
 SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_na);
 SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64);
+SEXP zubin_hexdump(SEXP x, SEXP offset, SEXP n, SEXP width);
+SEXP zubin_diff(SEXP a, SEXP b, SEXP n);
 
 /* zubin_test.c */
 SEXP zubin_test_status_string(SEXP codes);

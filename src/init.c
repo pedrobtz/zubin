@@ -23,6 +23,8 @@ static const R_CallMethodDef call_methods[] = {
     CALLDEF(zubin_unpack, 9),
     CALLDEF(zubin_pack, 6),
     CALLDEF(zubin_builder_put_typed, 4),
+    CALLDEF(zubin_hexdump, 4),
+    CALLDEF(zubin_diff, 3),
     CALLDEF(zubin_test_status_string, 1),
     CALLDEF(zubin_test_rw, 3),
     CALLDEF(zubin_test_rw_write, 3),
