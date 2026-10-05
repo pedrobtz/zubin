@@ -45,70 +45,12 @@ jobs:
   analyzers:
     uses: pedrobtz/r-actions/.github/workflows/analyzers.yml@ae549ed0422114e410184aea754b773e7d0740ec # v1.19.0
 
-  # r-actions' rchk.yml runs kalibera/rchk, which installs dependencies from
-  # CRAN and Bioconductor only, and zufast (LinkingTo) is on neither until
-  # Stage 9. So this job installs zufast into the image's package library,
-  # which lives in the mounted directory and so persists between the two
-  # container runs, and rchk then finds it installed and skips it. The
-  # failure detection is r-actions' own. Replace with the reusable workflow
-  # once zufast is on CRAN.
+  # zufast (LinkingTo) is on neither CRAN nor Bioconductor until Stage 9, and
+  # those are all the rchk image installs from: github-packages installs it
+  # into the image first. Drop that input once zufast is on CRAN.
   rchk:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/checkout@v6
-        with:
-          repository: pedrobtz/zufast
-          path: .zufast
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: release
-      - name: Build source tarballs
-        run: |
-          mkdir rchk-packages
-          (cd rchk-packages && R CMD build --no-build-vignettes --no-manual ../.zufast)
-          R CMD build --no-build-vignettes --no-manual .
-          mv zubin_*.tar.gz rchk-packages/
-          ls -l rchk-packages
-      - name: Install zufast into the rchk image's library
-        run: |
-          cat > rchk-packages/install-zufast.R <<'RSCRIPT'
-          lib <- Sys.getenv("R_LIBS")
-          dir.create(lib, recursive = TRUE, showWarnings = FALSE)
-          install.packages(Sys.glob("/rchk/packages/zufast_*.tar.gz"), lib = lib, repos = NULL)
-          stopifnot(requireNamespace("zufast", lib.loc = lib))
-          RSCRIPT
-          docker run --rm -v "$(pwd)/rchk-packages":/rchk/packages \
-            kalibera/rchk:latest R -f /rchk/packages/install-zufast.R
-      - name: Run rchk
-        run: |
-          set -o pipefail
-          tarball=$(cd rchk-packages && ls zubin_*.tar.gz)
-          status=0
-          docker run --rm -v "$(pwd)/rchk-packages":/rchk/packages \
-            kalibera/rchk:latest "/rchk/packages/${tarball}" | tee rchk-output.txt || status=$?
-          if [ "$status" -ne 0 ]; then
-            if grep -qE '^Function |\[(UP|PB|UPB)\]|Suspicious call|too many states' rchk-output.txt; then
-              echo "::warning::rchk exited ${status} after analysing; the findings decide"
-            else
-              echo "::error::rchk exited ${status} without analysing anything"
-              exit 1
-            fi
-          fi
-          if grep -qE '^Could not install package|^Cannot find package ' rchk-output.txt; then
-            echo "::error::rchk could not install the package, so nothing was analysed"
-            exit 1
-          fi
-          # It always prints its version footer when it ran.
-          grep -q '^Rchk version' rchk-output.txt || { echo "::error::no rchk footer: did it run?"; exit 1; }
-          # Findings as r-actions' rchk.yml parses them: rchk's diagnostic
-          # tags, or "unprotected" in a maacheck WARNING. "too many states"
-          # names R's own functions that rchk gave up on, never findings.
-          if grep -v '^ERROR: too many states' rchk-output.txt |
-              grep -E '\[(UP|PB|UPB)\]|unprotected|negative depth|imbalanced'; then
-            echo "::error::rchk reported findings"
-            exit 1
-          fi
-          grep 'too many states' rchk-output.txt || true
-          echo "rchk: no findings"
+    uses: pedrobtz/r-actions/.github/workflows/rchk.yml@2677abce7451ed039a46f7b75d93cc9a6cb5622d # feat/github-packages
+    with:
+      fail-on-findings: true
+      github-packages: |
+        pedrobtz/zufast

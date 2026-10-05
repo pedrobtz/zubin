@@ -39,7 +39,9 @@ test_that("strings are written as UTF-8 whatever their declared encoding", {
   Encoding(latin1) <- "latin1"
   bin_put(b, latin1, type = "z")
   expect_identical(bin_take(b), bytes("c3 a9 00"))
-  bin_put(b, rawToChar(bytes("e2 82 ac")), type = "s3")
+  euro <- rawToChar(bytes("e2 82 ac"))
+  Encoding(euro) <- "UTF-8"   # rawToChar() gives native, which a C locale cannot translate
+  bin_put(b, euro, type = "s3")
   expect_identical(bin_take(b), bytes("e2 82 ac"))
 })
 

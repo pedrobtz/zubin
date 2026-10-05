@@ -37,7 +37,7 @@ Stages 0–2 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,curs
 `zubin-r.h` (R glue: `zb_r_buf_new/get/free/borrow/to_raw`). Gates: `tools/check-headers`
 (needs `ZUFAST_INCLUDE` or an installed zufast, and R's headers for the `zubin-r.h` probe)
 and `tools/run-symbol-audit` in `abi.yaml`; `native-checks.yaml` (sanitizers, valgrind, LTO,
-gctorture, analyzers, and a bespoke blocking rchk that pre-installs zufast). R API so far:
+gctorture, analyzers, and a blocking rchk with `github-packages: pedrobtz/zufast`). R API so far:
 `bin_info()`, `bin_builder()`, `bin_put()` (raw, `"z"`, `"s<n>"`), `bin_reserve()`,
 `bin_reset()`, `bin_take()`, `bin_size()`, `as.raw()`. `zufast` comes from
 `Remotes: pedrobtz/zufast@main` until Stage 9. Next: Stage 3, layouts and the spec parser.

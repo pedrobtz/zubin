@@ -331,11 +331,12 @@ is Stage 5.
 - The finalizer canary, run locally with `R_RegisterCFinalizerEx()` removed from
   `zubin-r.h`: all three lifetime tests failed (live count 1, 2, 3 against 0, 1, 2), and
   passed again with it restored. The PR records the output.
-- rchk: r-actions' `rchk.yml` cannot install a `LinkingTo` dependency that is on neither
-  CRAN nor Bioconductor. `native-checks.yaml` has a bespoke rchk job that installs zufast
-  into the image's library (in the mounted directory) with the image's `R` passthrough, then
-  runs rchk with r-actions' failure detection, made blocking on any finding. It goes back
-  to the reusable workflow at Stage 9.
+- rchk: r-actions' `rchk.yml` could not install a `LinkingTo` dependency that is on neither
+  CRAN nor Bioconductor, since the rchk image resolves only those. A bespoke job proved the
+  fix (install zufast into the image's library, which lives in the mounted directory, with
+  the image's `R` passthrough), and it then went into r-actions as the `github-packages`
+  input of `rchk.yml` and `fuzz.yml`; zubin uses the reusable workflow, blocking on findings.
+  The input goes at Stage 9, when zufast is on CRAN.
 - CI found three things the local build could not. GCC's `-Walloc-size-larger-than`
   proved a `realloc(SIZE_MAX)` reachable after overflow in `zb_int_grow()` (a WARNING on
   every GCC leg, Windows included): growth is now bounded by `ZB_BUF_MAX_CAP`
