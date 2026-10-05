@@ -33,7 +33,7 @@ commit.
 
 ## Current state
 
-Stages 0–7 are done; Stage 8 is in review. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
+Stages 0–8 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
 (layout.h: types, spec parser, unpack and pack kernels), plus `zubin-r.h`. Gates:
 `abi.yaml`, `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml` (`fuzz_layout`,
 `fuzz_unpack`, `fuzz_buf`), `arch.yaml` (i386, musl, s390x). R API: `bin_info()`,
@@ -44,7 +44,7 @@ the builder (`bin_builder()`, `bin_put()` raw/typed/`"z"`/`"s<n>"`, `bin_reserve
 (rchk, fuzzing, arch) fetch zufast themselves (r-actions' `github-packages` input for
 rchk and fuzz). `tools/zubintest` is the consumer fixture (`consumer.yaml`); the README's
 "Using zubin from C" quotes it, and `tools/check-recipe` keeps the two identical: edit the
-fixture, then copy the change into the README. Next: Stage 9, which waits for zufast to be on CRAN.
+fixture, then copy the change into the README. Next: Stage 9, which waits for zufast to be on CRAN; its release commit is ready on the `stage-9-release` branch.
 
 In C, `zb_field.count` is the byte width for `b`, `s` and `x` fields; the element count of a
 column is 1 for them.

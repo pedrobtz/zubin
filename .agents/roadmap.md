@@ -631,7 +631,10 @@ will have, with and without zubin installed, on three operating systems.
 
 ## Stage 8 — Hardening, documentation, benchmarks · M
 
-**Status:** in review (#12): the hour of fuzzing per target and the step-20 gctorture run happen on `main` after merge.
+**Status:** done (#12). On `main` after merge: an hour of fuzzing per target with no finding
+(dispatched run 37267269936: `fuzz_unpack` 684 M executions, `fuzz_buf` 355 M, `fuzz_layout`
+217 M), every canary crashed first, and `native-checks` passed with gctorture at step 20
+(38 minutes).
 
 **Goal:** everything a user, a CRAN reviewer or a sanitizer reads or runs is in place and
 matches the code.
@@ -694,7 +697,11 @@ matches the code.
 
 ## Stage 9 — Release 0.1.0 · S
 
-**Status:** not started.
+**Status:** prepared, waiting for zufast on CRAN (checked 2026-10-05: not there). The branch
+`stage-9-release` holds the release commit: `Version: 0.1.0` with `version.h` and the NEWS
+heading, no `Remotes:`, the CRAN install in the README, and rchk and the arch legs
+resolving zufast from CRAN. Rebase it on `main`, open its PR with `full-ci`, run
+`devtools::check_win_devel()`, and once every leg is green, submit.
 
 **Entry:** zufast 0.1.0 is on CRAN.
 
