@@ -236,3 +236,78 @@ SEXP zubin_builder_take(SEXP ptr, SEXP reset)
     if (Rf_asLogical(reset) == TRUE) zb_buf_reset(b);
     return out;
 }
+
+/* ---- layouts (design 11, 13.2) ---------------------------------------------- */
+
+/* Parses a spec held in an R string into fields R_alloc()ed here, so they
+   live until the .Call returns. max_fields 0 sizes the array from the spec. */
+zb_status zubin_int_parse(SEXP spec, int big, int align, uint32_t max_fields,
+                          zb_layout *out, size_t *err_pos)
+{
+    const char *s;
+    size_t n;
+    zb_field *fields;
+    if (TYPEOF(spec) != STRSXP || XLENGTH(spec) != 1 || STRING_ELT(spec, 0) == NA_STRING) {
+        *err_pos = 0;
+        return ZB_ERR_INVALID;
+    }
+    s = CHAR(STRING_ELT(spec, 0));
+    n = strlen(s);
+    if (!max_fields) max_fields = zb_layout_count_fields(s, n);
+    fields = (zb_field *)R_alloc(max_fields, sizeof(zb_field));
+    return zb_layout_parse(s, n, big, align, fields, max_fields, out, err_pos);
+}
+
+/* The field table of a spec: type codes, element counts (1 for b, s and x,
+   whose width is their size), sizes, offsets, byte order (NA for one-byte
+   types), names (NA when unnamed) and each name's byte position; then the
+   record size and alignment. On failure, a status with `position`. */
+SEXP zubin_layout_parse(SEXP spec, SEXP big, SEXP align)
+{
+    const char *names[] = {"type", "count", "size", "offset", "big", "name", "name_pos",
+                           "record_size", "align", ""};
+    zb_layout l;
+    size_t err = 0;
+    uint32_t i;
+    zb_status st;
+    SEXP out, type, count, size, offset, bigs, name, pos;
+    const char *base;
+    st = zubin_int_parse(spec, Rf_asLogical(big) == TRUE, Rf_asLogical(align) == TRUE, 0, &l, &err);
+    if (st) {
+        SEXP pos;
+        out = PROTECT(zubin_int_status(st, -1));
+        pos = PROTECT(Rf_ScalarReal((double)err));
+        Rf_setAttrib(out, Rf_install("position"), pos);
+        UNPROTECT(2);
+        return out;
+    }
+    base = CHAR(STRING_ELT(spec, 0));
+    out = PROTECT(Rf_mkNamed(VECSXP, names));
+    type = Rf_allocVector(INTSXP, l.nfields);   SET_VECTOR_ELT(out, 0, type);
+    count = Rf_allocVector(INTSXP, l.nfields);  SET_VECTOR_ELT(out, 1, count);
+    size = Rf_allocVector(INTSXP, l.nfields);   SET_VECTOR_ELT(out, 2, size);
+    offset = Rf_allocVector(INTSXP, l.nfields); SET_VECTOR_ELT(out, 3, offset);
+    bigs = Rf_allocVector(LGLSXP, l.nfields);   SET_VECTOR_ELT(out, 4, bigs);
+    name = Rf_allocVector(STRSXP, l.nfields);   SET_VECTOR_ELT(out, 5, name);
+    pos = Rf_allocVector(INTSXP, l.nfields);    SET_VECTOR_ELT(out, 6, pos);
+    for (i = 0; i < l.nfields; i++) {
+        const zb_field *f = &l.fields[i];
+        int wide = f->type == ZB_BYTES || f->type == ZB_STR || f->type == ZB_PAD;
+        INTEGER(type)[i] = (int)f->type;
+        INTEGER(count)[i] = wide ? 1 : (int)f->count;
+        INTEGER(size)[i] = (int)f->size;
+        INTEGER(offset)[i] = (int)f->offset;
+        LOGICAL(bigs)[i] = zb_type_width(f->type) > 1 ? f->big_endian : NA_LOGICAL;
+        if (f->name) {
+            SET_STRING_ELT(name, i, Rf_mkCharLenCE(f->name, (int)f->name_len, CE_UTF8));
+            INTEGER(pos)[i] = (int)(f->name - base);
+        } else {
+            SET_STRING_ELT(name, i, NA_STRING);
+            INTEGER(pos)[i] = NA_INTEGER;
+        }
+    }
+    SET_VECTOR_ELT(out, 7, Rf_ScalarInteger((int)l.size));
+    SET_VECTOR_ELT(out, 8, Rf_ScalarInteger((int)l.align));
+    UNPROTECT(1);
+    return out;
+}

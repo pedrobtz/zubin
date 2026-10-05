@@ -1,0 +1,68 @@
+# Design 16.6: the headers compiled into libFuzzer targets with ASan and
+# UBSan, no R in the picture. The canaries job first proves the
+# instrumentation is live: each target's canary build must crash on
+# tools/fuzz/canary.input (tools/run-fuzz). Each target then fuzzes through
+# r-actions' fuzz.yml from its seeds and a corpus cached between runs, so
+# short runs add up: ten minutes a target on pull requests and pushes, an
+# hour nightly, and a dispatched run takes its budget as an input.
+#
+# The headers include zufast's, which is not on CRAN until Stage 9:
+# github-packages checks it out for the include path.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to fuzz each target (the job times out at 150 minutes)
+        type: number
+        default: 3600
+
+name: hardening
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  canaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: pedrobtz/zufast
+          path: .zufast
+      - name: Install clang with libFuzzer
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang
+          v=$(clang -dumpversion | cut -d. -f1)
+          sudo apt-get install -y -q "libclang-rt-$v-dev" || true
+      - name: Every canary crashes
+        env:
+          ZUFAST_INCLUDE: ${{ github.workspace }}/.zufast/inst/include
+        run: CANARY_ONLY=1 tools/run-fuzz
+
+  fuzz:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [layout]
+    uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@2677abce7451ed039a46f7b75d93cc9a6cb5622d # feat/github-packages
+    with:
+      harness: tools/fuzz/fuzz_${{ matrix.target }}.c
+      sources: tools/fuzz/support.c
+      github-packages: pedrobtz/zufast
+      # UBSan must stop the run, not print and carry on
+      cflags: -g -O1 -fno-omit-frame-pointer -fno-sanitize-recover=undefined -Iinst/include -I.github-packages/zufast/inst/include -Itools/fuzz
+      seed-corpus: tools/fuzz/seeds/${{ matrix.target }}
+      libfuzzer-args: -max_len=4096
+      # fromJSON: a dispatched input can arrive as a string
+      max-total-time: ${{ github.event_name == 'workflow_dispatch' && fromJSON(inputs.seconds) || github.event_name == 'schedule' && 3600 || 600 }}
+      timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 150 || 90 }}

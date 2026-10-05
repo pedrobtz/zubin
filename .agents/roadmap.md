@@ -354,7 +354,7 @@ is Stage 5.
 
 ## Stage 3 — Layouts and the spec parser · M
 
-**Status:** not started.
+**Status:** done (#7).
 
 **Goal:** the layout descriptor and its grammar, parsed without allocating, fuzzed from the
 day it exists, and exposed as the `zubin_layout` object.
@@ -388,6 +388,29 @@ day it exists, and exposed as the `zubin_layout` object.
 - The alignment oracle agrees on every struct, on all three operating systems.
 
 **Not this stage:** reading or writing a single byte through a layout.
+
+**What actually happened**
+
+- The first R-level run caught a parser bug the C-only tests would also have caught: the
+  count parser never stored its value, so every `b`, `s`, `x` width and array count was 0.
+  Comparing the R table against the C harness table field by field is what makes such a bug
+  loud rather than a wrong size somewhere downstream.
+- The normalised spec's prefix must be the order the spec *declares*, not the `endian`
+  argument: the round-trip test `bin_layout(l$spec) == l` caught it.
+- **32-bit x86 aligns 8-byte struct members to 4.** Design §11.4 claimed the rule held on
+  every target R supports; it holds on every 64-bit one. The oracle structs carry a flag, and
+  the eight-byte cases skip on a 32-bit build (the i386 leg of Stage 4 runs the rest). The
+  design and `?bin_layout` say so.
+- The canary is zufast's mechanism, a `-DZB_FUZZ_CANARY` build that overflows on the input
+  `ZB-CANARY`, not a separate `canary.c`. r-actions' `fuzz.yml` could not fetch zufast's
+  headers; it gained a `github-packages` input for that (with `rchk.yml`, Stage 2), and
+  `hardening.yaml` uses it: a small canaries job (`CANARY_ONLY=1 tools/run-fuzz`, since the
+  reusable workflow has no canary step), then each target through `fuzz.yml` with its
+  corpus cached, ten minutes on every PR and push, an hour nightly. `cflags` carries
+  `-fno-sanitize-recover=undefined`, or a UBSan report would print and the run go on.
+- `zb_type_width()`, `zb_type_name()` and `ZB_LAYOUT_MAX` became public (design §11.3); the
+  R glue and the fuzz target needed them, and a consumer will too.
+- `run-fuzz` reads `FUZZ_SECONDS`, not `SECONDS`, which is a special variable in bash.
 
 ---
 

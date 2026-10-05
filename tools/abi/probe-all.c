@@ -115,6 +115,25 @@ int zb_probe_all(void)
         acc += (int)(ZB_BUF_DOUBLING_LIMIT > ZB_BUF_MIN_CAP && ZB_BUF_MAX_CAP > ZB_BUF_MIN_CAP);
     }
 
+    /* layout.h */
+    {
+        static const char spec[] = "<a:u8 x3 b:f32[2].be c:s4";
+        zb_field fields[8];
+        zb_layout l;
+        size_t pos = 0;
+        uint32_t bound = zb_layout_count_fields(spec, sizeof spec - 1);
+        zb_type t = ZB_U8;
+        memset(&l, 0, sizeof l);
+        memset(fields, 0, sizeof fields);
+        acc += (int)zb_layout_parse(spec, sizeof spec - 1, 0, 1, fields, bound < 8 ? bound : 8, &l, &pos);
+        acc += (int)(l.nfields + l.size + l.align + (uint32_t)pos);
+        acc += (int)zb_type_width(t) + (int)zb_type_name(ZB_PAD)[0] + (int)ZB_LAYOUT_MAX % 7;
+        acc += ZB_I8 + ZB_U16 + ZB_I16 + ZB_U32 + ZB_I32 + ZB_U64 + ZB_I64 + ZB_F16 + ZB_BF16 +
+               ZB_F32 + ZB_F64 + ZB_BOOL + ZB_BYTES + ZB_STR;
+        acc += (int)fields[0].count + (int)fields[0].offset + (int)fields[0].big_endian +
+               (int)fields[0].name_len + (fields[0].name ? 1 : 0);
+    }
+
     /* zufast/utf8.h, re-exported by the umbrella */
     acc += zuf_utf8_valid((const char *)buf, sizeof buf);
 

@@ -33,14 +33,14 @@ commit.
 
 ## Current state
 
-Stages 0–2 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor}.h`, plus
-`zubin-r.h` (R glue: `zb_r_buf_new/get/free/borrow/to_raw`). Gates: `tools/check-headers`
-(needs `ZUFAST_INCLUDE` or an installed zufast, and R's headers for the `zubin-r.h` probe)
-and `tools/run-symbol-audit` in `abi.yaml`; `native-checks.yaml` (sanitizers, valgrind, LTO,
-gctorture, analyzers, and a blocking rchk with `github-packages: pedrobtz/zufast`). R API so far:
-`bin_info()`, `bin_builder()`, `bin_put()` (raw, `"z"`, `"s<n>"`), `bin_reserve()`,
-`bin_reset()`, `bin_take()`, `bin_size()`, `as.raw()`. `zufast` comes from
-`Remotes: pedrobtz/zufast@main` until Stage 9. Next: Stage 3, layouts and the spec parser.
+Stages 0–3 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`,
+plus `zubin-r.h` (R glue). `layout.h` has the types and the allocation-free spec parser; the
+unpack and pack kernels arrive in Stages 4 and 5. Gates: `abi.yaml` (`tools/check-headers`,
+`tools/run-symbol-audit`), `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml`
+(canaries through `tools/run-fuzz`, then r-actions' `fuzz.yml` per target). R API so far: `bin_info()`, the
+builder (`bin_builder()`, `bin_put()` raw/`"z"`/`"s<n>"`, `bin_reserve()`, `bin_reset()`,
+`bin_take()`, `as.raw()`), `bin_layout()` and `bin_size()`. `zufast` comes from
+`Remotes: pedrobtz/zufast@main` until Stage 9. Next: Stage 4, unpack and decode.
 
 **The `.Call` convention:** an entry point that can fail returns, on failure, a
 `zubin_status`-classed string holding the `zb_status` enumerator name (attribute `index`
@@ -51,6 +51,9 @@ test harness.
 ## Commands
 
 ```sh
+tools/check-headers                                # header gate (CC/CXX, ZUFAST_INCLUDE)
+tools/run-symbol-audit                             # R CMD check's compiled-code scan, on the probe
+CC=/opt/homebrew/opt/llvm/bin/clang tools/run-fuzz # libFuzzer; Apple clang has none
 Rscript -e 'devtools::document()'
 Rscript -e 'devtools::test()'
 Rscript -e 'devtools::test(shuffle = TRUE)'
