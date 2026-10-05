@@ -33,8 +33,11 @@ jobs:
          {"name": "s390x", "platform": "linux/s390x",
           "image": "s390x/debian:bookworm",
           "setup": "apt-get update && apt-get install -y --no-install-recommends r-base-dev r-cran-testthat r-cran-withr ca-certificates locales && echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen"}]
+      # _R_CHECK_TESTS_NLINES_=0: R CMD check shows a failing suite's whole
+      # output, not its last 13 lines; these legs are where that matters.
       install-dependencies: >-
-        Rscript -e 'for (p in c("testthat", "withr")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, repos = "https://cloud.r-project.org")'
+        mkdir -p ~/.R && echo _R_CHECK_TESTS_NLINES_=0 > ~/.R/check.Renviron
+        && Rscript -e 'for (p in c("testthat", "withr")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, repos = "https://cloud.r-project.org")'
         && Rscript -e 'download.file("https://github.com/pedrobtz/zufast/archive/refs/heads/main.tar.gz", "/tmp/zufast.tar.gz", mode = "wb")'
         && mkdir -p /tmp/zufast && tar -xzf /tmp/zufast.tar.gz -C /tmp/zufast --strip-components 1
         && R CMD INSTALL /tmp/zufast
