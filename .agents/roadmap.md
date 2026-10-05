@@ -138,7 +138,7 @@ Stage 6 is off the critical path and can be done in any spare sitting after Stag
 
 ## Stage 0 — Package identity and a clean baseline · S
 
-**Status:** not started.
+**Status:** done (#4).
 
 **Goal:** the `usethis` skeleton becomes a package with the right metadata, registration
 and build hygiene, so every later stage is measured against a clean 0/0/0.
@@ -181,6 +181,18 @@ and build hygiene, so every later stage is measured against a clean 0/0/0.
 - `NAMESPACE` carries `useDynLib(zubin, .registration = TRUE)`.
 
 **Not this stage:** any header, any C beyond `init.c`.
+
+**What actually happened**
+
+- The usethis template's `src/zubin.c` was not a registration table; deleting it left
+  `tests/testthat/` empty for a moment, and `git rm` removes the directory with the last
+  file, so the replacement test has to be written after recreating it.
+- `init.c` needs `<stddef.h>` for `NULL`: `R_ext/Rdynload.h` does not bring it in under
+  clang.
+- `devtools::check(cran = TRUE)` was 0/0/0 locally without the CRAN-incoming NOTE, because
+  `check()` skips the incoming feasibility checks unless `remote = TRUE`.
+- The tracking issues were created with this stage: milestone `v0.1.0`, umbrella #2, stage
+  issues #4–#13. (#3 was created by mistake and closed.)
 
 ---
 

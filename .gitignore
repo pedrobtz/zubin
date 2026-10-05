@@ -1,1 +1,8 @@
 docs
+inst/doc
+CRAN-SUBMISSION
+_problems/
+src/*.o
+src/*.so
+src/*.dll
+src/*.dylib

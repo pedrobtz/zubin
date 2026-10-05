@@ -1,0 +1,4 @@
+PKG_CPPFLAGS = -I../inst/include
+PKG_CFLAGS = $(C_VISIBILITY)
+
+OBJECTS = init.o
