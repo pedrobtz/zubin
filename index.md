@@ -9,9 +9,15 @@ header-only C99 library that other packages use through `LinkingTo`.
 
 ## Installation
 
-zubin is not on CRAN yet. It links to
-[zufast](https://github.com/pedrobtz/zufast), which is not either, so
-install both from GitHub:
+Once zubin is on CRAN:
+
+``` r
+
+install.packages("zubin")
+```
+
+The development version, which also needs the development version of
+[zufast](https://github.com/pedrobtz/zufast) until that is on CRAN:
 
 ``` r
 

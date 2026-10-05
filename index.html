@@ -11,8 +11,8 @@
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Read and Write Structured Binary Data">
-<meta name="description" content="Describe a fixed binary record once, as a layout, and read or write millions of them in one vectorised call: integers from 8 to 64 bits, half, brain and single and double precision floats, booleans, fixed bytes and fixed strings, padding, arrays and C struct alignment, in either byte order. Typed codecs convert whole vectors to and from bytes at every width and byte order, refusing rather than rounding a value that does not fit, and a growable byte builder with a hard cap appends without quadratic copying. The same buffer, cursor, typed reads and writes and layout kernels are a header-only C library that other packages use through LinkingTo alone.">
-<meta property="og:description" content="Describe a fixed binary record once, as a layout, and read or write millions of them in one vectorised call: integers from 8 to 64 bits, half, brain and single and double precision floats, booleans, fixed bytes and fixed strings, padding, arrays and C struct alignment, in either byte order. Typed codecs convert whole vectors to and from bytes at every width and byte order, refusing rather than rounding a value that does not fit, and a growable byte builder with a hard cap appends without quadratic copying. The same buffer, cursor, typed reads and writes and layout kernels are a header-only C library that other packages use through LinkingTo alone.">
+<meta name="description" content="Describe a fixed binary record once, as a layout, and read or write millions of them in one vectorised call: integers from 8 to 64 bits, IEEE half, bfloat16 (brain floating point), single and double precision floats, booleans, fixed bytes and fixed strings, padding, arrays and C struct alignment, in either byte order. Typed codecs convert whole vectors to and from bytes at every width and byte order, refusing rather than rounding a value that does not fit, and a growable byte builder with a hard cap appends without quadratic copying. The same buffer, cursor, typed reads and writes and layout kernels are a header-only C library that other packages use through LinkingTo alone.">
+<meta property="og:description" content="Describe a fixed binary record once, as a layout, and read or write millions of them in one vectorised call: integers from 8 to 64 bits, IEEE half, bfloat16 (brain floating point), single and double precision floats, booleans, fixed bytes and fixed strings, padding, arrays and C struct alignment, in either byte order. Typed codecs convert whole vectors to and from bytes at every width and byte order, refusing rather than rounding a value that does not fit, and a growable byte builder with a hard cap appends without quadratic copying. The same buffer, cursor, typed reads and writes and layout kernels are a header-only C library that other packages use through LinkingTo alone.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -62,15 +62,18 @@
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>zubin is not on CRAN yet. It links to <a href="https://github.com/pedrobtz/zufast" class="external-link">zufast</a>, which is not either, so install both from GitHub:</p>
+<p>Once zubin is on CRAN:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"zubin"</span><span class="op">)</span></span></code></pre></div>
+<p>The development version, which also needs the development version of <a href="https://github.com/pedrobtz/zufast" class="external-link">zufast</a> until that is on CRAN:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"pedrobtz/zubin"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="example">Example<a class="anchor" aria-label="anchor" href="#example"></a>
 </h2>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://pedrobtz.github.io/zubin/">zubin</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">hdr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&gt;magic:u32 version:u16 count:u32"</span><span class="op">)</span></span>
@@ -106,68 +109,68 @@
 <pre class="make"><code>PKG_CFLAGS = $(C_VISIBILITY)</code></pre>
 <p><strong>4. Include and call.</strong> <code>&lt;zubin.h&gt;</code> for everything, or one area at a time (<code>&lt;zubin/cursor.h&gt;</code>, <code>&lt;zubin/buf.h&gt;</code>, <code>&lt;zubin/layout.h&gt;</code>, …). Any number of translation units may include them; there is nothing to link and no implementation macro. They compile as C99 and as C++11. A checked sequential read of a header:</p>
 <!-- recipe: src/cursor.c -->
-<div class="sourceCode" id="cb6"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co">/* Translation unit 2: a checked sequential read of a header. Includes one</span></span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">   area header, then the umbrella, the two ways the README allows. */</span></span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin/cursor.h&gt;</span></span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin.h&gt;</span></span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="pp">#include </span><span class="im">"zubintest.h"</span></span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a></span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">/* magic:u32be version:u16le count:u32le name:6 bytes; returns c(magic,</span></span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">   version, count, the position after the header), or the status's name and</span></span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">   the position where the read failed. */</span></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>SEXP zt_header<span class="op">(</span>SEXP x<span class="op">)</span></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="op">{</span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>    zb_cur c<span class="op">;</span></span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>    <span class="dt">uint32_t</span> magic <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>    <span class="dt">uint16_t</span> version <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">uint8_t</span> <span class="op">*</span>name <span class="op">=</span> NULL<span class="op">;</span></span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a>    zb_status st<span class="op">;</span></span>
-<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a>    SEXP out<span class="op">;</span></span>
-<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a>    zb_cur_init<span class="op">(&amp;</span>c<span class="op">,</span> XLENGTH<span class="op">(</span>x<span class="op">)</span> <span class="op">?</span> RAW<span class="op">(</span>x<span class="op">)</span> <span class="op">:</span> NULL<span class="op">,</span> <span class="op">(</span><span class="dt">size_t</span><span class="op">)</span>XLENGTH<span class="op">(</span>x<span class="op">));</span></span>
-<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">((</span>st <span class="op">=</span> zb_cur_u32be<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>magic<span class="op">))</span> <span class="op">||</span> <span class="op">(</span>st <span class="op">=</span> zb_cur_u16le<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>version<span class="op">))</span> <span class="op">||</span></span>
-<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a>        <span class="op">(</span>st <span class="op">=</span> zb_cur_u32le<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>count<span class="op">))</span> <span class="op">||</span> <span class="op">(</span>st <span class="op">=</span> zb_cur_bytes<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>name<span class="op">,</span> <span class="dv">6</span><span class="op">)))</span> <span class="op">{</span></span>
-<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a>        out <span class="op">=</span> PROTECT<span class="op">(</span>Rf_allocVector<span class="op">(</span>STRSXP<span class="op">,</span> <span class="dv">2</span><span class="op">));</span></span>
-<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a>        SET_STRING_ELT<span class="op">(</span>out<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> Rf_mkChar<span class="op">(</span>zb_status_string<span class="op">(</span>st<span class="op">)));</span></span>
-<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a>        SET_STRING_ELT<span class="op">(</span>out<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> Rf_mkChar<span class="op">(</span>c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">0</span> <span class="op">?</span> <span class="st">"0"</span> <span class="op">:</span> c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">4</span> <span class="op">?</span> <span class="st">"4"</span> <span class="op">:</span> c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">6</span> <span class="op">?</span> <span class="st">"6"</span> <span class="op">:</span> <span class="st">"10"</span><span class="op">));</span></span>
-<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a>        UNPROTECT<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
-<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a>        <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a>    out <span class="op">=</span> Rf_allocVector<span class="op">(</span>REALSXP<span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
-<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> magic<span class="op">;</span></span>
-<span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> version<span class="op">;</span></span>
-<span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">2</span><span class="op">]</span> <span class="op">=</span> count<span class="op">;</span></span>
-<span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">3</span><span class="op">]</span> <span class="op">=</span> <span class="op">(</span><span class="dt">double</span><span class="op">)</span>c<span class="op">.</span>pos<span class="op">;</span></span>
-<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb6-33"><a href="#cb6-33" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co">/* Translation unit 2: a checked sequential read of a header. Includes one</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">   area header, then the umbrella, the two ways the README allows. */</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin/cursor.h&gt;</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin.h&gt;</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="pp">#include </span><span class="im">"zubintest.h"</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">/* magic:u32be version:u16le count:u32le name:6 bytes; returns c(magic,</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">   version, count, the position after the header), or the status's name and</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">   the position where the read failed. */</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>SEXP zt_header<span class="op">(</span>SEXP x<span class="op">)</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>    zb_cur c<span class="op">;</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>    <span class="dt">uint32_t</span> magic <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>    <span class="dt">uint16_t</span> version <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">uint8_t</span> <span class="op">*</span>name <span class="op">=</span> NULL<span class="op">;</span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>    zb_status st<span class="op">;</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>    SEXP out<span class="op">;</span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>    zb_cur_init<span class="op">(&amp;</span>c<span class="op">,</span> XLENGTH<span class="op">(</span>x<span class="op">)</span> <span class="op">?</span> RAW<span class="op">(</span>x<span class="op">)</span> <span class="op">:</span> NULL<span class="op">,</span> <span class="op">(</span><span class="dt">size_t</span><span class="op">)</span>XLENGTH<span class="op">(</span>x<span class="op">));</span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">((</span>st <span class="op">=</span> zb_cur_u32be<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>magic<span class="op">))</span> <span class="op">||</span> <span class="op">(</span>st <span class="op">=</span> zb_cur_u16le<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>version<span class="op">))</span> <span class="op">||</span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>        <span class="op">(</span>st <span class="op">=</span> zb_cur_u32le<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>count<span class="op">))</span> <span class="op">||</span> <span class="op">(</span>st <span class="op">=</span> zb_cur_bytes<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>name<span class="op">,</span> <span class="dv">6</span><span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a>        out <span class="op">=</span> PROTECT<span class="op">(</span>Rf_allocVector<span class="op">(</span>STRSXP<span class="op">,</span> <span class="dv">2</span><span class="op">));</span></span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a>        SET_STRING_ELT<span class="op">(</span>out<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> Rf_mkChar<span class="op">(</span>zb_status_string<span class="op">(</span>st<span class="op">)));</span></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a>        SET_STRING_ELT<span class="op">(</span>out<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> Rf_mkChar<span class="op">(</span>c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">0</span> <span class="op">?</span> <span class="st">"0"</span> <span class="op">:</span> c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">4</span> <span class="op">?</span> <span class="st">"4"</span> <span class="op">:</span> c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">6</span> <span class="op">?</span> <span class="st">"6"</span> <span class="op">:</span> <span class="st">"10"</span><span class="op">));</span></span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a>        UNPROTECT<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a>        <span class="cf">return</span> out<span class="op">;</span></span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a>    out <span class="op">=</span> Rf_allocVector<span class="op">(</span>REALSXP<span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> magic<span class="op">;</span></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> version<span class="op">;</span></span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">2</span><span class="op">]</span> <span class="op">=</span> count<span class="op">;</span></span>
+<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">3</span><span class="op">]</span> <span class="op">=</span> <span class="op">(</span><span class="dt">double</span><span class="op">)</span>c<span class="op">.</span>pos<span class="op">;</span></span>
+<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
+<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Every function that can fail returns a <code>zb_status</code> (<code>ZB_OK</code> is 0), and on failure its inputs are unchanged: a cursor that returns <code>ZB_ERR_EOF</code> has not moved.</p>
 <p><strong>5. Buffers owned by R.</strong> <code>&lt;zubin-r.h&gt;</code> is the one header that includes R’s, and is not part of <code>&lt;zubin.h&gt;</code>. <code>zb_r_buf_new()</code> hands you a buffer owned by an external pointer whose finalizer is registered before the buffer exists, so an <code>Rf_error()</code> or an interrupt cannot leak it:</p>
 <!-- recipe: src/buffer.c -->
-<div class="sourceCode" id="cb7"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co">/* Translation unit 3: a buffer owned by R, through &lt;zubin-r.h&gt;. */</span></span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin-r.h&gt;</span></span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">"zubintest.h"</span></span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">/* Appends the doubles in `values` as f32be, then borrows the raw vector</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">   `tail` and appends its bytes, and returns the buffer's bytes. The buffer is</span></span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">   owned by an external pointer from before it exists, so the error below</span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">   cannot leak it. */</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>SEXP zt_build<span class="op">(</span>SEXP values<span class="op">,</span> SEXP tail<span class="op">)</span></span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="op">{</span></span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>    zb_status st<span class="op">;</span></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>    zb_buf view<span class="op">,</span> <span class="op">*</span>b<span class="op">;</span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>    R_xlen_t i<span class="op">;</span></span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>    SEXP out<span class="op">,</span> ptr <span class="op">=</span> PROTECT<span class="op">(</span>zb_r_buf_new<span class="op">(</span><span class="dv">16</span><span class="op">,</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">20</span><span class="op">,</span> <span class="op">&amp;</span>st<span class="op">));</span></span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"zt_build: </span><span class="sc">%s</span><span class="st">"</span><span class="op">,</span> zb_status_string<span class="op">(</span>st<span class="op">));</span></span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>    b <span class="op">=</span> zb_r_buf_get<span class="op">(</span>ptr<span class="op">);</span></span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> XLENGTH<span class="op">(</span>values<span class="op">);</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>zb_put_f32be<span class="op">(</span>b<span class="op">,</span> <span class="op">(</span><span class="dt">float</span><span class="op">)</span>REAL<span class="op">(</span>values<span class="op">)[</span>i<span class="op">]))</span> Rf_error<span class="op">(</span><span class="st">"zt_build: put failed"</span><span class="op">);</span></span>
-<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>    zb_r_buf_borrow<span class="op">(&amp;</span>view<span class="op">,</span> tail<span class="op">);</span></span>
-<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>zb_put_bytes<span class="op">(</span>b<span class="op">,</span> view<span class="op">.</span>data<span class="op">,</span> view<span class="op">.</span>len<span class="op">))</span> Rf_error<span class="op">(</span><span class="st">"zt_build: the cap was reached"</span><span class="op">);</span></span>
-<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a>    out <span class="op">=</span> PROTECT<span class="op">(</span>zb_r_buf_to_raw<span class="op">(</span>b<span class="op">));</span></span>
-<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a>    zb_r_buf_free<span class="op">(</span>ptr<span class="op">);</span></span>
-<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a>    UNPROTECT<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co">/* Translation unit 3: a buffer owned by R, through &lt;zubin-r.h&gt;. */</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin-r.h&gt;</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">"zubintest.h"</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">/* Appends the doubles in `values` as f32be, then borrows the raw vector</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">   `tail` and appends its bytes, and returns the buffer's bytes. The buffer is</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">   owned by an external pointer from before it exists, so the error below</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">   cannot leak it. */</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>SEXP zt_build<span class="op">(</span>SEXP values<span class="op">,</span> SEXP tail<span class="op">)</span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>    zb_status st<span class="op">;</span></span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>    zb_buf view<span class="op">,</span> <span class="op">*</span>b<span class="op">;</span></span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>    R_xlen_t i<span class="op">;</span></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>    SEXP out<span class="op">,</span> ptr <span class="op">=</span> PROTECT<span class="op">(</span>zb_r_buf_new<span class="op">(</span><span class="dv">16</span><span class="op">,</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">20</span><span class="op">,</span> <span class="op">&amp;</span>st<span class="op">));</span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"zt_build: </span><span class="sc">%s</span><span class="st">"</span><span class="op">,</span> zb_status_string<span class="op">(</span>st<span class="op">));</span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>    b <span class="op">=</span> zb_r_buf_get<span class="op">(</span>ptr<span class="op">);</span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> XLENGTH<span class="op">(</span>values<span class="op">);</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>zb_put_f32be<span class="op">(</span>b<span class="op">,</span> <span class="op">(</span><span class="dt">float</span><span class="op">)</span>REAL<span class="op">(</span>values<span class="op">)[</span>i<span class="op">]))</span> Rf_error<span class="op">(</span><span class="st">"zt_build: put failed"</span><span class="op">);</span></span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a>    zb_r_buf_borrow<span class="op">(&amp;</span>view<span class="op">,</span> tail<span class="op">);</span></span>
+<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>zb_put_bytes<span class="op">(</span>b<span class="op">,</span> view<span class="op">.</span>data<span class="op">,</span> view<span class="op">.</span>len<span class="op">))</span> Rf_error<span class="op">(</span><span class="st">"zt_build: the cap was reached"</span><span class="op">);</span></span>
+<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a>    out <span class="op">=</span> PROTECT<span class="op">(</span>zb_r_buf_to_raw<span class="op">(</span>b<span class="op">));</span></span>
+<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a>    zb_r_buf_free<span class="op">(</span>ptr<span class="op">);</span></span>
+<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a>    UNPROTECT<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb8-25"><a href="#cb8-25" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
+<span id="cb8-26"><a href="#cb8-26" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>The C API, buffer ownership and the layout kernels are described in the <code>c-api</code> article on the package website.</p>
 </div>
 </div>
