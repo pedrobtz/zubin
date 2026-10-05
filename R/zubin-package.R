@@ -1,4 +1,6 @@
-#' @keywords internal
+#' @keywords package
+#' @seealso [bin_layout()] for the specification of a record and the type
+#'   table; the vignette, `vignette("zubin")`, for a tour.
 "_PACKAGE"
 
 ## usethis namespace: start
