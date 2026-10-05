@@ -1,0 +1,530 @@
+# zubin — Roadmap to 0.1.0 (first CRAN release)
+
+Companion to [design.md](design.md) revision 2. Section references (§) point there.
+[next.md](next.md) holds everything after 0.1.0.
+
+Status: adopted 2026-10-04. Nothing below is implemented; the repository is the `usethis`
+skeleton plus these documents.
+
+## Sequencing principles
+
+1. **The header gate lands before the first header has a consumer**, including zubin's
+   own R glue. Every header is compiled standalone, as C99 and C++11, from the commit that
+   creates it; a header that only ever compiled inside `zubin.so` has never been tested as
+   what it is.
+2. **Ownership and limits land before anything allocates.** The buffer's flags, cap and
+   checked arithmetic (§9) are Stage 2; nothing in a later stage grows memory any other way.
+   zukomp's version of this rule is "limits before the tree".
+3. **The parser lands before the kernels.** Untrusted strings (layout specs) are checked
+   and fuzzed before untrusted bytes are read through them.
+4. **Unpack before pack.** Pack's oracle is unpack; the round-trip property arrives with
+   Stage 5 and every later stage inherits it.
+5. **Byte order is proven at Stage 4, not discovered later.** The s390x leg runs the golden
+   vectors the day the first kernel exists (§15).
+6. **Every stage ends with something runnable and tested**, and a stage is done when its
+   exit criteria pass in CI on all three platforms, not when the code is written.
+7. **Gates need canaries.** A gate is trusted once it has been seen to fail on purpose:
+   a planted symbol, a broken finalizer, a fuzz canary that crashes.
+8. **Change the design in the same commit as the contract.** A stage that changes a
+   decision in §19 edits design.md in that commit, with the roxygen table and the tests
+   that state it.
+
+Sizes are relative: **S** ≈ a sitting, **M** ≈ a few, **L** ≈ the stage is the week.
+
+**Status never goes in a heading.** A heading is `## Stage N — Title · Size` and nothing
+else; the state is the **Status:** line under it. Status words in a heading change its
+GitHub anchor and break every issue that links to it.
+
+**Tracking.** A `v0.1.0` milestone, one umbrella issue, and one `stage`-labelled sub-issue
+per stage linking to its heading here. Close a stage's issue when its exit criteria pass
+and update its **Status:** line in the same PR. Each stage's section gains a **What
+actually happened** block when it closes: what the plan got wrong is the most useful thing
+these files record.
+
+## The release order, and what it costs
+
+zubin's headers include zufast's, so `LinkingTo: zufast` is unconditional and **zufast must
+be on CRAN before zubin can be submitted**. On 2026-10-04 zufast is tagged 0.1.0 and not
+on CRAN. Until it is, `DESCRIPTION` carries `Remotes: pedrobtz/zufast@main` so that
+`setup-r-dependencies` and `pak` resolve it in CI (zuxlsx does the same for three
+siblings), and Stage 9 removes the field. Every stage before 9 can proceed; only the
+submission waits. If zufast's release slips indefinitely, the fallback is to inline the six
+load/store functions zubin uses into `rw.h` under a documented exception to design decision
+13; that is a one-day change and is not planned.
+
+The family order is therefore: zufast 0.1.0 on CRAN, then zubin 0.1.0, then the adoption
+issues of §3.2.
+
+## Working rhythm
+
+One pull request per stage (zucrypt's rhythm): branch `stage-N-<slug>` from `main`;
+`devtools::document()`, `devtools::test()`, `devtools::test(shuffle = TRUE)` and
+`devtools::check(cran = TRUE)` clean at 0/0/0 locally before pushing; the PR body states
+the stage and its exit criteria as a checklist; every CI leg green before merging, not
+"green except the container ones"; then update CLAUDE.md's current-state paragraph and the
+**Status:** line.
+
+Two local traps, known today: roxygen2 on this machine is 8.0.0 and the family pins
+`Config/roxygen2/version: 8.1.0`, so upgrade before the first `document()` or `man/` is
+rewritten; and `devtools::check()` offline NOTEs on the system clock, silenced with
+`_R_CHECK_SYSTEM_CLOCK_=0`.
+
+## Testing strategy, fixed once
+
+Inherited from the family and stated in §16; every stage adds its tests under these rules.
+
+- Self-sufficient tests: inputs built inside each `test_that()`; byte-explicit, as hex
+  strings through `bytes("1a 2b")` in `helper-bytes.R`, never from source-file string
+  literals; `withr::local_seed()` for anything random.
+- Assert on condition classes, never message text; wording is covered by snapshots.
+- Serial testthat, no `Config/testthat/parallel` (§15). `devtools::test(shuffle = TRUE)` is
+  in every stage's definition of done.
+- Helpers: `helper-bytes.R` (`bytes()`, `hex()`), `helper-expect.R`
+  (`expect_roundtrip(layout, df)`, `expect_bytes(x, hex)`, `expect_zubin_error(expr,
+  class, ...)` asserting the condition's fields), `helper-abi.R` from zufast,
+  `helper-skip.R` (`skip_if_no_slow_tests()` on `ZUBIN_SLOW_TESTS`, `skip_heavy()` on
+  `ZUBIN_SKIP_HEAVY` for the gctorture leg, zucbor's pattern).
+- The always-compiled harness `src/zubin_test.c` (§16.3) is the main lever: it drives the
+  headers at caller-chosen sizes, strides, truncation points and caps, and exposes the
+  live-buffer counter.
+- Fixtures: `tests/testthat/fixtures/golden.tsv` (§16.4), read with `colClasses =
+  "character"` (zukomp's trap); generated nothing at test time.
+- CRAN budget: the suite finishes in under a minute; sweeps and 64 MiB buffers behind
+  `ZUBIN_SLOW_TESTS=true`, run in CI.
+
+## CI, and the stage each workflow lands in
+
+Reusable workflows from `pedrobtz/r-actions` at `@v1`, except `coverage.yml`, pinned by
+commit with the tag in a comment, because it holds a write token (zucrypt's rule; the
+skeleton's `coverage.yaml` uses `@v1` today and Stage 0 pins it). Bespoke workflows are
+copied from zufast and adapted. A workflow lands at the stage where it has something to
+check; a job that is green because it inspected nothing is worse than none.
+
+| Workflow | Stage | What it checks |
+|---|---|---|
+| `R-CMD-check.yaml` (exists) | 0 | runners and the CRAN-like containers; quick on PRs, full on `main` and with the `full-ci` label |
+| `coverage.yaml` (exists) | 0 | badge on `main`; `native: true` from Stage 1 |
+| `pkgdown.yaml` (exists) | 0 | the site; `development: mode: auto` |
+| `abi.yaml` | 1 | `tools/check-headers` with GCC and clang on Linux and macOS; `tools/run-symbol-audit` |
+| `native-checks.yaml` | 2 | r-actions sanitizers, valgrind, LTO, gctorture (quick step on PRs, step 20 on `main`), blocking rchk, analyzers |
+| `hardening.yaml` | 3 | `tools/run-fuzz`: canaries, then each libFuzzer target; r-actions `fuzz.yml` with a cached corpus; nightly long runs |
+| `arch.yaml` | 4 | i386, musl, s390x; `error-on: warning`, `require-tests: true`, testthat installed in every leg (zucrypt's finding) |
+| `consumer.yaml` | 7 | `tools/zubintest` on three operating systems, with and without zubin installed |
+| `alloc-failure.yaml` | 8 | r-actions allocation-failure sweep over `bin_put()` and `bin_unpack()`, if the interposer fits; informational first |
+| `vendor.yaml`, `vendor-upstream.yaml` | — | not used: zubin vendors nothing |
+
+CI stands in for win-builder and macbuilder (zukomp's rule): the Windows R-devel and
+macOS release legs are CRAN's own builds under `--as-cran`. Neither builder is a release
+step; both remain available to reproduce a CRAN failure.
+
+## Stage map
+
+| Stage | Size | Needs | Delivers |
+|---|---|---|---|
+| 0 — Package identity and a clean baseline | S | — | a package that checks 0/0/0 with zufast resolved |
+| 1 — Layer 0: status, version, rw, cursor; the header gate | M | 0 | `zubin.h`, `abi.yaml`, `bin_info()`, the harness |
+| 2 — The buffer and the builder | M | 1 | `buf.h`, `zubin-r.h`, `bin_builder()` and friends, `native-checks.yaml` |
+| 3 — Layouts and the spec parser | M | 1 | `layout.h` types and parser, `bin_layout()`, `hardening.yaml` |
+| 4 — Unpack and decode | L | 2, 3 | kernels, `bin_unpack()`, `bin_decode()`, golden vectors, `arch.yaml` |
+| 5 — Pack and encode | M | 4 | inverse kernels, `bin_pack()`, `bin_encode()`, typed `bin_put()`, round trips |
+| 6 — Hexdump and diff | S | 1 | `bin_hexdump()`, `bin_diff()` |
+| 7 — The consumer fixture and the C contract | M | 5 | `tools/zubintest`, `consumer.yaml`, the README recipe, the C-API article |
+| 8 — Hardening, documentation, benchmarks | M | 6, 7 | vignette, WORDLIST, cran-comments, benchmarks, full gates |
+| 9 — Release 0.1.0 | S | 8, and zufast on CRAN | the submission |
+
+Stage 6 is off the critical path and can be done in any spare sitting after Stage 1.
+
+---
+
+## Stage 0 — Package identity and a clean baseline · S
+
+**Status:** not started.
+
+**Goal:** the `usethis` skeleton becomes a package with the right metadata, registration
+and build hygiene, so every later stage is measured against a clean 0/0/0.
+
+**Do**
+
+- `DESCRIPTION`: `Title: Read and Write Structured Binary Data`; a Description naming
+  layouts, vectorised unpack and pack, typed codecs at every width and byte order, the byte
+  builder, and the header-only C API through `LinkingTo`; `Authors@R` Pedro Baltazar
+  (`aut`, `cre`, `cph`); `Depends: R (>= 4.1)`; `LinkingTo: zufast (>= 0.1.0)`;
+  `Remotes: pedrobtz/zufast@main` (development only, see above); `Suggests: bit64, knitr,
+  rmarkdown, testthat (>= 3.0.0), withr`; `VignetteBuilder: knitr`; `Language: en-GB`;
+  `Config/roxygen2/version: 8.1.0` (upgrade roxygen2 first); `URL` and `BugReports`;
+  `Config/testthat/edition: 3` and **no** `Config/testthat/parallel`. No `Copyright:`
+  field: nothing is vendored.
+- `LICENSE` and `LICENSE.md` name the real holder.
+- `.Rbuildignore`: add `^\.agents$`, `^tools$`, `^cran-comments\.md$`,
+  `^vignettes/articles$`, `^CRAN-SUBMISSION$`, `^\.claude$`, and the `src/` patterns for
+  `*.o`, `*.so`, `*.dll`, `*.dylib`; the same object patterns in `.gitignore`.
+- `src/init.c` with `R_registerRoutines()` over an empty table, `R_useDynamicSymbols(dll,
+  FALSE)`, `R_forceSymbols(dll, TRUE)`; delete `src/zubin.c`; `src/Makevars` with
+  `PKG_CPPFLAGS = -I../inst/include`, `PKG_CFLAGS = $(C_VISIBILITY)`, `OBJECTS = init.o`.
+- `R/zubin-package.R` with the `@useDynLib zubin, .registration = TRUE` block;
+  `R/conditions.R` with `zubin_abort()` and `invalid_argument()` in zufast's shape, the call
+  reduced to the function name (§13.7).
+- `NEWS.md`: `# zubin 0.0.0.9000` (a bare "development version" heading is a check NOTE
+  once it is the only one).
+- Replace the template test with `tests/testthat/test-init.R`: the DLL is loaded and
+  registered. An empty `tests/testthat/` beside `tests/testthat.R` is a hard check error.
+- `coverage.yaml`: pin `coverage.yml` by commit with the tag in a trailing comment.
+- `.claude/CLAUDE.md` (not the root, which pkgdown would render): what zubin is, the two
+  documents as the spec, the commands, the naming table, the invariants of §4.5 and §12,
+  and a current-state paragraph that every stage updates.
+
+**Exit**
+
+- `devtools::check(cran = TRUE)` is 0/0/0 locally, apart from the CRAN-incoming
+  version NOTE.
+- `R-CMD-check.yaml` is green on every leg with zufast installed from the `Remotes` field.
+- `NAMESPACE` carries `useDynLib(zubin, .registration = TRUE)`.
+
+**Not this stage:** any header, any C beyond `init.c`.
+
+---
+
+## Stage 1 — Layer 0: status, version, rw, cursor; the header gate · M
+
+**Status:** not started.
+
+**Goal:** the first four headers exist, compile standalone under the gate, and are
+exercised through the package's own shared object; the delivery mechanism of §4 is proven
+before any feature rides on it.
+
+**Do**
+
+- `inst/include/zubin/version.h`, `status.h` (§7), `detail/portability.h` (over zufast's),
+  `rw.h` (§8), `cursor.h` (§10); `inst/include/zubin.h` including them, with the
+  `#error` on `ZUFAST_VERSION_NUMBER < 100`.
+- `tools/check-headers` from zufast, adapted: standalone compiles, `tools/abi/probe-none.c`,
+  `tools/abi/probe-all.c` (every function of these four headers, extended by each later
+  stage), the forbidden-identifier grep; `tools/run-symbol-audit`; `.github/workflows/abi.yaml`.
+- `src/zubin_r.c` with `zubin_info()`; `R/info.R` with `bin_info()` (§13.7).
+- `src/zubin_test.c`: `zubin_test_rw(type, endian, bytes)` and its inverse, driving every
+  `zb_rd_*`/`zb_wr_*`; `zubin_test_cursor(bytes, plan)` reading a sequence of typed fields
+  and reporting the status and position after each.
+- Tests: `test-abi.R` (exports exactly `R_init_zubin`; `bin_info()$zufast` is the pinned
+  version), `test-info.R`, `test-rw.R` (differential against `readBin()`/`writeBin()` for
+  every width and order base R has; f16 and bf16 over all 65 536 patterns against zufast's
+  own conversion and against an R reference), `test-cursor.R` (every truncation point of a
+  mixed record returns `ZB_ERR_EOF` and leaves `pos` unchanged; `seek` and `skip` past the
+  end refuse).
+- `coverage.yaml` gains `native: true`.
+
+**Exit**
+
+- `abi.yaml` green with GCC and clang on Linux and clang on macOS: every header C99 and
+  C++11 clean at `-O0` and `-O2`, both probes warning-free, no R identifier under `zubin/`.
+- `tools/run-symbol-audit` passes, and was seen to fail with a planted `printf`.
+- `test-abi.R` shows exactly `R_init_zubin`.
+- The cursor is unchanged on every failure, at every position, for every type.
+
+**Not this stage:** `buf.h`, `layout.h`, anything a user calls except `bin_info()`.
+
+---
+
+## Stage 2 — The buffer and the builder · M
+
+**Status:** not started.
+
+**Goal:** `zb_buf` with its ownership model, limits and checked growth, the R-owned
+variant in `zubin-r.h`, and the R builder over them; the heap discipline of §12 is in place
+and proven before any kernel allocates.
+
+**Do**
+
+- `inst/include/zubin/buf.h` (§9): the struct and flags, `init`, `alloc`, `borrow`,
+  `release`, `reset`, `detach`, `reserve` with `zb_int_add()`/`zb_int_mul()`/`zb_int_grow()`,
+  `zb_put_bytes()`, `zb_put_zeros()`, `zb_put_raw()`, and the scalar `zb_put_<type><order>()`
+  and vectorised `_n` appends for every type of §8.
+- `inst/include/zubin-r.h` (§12): `zb_r_buf_new()` with the finalizer registered before the
+  buffer exists and `onexit = TRUE`, `zb_r_buf_get()`, `zb_r_buf_borrow()`,
+  `zb_r_buf_to_raw()`. `tools/check-headers` gains the probe that compiles it against R's
+  headers.
+- `R/builder.R`: `bin_builder()`, `bin_put()` for raw input and for `"z"` and `"s<n>"`
+  strings, `bin_reserve()`, `bin_reset()`, `bin_size()` (the generic, with the builder
+  method), `bin_take()`, `as.raw()`, `print()`. Conditions `zubin_limit_error` (`size`,
+  `max`), `zubin_memory_error`, and the finalized-builder error.
+- Harness: `zubin_test_buf_growth(sizes)` reporting reallocation counts;
+  `zubin_test_buf_cap(max, puts)`; `zubin_test_live_buffers()`, the live counter;
+  `zubin_test_put_then_error()` and a put loop long enough to interrupt.
+- Tests: growth from 0 past 64 MiB in `ZUBIN_SLOW_TESTS` with the expected reallocation
+  count; exactly `max` succeeds, `max + 1` is `zubin_limit_error`, the buffer is unchanged
+  and `ZB_BUF_HIT_LIMIT` is set; `bin_take()` empties and keeps capacity; a taken builder
+  accepts new puts; a borrowed buffer cannot grow; `test-lifetime.R`: after an error inside
+  a put and after a `setTimeLimit()` interrupt of a long put loop, the live counter returns
+  to its baseline after `gc()`; `gctorture(TRUE)` over the builder tests.
+- `.github/workflows/native-checks.yaml`: sanitizers, valgrind, LTO, gctorture (quick on
+  PRs), blocking rchk, analyzers, from r-actions.
+
+**Exit**
+
+- Every test above green; `native-checks.yaml` green including rchk.
+- The lifetime test was shown to fail with the finalizer broken, and the PR records it.
+- `abi.yaml` still green with `buf.h` and `zubin-r.h` added to both probes.
+
+**Not this stage:** typed `bin_put(b, x, type = "u32")`, which shares the pack kernels and
+is Stage 5.
+
+---
+
+## Stage 3 — Layouts and the spec parser · M
+
+**Status:** not started.
+
+**Goal:** the layout descriptor and its grammar, parsed without allocating, fuzzed from the
+day it exists, and exposed as the `zubin_layout` object.
+
+**Do**
+
+- `inst/include/zubin/layout.h`: `zb_type`, `zb_field`, `zb_layout` (§11.1);
+  `zb_layout_count_fields()`, `zb_layout_parse()` with every rule of §11.2 and the byte
+  position of each error; the alignment rule of §11.4.
+- `R/layout.R`: `bin_layout()` with the string and named-vector forms, the normalised
+  `spec`, the `fields` data frame, `size`, `align`; methods `print`, `format`, `length`,
+  `names`, `as.data.frame`, `bin_size()`; `zubin_spec_error` with `position`.
+- Harness: `zubin_test_layout(spec, endian, align)` returning the C-side field table, so
+  the R object and the C parse are compared field by field; `zubin_test_struct_offsets()`
+  returning `offsetof()` and `sizeof()` for a dozen C structs compiled into the harness, the
+  oracle for `align = TRUE`.
+- `tools/fuzz/fuzz_layout.c` over the parser, `tools/fuzz/canary.c`, `tools/run-fuzz`
+  (canaries first, exit status captured, not a pipe's); `.github/workflows/hardening.yaml`
+  with the r-actions `fuzz.yml` and a cached corpus; seeds from every example in design
+  §11.2 and §13.8.
+- Tests: one test per grammar rule and per error, each asserting the class and the
+  position; the WAV, BMP, PNG IHDR, Java class, CFB and ITCH layouts' sizes and offsets
+  against their specifications; alignment against the harness oracle; the named-vector form
+  equals the string form; a `zubin_layout` passes through unchanged; `print` snapshot.
+
+**Exit**
+
+- Every grammar rule and error has a test; `abi.yaml` green with `layout.h` in the probes.
+- `hardening.yaml` green: the canary crashed, `fuzz_layout` ran ten minutes on the PR with
+  no finding.
+- The alignment oracle agrees on every struct, on all three operating systems.
+
+**Not this stage:** reading or writing a single byte through a layout.
+
+---
+
+## Stage 4 — Unpack and decode · L
+
+**Status:** not started.
+
+**Goal:** the field-major kernels, `bin_unpack()` and `bin_decode()`, the whole §13.1 type
+model in the reading direction, and the golden vectors proven on a big-endian host.
+
+**Do**
+
+- `layout.h`: the unpack kernels of §11.5 with the column-major array rule.
+- `src/zubin_r.c`: `zubin_unpack()` and `zubin_decode()`: argument re-validation in C,
+  bounds checks with offsets, one column allocated per field, `R_CheckUserInterrupt()`
+  between fields, `b<n>` into a list of raw, `s<n>` through `zuf_utf8_valid()` into
+  `CE_UTF8`/`CE_LATIN1`/`CE_BYTES` CHARSXPs made in one function, the `integer64` class on
+  request, the `i32` NA rule.
+- `R/unpack.R`, `R/decode.R`: `bin_unpack()` and `bin_decode()` with every argument of
+  §13.3–§13.4; the data frame assembly with `I()` on byte columns; conditions
+  `zubin_bounds_error` (`offset`, `length`), `zubin_range_error` (`field`, `index`),
+  `zubin_encoding_error` (`field`, `index`).
+- `tests/testthat/fixtures/golden.tsv`: spec, hex, expected values, source, for the formats
+  of §16.4 and for every `readBin()` width.
+- Harness: `zubin_test_unpack_kernel(bytes, spec, n, stride)` driving each kernel directly,
+  including odd strides and `n = 0`.
+- `tools/fuzz/fuzz_unpack.c`: a spec and bytes; every field of every whole record is
+  decoded; nothing may crash or read out of bounds.
+- Tests: one per §13.1 row in the reading direction, including every error in the row;
+  golden vectors; `offset`, `n`, `stride`, trailing bytes, explicit `n` past the end; array
+  fields as matrices and as expanded columns; empty input; a 2^31 + 16 byte raw decoded in
+  `ZUBIN_SLOW_TESTS`; the interrupt test (`setTimeLimit()` inside the unpack expression,
+  behind `skip_heavy()`), after which the same input unpacks in full; Markus Kuhn's UTF-8
+  cases through `s<n>`.
+- `.github/workflows/arch.yaml` from zufast's: i386, musl, s390x, with testthat installed
+  and `error-on: warning`, `require-tests: true`. Dispatch it by hand and record the test
+  counts in the PR.
+
+**Exit**
+
+- The golden vectors decode identically on every `R-CMD-check` leg and on i386, musl and
+  s390x; the arch legs report a non-zero test count.
+- Every §13.1 row has a reading test; `fuzz_unpack` ran ten minutes with no finding.
+- Sanitizers, valgrind and rchk clean over the new code; the interrupt test passes.
+
+**Not this stage:** writing.
+
+---
+
+## Stage 5 — Pack and encode · M
+
+**Status:** not started.
+
+**Goal:** the inverse kernels with range and NA checks, `bin_pack()`, `bin_encode()` and
+typed `bin_put()`, and the round-trip properties that make every later change cheap to
+trust.
+
+**Do**
+
+- `layout.h`: the pack kernels of §11.5 with `*bad`; `zb_pack_zeros()` for padding and
+  alignment gaps.
+- `src/zubin_r.c`: `zubin_pack()` (one exact-size `RAWSXP`, zeros first, then each field),
+  `zubin_encode()`, and `zubin_put_typed()` into a builder through `zb_put_raw()` plus the
+  same kernels, so there is one conversion path.
+- `R/pack.R`, `R/encode.R`, `R/builder.R`: `bin_pack()` with named vectors or one frame,
+  the recycling rule of §14.5, `integer64` input by class; `bin_encode()`; `bin_put()`
+  gains `type`; `zubin_na_error` (`field`, `index`).
+- `tools/fuzz/fuzz_buf.c`: an input-driven sequence of typed puts, resets and reserves
+  against a tiny cap; `len <= cap <= max` and the flag hold after every step.
+- Tests: one per §13.1 row in the writing direction, including every error; `bin_pack()`
+  twice gives identical bytes and no byte is uninitialised (valgrind leg); round trips
+  `expect_roundtrip(layout, df)` over generated layouts and frames under
+  `withr::local_seed()`; `bin_encode(bin_decode(b, t), t)` is `b` for every type over random
+  bytes; f16 and bf16 exhaustive in both directions; differential against `writeBin()`;
+  `bin_put(b, x, "u32")` equals `bin_put(b, bin_encode(x, "u32"))`; recycling that does not
+  divide is an error.
+
+**Exit**
+
+- Every §13.1 row has tests in both directions; the roxygen table, design §13.1 and the
+  tests agree.
+- Round-trip properties green on every platform; `fuzz_buf` ran ten minutes with no
+  finding; valgrind reports no uninitialised byte in packed output.
+
+**Not this stage:** any new field type.
+
+---
+
+## Stage 6 — Hexdump and diff · S
+
+**Status:** not started.
+
+**Goal:** `bin_hexdump()` and `bin_diff()` (§13.6), used from here on in every example and
+test that shows bytes.
+
+**Do**
+
+- `src/zubin_r.c`: `zubin_hexdump()` formatting lines in C (offset, hex groups, ASCII
+  column) with `offset`, `n`, `width`; `zubin_diff()` returning the first `n` differing
+  offsets and both bytes.
+- `R/hexdump.R`: `bin_hexdump()` returning a `zubin_hexdump` character vector with a
+  `print` method; `bin_diff()` returning a data frame with the two lengths as attributes.
+- Tests: snapshots for a known 64-byte input at widths 8 and 16 and at a non-zero offset;
+  `n` beyond the end; empty input; `bin_diff()` on equal, prefix, and differing inputs.
+
+**Exit**
+
+- Snapshots green on all three operating systems (line endings included).
+
+---
+
+## Stage 7 — The consumer fixture and the C contract · M
+
+**Status:** not started.
+
+**Goal:** the header-only delivery is proven by a package in the exact shape every consumer
+will have, with and without zubin installed, on three operating systems.
+
+**Do**
+
+- `tools/zubintest` (§16.5): `LinkingTo: zubin, zufast`, no `Imports`, `useDynLib` only;
+  two translation units including `<zubin.h>`, one including `<zubin-r.h>`; a suite that
+  parses a layout, unpacks a record, builds a buffer through `zb_r_buf_new()`, borrows a raw
+  vector, and reads it with a cursor.
+- `.github/workflows/consumer.yaml` from zufast's: install zufast and zubin, then the
+  fixture; `R CMD check --as-cran` of the fixture must show `checking compiled code ... OK`
+  and no ERROR or WARNING; run its tests; `nm` shows no global `zb_` or `zuf_` symbol in
+  its shared object; move zubin out of the library path with `R_LIBS_USER='-'` and run the
+  tests again.
+- `README.md`: the full consumer recipe, "Using zubin from C", followed verbatim by the
+  fixture; `vignettes/articles/c-api.Rmd` (pkgdown-only): §4, §5, §9–§12 for a package
+  author, quoting the fixture rather than inventing examples.
+- `tools/abi/probe-all.c` covers every public function now in the headers.
+
+**Exit**
+
+- `consumer.yaml` green on Linux, macOS and Windows, including the zubin-uninstalled step.
+- The README recipe and the fixture's `DESCRIPTION`, `NAMESPACE` and `Makevars` agree
+  line for line.
+
+---
+
+## Stage 8 — Hardening, documentation, benchmarks · M
+
+**Status:** not started.
+
+**Goal:** everything a user, a CRAN reviewer or a sanitizer reads or runs is in place and
+matches the code.
+
+**Do**
+
+- The shipped vignette `vignettes/zubin.Rmd`: layouts, `bin_unpack()` and `bin_pack()`,
+  `bin_decode()` and `bin_encode()`, the builder, `bin_hexdump()`, the WAV and big-endian
+  examples of §13.8 executed into `tempfile()`s, the alignment example, and the type model
+  table.
+- Roxygen: `?bin_layout` carries the §11.2 grammar and the §13.1 table; every function
+  states "offsets are 0-based" in its first paragraph where it takes one; runnable examples
+  on every export; pkgdown reference index grouped into layouts, records, codecs, builder,
+  inspection, package.
+- `inst/WORDLIST` through `spelling::update_wordlist()`; `urlchecker::url_check()`;
+  the `cran-extrachecks` and `review-cran-submission` passes.
+- `tools/benchmarks.R` and `tools/run-benchmarks` against the baselines of §17;
+  `.agents/benchmarks.md` with first results on this machine and one Linux x86-64 runner.
+- Gates at full strength: a `full-ci` run (gctorture step 20); the nightly fuzz schedule
+  enabled; `alloc-failure.yaml` added if r-actions' interposer reaches `zb_buf_reserve()`
+  (`target-pattern: ZB_ERR_MEMORY`), informational until it reads clean.
+- `cran-comments.md` as a first submission: only checks that have run; one paragraph on the
+  header-only C API and the `LinkingTo` consumer shape; nothing about vendored code.
+- `NEWS.md` 0.1.0 entry: the fourteen functions, the C headers and their contract, the
+  explicit non-goals, the pointer to next.md's items.
+- CLAUDE.md current state; `.agents/design.md` amended wherever Stages 1–7 found it wrong.
+
+**Exit**
+
+- Every deliverable of design §18 except criterion 9 is met and linked from the PR.
+- Each fuzz target has accumulated an hour; each canary was seen to crash.
+- `devtools::check(cran = TRUE)` 0/0/0 on all three platforms; spelling and URLs clean.
+
+---
+
+## Stage 9 — Release 0.1.0 · S
+
+**Status:** not started.
+
+**Entry:** zufast 0.1.0 is on CRAN.
+
+**Do**
+
+- Remove `Remotes:`; keep `LinkingTo: zufast (>= 0.1.0)`; `Version: 0.1.0` and the
+  `NEWS.md` heading together.
+- A green run of every workflow on the release commit: that run is the win-builder and
+  macbuilder result (zukomp's rule).
+- Submit (the maintainer's step); answer reviewers; on acceptance tag `v0.1.0`, publish the
+  GitHub release, move `main` to `0.1.0.9000` with a matching NEWS heading.
+- File the adoption issues of design §3.2 (zuhttp, zucbor, zuxlsx, rdz) and link them from
+  the README; propose zubin's cells for the family table at the next all-repository change.
+
+**Exit:** zubin 0.1.0 on CRAN; `main` at `0.1.0.9000`; the issues filed.
+
+---
+
+## Acceptance criteria against stages
+
+| Design §18 criterion | Stage | Verified by |
+|---|---|---|
+| 1 headers compile standalone; probes clean; `zubin-r.h` against R | 1, 2 | `abi.yaml` |
+| 2 `zubin.so` exports exactly `R_init_zubin` | 1 | `test-abi.R` |
+| 3 fixture builds, checks clean, runs without zubin | 7 | `consumer.yaml` |
+| 4 every type-model row tested; golden vectors identical on s390x | 4, 5 | `test-unpack.R`, `test-pack.R`, `arch.yaml` |
+| 5 round trips; f16/bf16 exhaustive | 1, 5 | `test-rw.R`, `test-roundtrip.R` |
+| 6 lifetime test fails with the finalizer broken | 2 | `test-lifetime.R`, the PR record |
+| 7 an hour of fuzzing per target; canaries crashed | 3, 4, 5, 8 | `hardening.yaml` |
+| 8 check 0/0/0 on three platforms; shuffled; gctorture | 0–8 | `R-CMD-check.yaml`, `native-checks.yaml` |
+| 9 zufast on CRAN; no `Remotes:` | 9 | the submission |
+
+## Explicitly not in 0.1.0
+
+Variable-length fields, a cursor-style reader from R, byte search and splitting, views,
+memory mapping, connections, serialisation streams and object hashing, the nanoarrow
+bridge, bitfields, `blob` and `float` outputs, a `bigint` for `u64`, zero-copy
+`bin_take()`. Each is in [next.md](next.md) with the trigger that admits it. None is made
+harder by shipping 0.1.0 first: every one is an addition to the headers and a new function
+in R.
