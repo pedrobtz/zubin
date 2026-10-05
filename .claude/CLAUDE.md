@@ -33,15 +33,15 @@ commit.
 
 ## Current state
 
-Stages 0–5 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
+Stages 0–6 are done. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
 (layout.h: types, spec parser, unpack and pack kernels), plus `zubin-r.h`. Gates:
 `abi.yaml`, `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml` (`fuzz_layout`,
 `fuzz_unpack`, `fuzz_buf`), `arch.yaml` (i386, musl, s390x). R API: `bin_info()`,
 `bin_layout()`, `bin_size()`, `bin_unpack()`, `bin_pack()`, `bin_decode()`, `bin_encode()`,
-and the builder (`bin_builder()`, `bin_put()` raw/typed/`"z"`/`"s<n>"`, `bin_reserve()`,
-`bin_reset()`, `bin_take()`, `as.raw()`). `zufast` comes from
+the builder (`bin_builder()`, `bin_put()` raw/typed/`"z"`/`"s<n>"`, `bin_reserve()`,
+`bin_reset()`, `bin_take()`, `as.raw()`), and `bin_hexdump()`/`bin_diff()`. `zufast` comes from
 `Remotes: pedrobtz/zufast@main` until Stage 9; workflows that cannot resolve `Remotes`
-(rchk, fuzzing, arch) fetch zufast themselves. Next: Stage 6, hexdump and diff.
+(rchk, fuzzing, arch) fetch zufast themselves. Next: Stage 7, the consumer fixture and the C contract.
 
 In C, `zb_field.count` is the byte width for `b`, `s` and `x` fields; the element count of a
 column is 1 for them.
