@@ -21,6 +21,15 @@ jobs:
     with:
       # Quick on each push to a pull request, full after merge. The
       # `full-ci` label runs the full set on a pull request before merging.
+      # r-actions' default runners, plus Windows on R-devel: CRAN checks
+      # Windows on R-devel, and nothing else in CI does (the containers are
+      # Linux). Win-builder remains available to reproduce a CRAN failure.
+      runners: >-
+        [{"os": "macos-latest", "r": "release"},
+         {"os": "windows-latest", "r": "release"},
+         {"os": "windows-latest", "r": "devel"},
+         {"os": "ubuntu-latest", "r": "release"},
+         {"os": "ubuntu-latest", "r": "oldrel-1"}]
       profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
       # The full profile also runs the sweeps and the big inputs (a raw
       # vector above 2^31 bytes, growth past 64 MiB): roadmap, testing strategy.

@@ -17,7 +17,8 @@ zubin `LinkingTo`s zufast, which is on CRAN (version 0.1.0).
 
 The checks below ran on the release commit in the package's continuous integration.
 
-* GitHub Actions: macOS (R release), Windows (R release), Ubuntu (R release and oldrel-1).
+* GitHub Actions: macOS (R release), Windows (R release and R-devel), Ubuntu (R release
+  and oldrel-1).
 * R-hub containers with CRAN's compilers: clang 23, Ubuntu clang, Ubuntu GCC 16.
 * 32-bit i386 and musl (Alpine), and big-endian s390x under QEMU.
 * UBSan and ASan (GCC and clang), valgrind, LTO, `gctorture`, rchk, and GCC's
