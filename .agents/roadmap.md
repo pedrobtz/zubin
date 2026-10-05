@@ -700,8 +700,8 @@ matches the code.
 **Status:** prepared, waiting for zufast on CRAN (checked 2026-10-05: not there). The branch
 `stage-9-release` holds the release commit: `Version: 0.1.0` with `version.h` and the NEWS
 heading, no `Remotes:`, the CRAN install in the README, and rchk and the arch legs
-resolving zufast from CRAN. Rebase it on `main`, open its PR with `full-ci`, run
-`devtools::check_win_devel()`, and once every leg is green, submit.
+resolving zufast from CRAN. Rebase it on `main`, open its PR with `full-ci`, and once
+every leg is green (that run is the win-builder and macbuilder result), submit.
 
 **Entry:** zufast 0.1.0 is on CRAN.
 
