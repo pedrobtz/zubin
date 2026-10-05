@@ -7,6 +7,9 @@ one record.
 
 ``` r
 bin_size(x, ...)
+
+# S3 method for class 'zubin_layout'
+bin_size(x, ...)
 ```
 
 ## Arguments
@@ -21,7 +24,7 @@ bin_size(x, ...)
 
 ## Value
 
-A double for a builder.
+A double for a builder; an integer for a layout.
 
 ## Examples
 

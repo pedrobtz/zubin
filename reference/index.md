@@ -10,6 +10,8 @@
   : A growable byte buffer
 - [`bin_info()`](https://pedrobtz.github.io/zubin/reference/bin_info.md)
   : Information about the compiled zubin headers
+- [`bin_layout()`](https://pedrobtz.github.io/zubin/reference/bin_layout.md)
+  : Describe a binary record
 - [`bin_put()`](https://pedrobtz.github.io/zubin/reference/bin_put.md) :
   Append bytes or strings to a builder
 - [`bin_size()`](https://pedrobtz.github.io/zubin/reference/bin_size.md)
