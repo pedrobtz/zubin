@@ -35,6 +35,9 @@ pak::pak("pedrobtz/zubin")
   : Read a vector of one type from bytes
 - [`bin_encode()`](https://pedrobtz.github.io/zubin/reference/bin_encode.md)
   : Write a vector of one type to bytes
+- [`bin_hexdump()`](https://pedrobtz.github.io/zubin/reference/bin_hexdump.md)
+  [`bin_diff()`](https://pedrobtz.github.io/zubin/reference/bin_hexdump.md)
+  : Show bytes as a hex dump, and find where two raw vectors differ
 - [`bin_info()`](https://pedrobtz.github.io/zubin/reference/bin_info.md)
   : Information about the compiled zubin headers
 - [`bin_layout()`](https://pedrobtz.github.io/zubin/reference/bin_layout.md)
