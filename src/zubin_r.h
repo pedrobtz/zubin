@@ -17,6 +17,7 @@ extern long zubin_int_live_buffers;
 
 /* zubin_r.c: shared with the harness */
 SEXP zubin_int_status(zb_status st, R_xlen_t index);
+SEXP zubin_int_failure(const char *name, R_xlen_t index, int field);
 int zubin_int_size(SEXP x, size_t *out);
 zb_status zubin_int_parse(SEXP spec, int big, int align, uint32_t max_fields,
                           zb_layout *out, size_t *err_pos);
@@ -31,6 +32,8 @@ SEXP zubin_builder_reserve(SEXP ptr, SEXP n);
 SEXP zubin_builder_reset(SEXP ptr);
 SEXP zubin_builder_take(SEXP ptr, SEXP reset);
 SEXP zubin_layout_parse(SEXP spec, SEXP big, SEXP align);
+SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP stride,
+                  SEXP int64, SEXP allow_na, SEXP encoding);
 
 /* zubin_test.c */
 SEXP zubin_test_status_string(SEXP codes);
@@ -47,5 +50,6 @@ SEXP zubin_test_put_then_error(void);
 SEXP zubin_test_put_loop(SEXP chunk, SEXP times);
 SEXP zubin_test_layout(SEXP spec, SEXP big, SEXP align, SEXP max_fields);
 SEXP zubin_test_struct_offsets(void);
+SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride);
 
 #endif /* ZUBIN_R_H */

@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [layout]
+        target: [layout, unpack]
     uses: pedrobtz/r-actions/.github/workflows/fuzz.yml@2677abce7451ed039a46f7b75d93cc9a6cb5622d # feat/github-packages
     with:
       harness: tools/fuzz/fuzz_${{ matrix.target }}.c

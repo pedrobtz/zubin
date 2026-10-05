@@ -539,11 +539,11 @@ compiler vectorises, and the output is exactly an R column.
 
 ```c
 /* Reads n records starting at base with the given stride, one field into one column. */
-static inline zb_status zb_unpack_i32 (const uint8_t *base, size_t n, size_t stride, const zb_field *f, int32_t *dst, int allow_na);  /* u8 i8 u16 i16 i32 bool */
-static inline void      zb_unpack_f64 (const uint8_t *base, size_t n, size_t stride, const zb_field *f, double *dst);                /* u32 f16 bf16 f32 f64 */
-static inline zb_status zb_unpack_i64 (const uint8_t *base, size_t n, size_t stride, const zb_field *f, int64_t *dst);               /* i64; u64 while < 2^63 */
+static inline zb_status zb_unpack_i32 (const uint8_t *base, size_t n, size_t stride, const zb_field *f, int32_t *dst, int allow_na, size_t *bad);  /* u8 i8 u16 i16 i32 bool */
+static inline zb_status zb_unpack_f64 (const uint8_t *base, size_t n, size_t stride, const zb_field *f, double *dst);                /* u32 f16 bf16 f32 f64 */
+static inline zb_status zb_unpack_i64 (const uint8_t *base, size_t n, size_t stride, const zb_field *f, int64_t *dst, size_t *bad);  /* i64; u64 while < 2^63 */
 static inline zb_status zb_unpack_f64x(const uint8_t *base, size_t n, size_t stride, const zb_field *f, double *dst, size_t *bad);   /* i64 u64 -> double, exact or ZB_ERR_RANGE at *bad */
-static inline void      zb_unpack_bytes(const uint8_t *base, size_t n, size_t stride, const zb_field *f, uint8_t *dst);              /* b s: n * size contiguous */
+static inline zb_status zb_unpack_bytes(const uint8_t *base, size_t n, size_t stride, const zb_field *f, uint8_t *dst);              /* b s: n * size contiguous */
 
 /* The inverses. *bad receives the index of the first value that does not fit. */
 static inline zb_status zb_pack_i32  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const int32_t *src, int allow_na, size_t *bad);
@@ -557,6 +557,13 @@ Array fields (`count > 1`) are written **column-major**: element k of record i l
 `dst[k * n + i]`, which is R's matrix layout, so the R glue hands the kernel a matrix's
 data pointer and nothing is transposed afterwards. The kernels never see a `SEXP`; they are
 what a C consumer calls to decode a block of records into its own arrays.
+
+Every unpack kernel returns a status (Stage 4): `ZB_ERR_INVALID` for a field of a type the
+kernel does not read, so a consumer that dispatches wrongly is told rather than handed
+garbage; and every kernel that can refuse a value writes the index of the first record
+holding one to `*bad`. The `i32` kernel's refusal of −2^31 is `ZB_ERR_RANGE`, the same as
+the other reading refusals. The kernels do not bounds-check: the caller has proved that the
+last record ends inside the buffer, `offset + (n − 1) × stride + size ≤ length`.
 
 ## 12. `zubin-r.h` — SEXP glue
 
@@ -785,8 +792,11 @@ name or default to.
 
 `NA` has no byte representation except for `i32` (`INT_MIN`) and `f64` (R's NaN payload).
 Writing an `NA` anywhere else is `zubin_na_error`; reading `INT_MIN` into `i32` is an error
-by default because a file that happens to contain `-2147483648` would otherwise acquire a
-missing value silently. `na = "allow"` turns both directions on for `i32` and nothing else.
+by default (`zubin_range_error`) because a file that happens to contain `-2147483648` would
+otherwise acquire a missing value silently. `na = "allow"` turns both directions on for
+`i32`. The same holds for `i64` read with `int64 = "integer64"`: bit64 uses −2^63 as
+`NA_integer64_`, so reading it is an error unless `na = "allow"` (found at Stage 1, decided at
+Stage 4).
 
 ### 14.4 Range and exactness
 
@@ -805,7 +815,7 @@ flag); the strict rule is vctrs', not base R's silent partial recycling.
 
 `s<n>` is a C string in a fixed field: on read, bytes up to the first NUL or the field
 width, whichever is first, validated as UTF-8 through `zuf_utf8_valid()` and marked
-`CE_UTF8`; invalid bytes are `zubin_encoding_error` unless `encoding = "latin1"` (marked
+`CE_UTF8` (R marks an all-ASCII string native, as it does any); invalid bytes are `zubin_encoding_error` unless `encoding = "latin1"` (marked
 `CE_LATIN1`, any bytes valid) or `encoding = "bytes"` (marked `CE_BYTES`). On write, the
 string's bytes (through `enc2utf8()`) padded with NULs to the width; longer is a range
 error; `NA_character_` is an NA error. A field that must preserve interior NULs or exact
