@@ -15,8 +15,9 @@ when it is submitted).
   `bin_info()`.
 * `bin_serialize()` appends R's serialization of an object to a builder, without first
   allocating it as a raw vector; `bin_unserialize()` reads one from a raw vector at a 0-based
-  offset; `bin_hash_object()` gives an XXH3 fingerprint of an object that does not change
-  with the R version, streamed so that the serialization is never allocated (#25).
+  offset; `bin_hash_object()` gives an XXH3 fingerprint of an object's serialization, without
+  the header that records the R version, streamed so that the serialization is never
+  allocated (#25).
 * Nothing is silently wrong: a value that does not fit its field, an `NA` with no bytes, a
   64-bit integer that a double cannot hold exactly, and a string that is not UTF-8 are each
   a classed error naming the field and the 0-based record (`?zubin-conditions`).

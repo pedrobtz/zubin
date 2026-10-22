@@ -4,8 +4,8 @@
 # the runs where the failure reached zubin's allocator and came back as a
 # zubin_memory_error. Informational: weekly and by hand, never on a pull
 # request, until it reads clean. Its first run found four crashes, all inside
-# R's regex engine (grepl() under bin_put()) rather than in zubin; bin_put()
-# no longer uses a regex.
+# R's regex engine (grepl() under bin_put()) rather than in zubin; neither
+# bin_put() nor type_layout(), which typed bin_put() reaches, uses one now.
 on:
   schedule:
     - cron: "37 4 * * 3"

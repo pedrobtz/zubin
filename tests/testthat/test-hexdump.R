@@ -62,3 +62,8 @@ test_that("equal inputs and a prefix have no differing bytes, only lengths", {
   expect_error(bin_diff(a, 1:3), class = "zubin_invalid_argument")
   expect_error(bin_diff(a, a, n = -1), class = "zubin_invalid_argument")
 })
+
+test_that("a huge n on tiny inputs allocates for the inputs, not for n", {
+  d <- bin_diff(bytes("01 02"), bytes("01 03"), n = 2^52)
+  expect_identical(d$offset, 1)
+})

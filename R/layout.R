@@ -168,7 +168,7 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
     offset = res$offset, endian = endian, stringsAsFactors = FALSE
   )
   # the order the spec itself declares, when it declares one
-  prefix <- substr(sub("^[[:space:]]+", "", text), 1L, 1L)
+  prefix <- spec_prefix(text)
   if (prefix == "<") big <- FALSE
   if (prefix == ">") big <- TRUE
   if (prefix == "=") big <- bin_info()$endian == "big"
@@ -181,6 +181,15 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
     ),
     class = "zubin_layout"
   )
+}
+
+# The first character of text that is not a space, as the C parser counts
+# spaces; "" when there is none. No regular expression, since every typed
+# bin_put() comes through here (see type_layout()).
+spec_prefix <- function(text) {
+  b <- charToRaw(text)
+  b <- b[!b %in% as.raw(c(9:13, 32L))]
+  if (length(b)) rawToChar(b[1L]) else ""
 }
 
 # The canonical spec: the default order as a prefix, every value field

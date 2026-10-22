@@ -99,9 +99,12 @@ bin_decode <- function(x, type, offset = 0, n = NULL,
 }
 
 # A one-field layout for a single type token, or an error naming `type`.
+# No regular expression: the allocation-failure sweep found R's regex engine
+# segfaulting when an allocation inside grepl() fails. The characters are
+# checked here, so the token cannot smuggle in a second field; the grammar
+# is the native parser's.
 type_layout <- function(type, endian, call = sys.call(-1L)) {
-  if (!is.character(type) || length(type) != 1L || is.na(type) ||
-        !grepl("^[a-z]+[0-9]*(\\.(le|be))?$", type) || grepl("^x", type)) {
+  if (!is_type_token(type)) {
     invalid_argument("`type` must be one type token, such as \"u32\", \"f64.be\" or \"s16\".",
                      arg = "type", call = call)
   }
@@ -111,6 +114,15 @@ type_layout <- function(type, endian, call = sys.call(-1L)) {
       invalid_argument(sprintf("Unknown `type` \"%s\".", type), arg = "type", call = call)
     }
   )
+}
+
+# One string of lower-case letters, digits and dots that starts with a
+# letter other than x (padding has no value to read or write).
+is_type_token <- function(type) {
+  if (!is.character(type) || length(type) != 1L || is.na(type)) return(FALSE)
+  ch <- utf8ToInt(type)   # NA when type is not valid UTF-8
+  length(ch) > 0L && !anyNA(ch) && ch[1L] >= 97L && ch[1L] <= 122L && ch[1L] != 120L &&
+    all((ch >= 97L & ch <= 122L) | (ch >= 48L & ch <= 57L) | ch == 46L)
 }
 
 unpack_columns <- function(x, layout, offset, n, stride, int64, na, encoding,

@@ -137,6 +137,7 @@ it if a parallel user asks.
 | `bigint` for `u64` | an exact class for values at or above 2^63, following `zuyaml_bigint` / `cbor_bigint` | someone has such a file | 0.1.0 |
 | POD in a `RAWSXP` | `zb_pod_alloc()`, `zb_pod_ptr()`, `zb_pod_check()`: plain-old-data state in a raw vector instead of an external pointer; copy-on-modify and serialisation for free; alignment and pointer caveats stated | a family package wants finaliser-free state | `zubin-r.h` |
 | `bin_write()` in place | write one field into a copy of a raw vector at an offset | a patching use case | 0.1.0 |
+| canonical object hash | a serialisation owned and versioned by zubin for a stated subset of objects (atomic vectors, lists, attributes), so that `bin_hash_object()`'s digest can be a durable content address across R versions; 0.1.0 hashes R's own serialisation body and promises no more (design §13.9, #31) | a user keys persistent storage by the digest | 0.1.0 |
 | varints, zigzag, CRC32 | **zufast's**, on its §25 list; zubin's cursor and builder wrap them (`zb_cur_varint_u64()`, `zb_put_varint_u64()`) | a protobuf-shaped or Parquet-footer reader; rdz | zufast |
 
 ## 1.0.0 — The freeze

@@ -29,11 +29,23 @@ A raw vector of \code{length(x)} times the type's width.
 \code{bin_encode()} writes every element of \code{x} as \code{type}, in \code{endian} order:
 \code{\link[=writeBin]{writeBin()}} generalised to every width and both byte orders, rounding to
 f16, bf16 and f32 to nearest even, and refusing, never truncating, an
-integer that does not fit. \code{bin_encode(bin_decode(b, t), t)} is \code{b}.
+integer that does not fit.
+}
+\details{
+\code{bin_encode(bin_decode(b, t), t)} is \code{b} when \code{b} is the canonical
+encoding of its values, which every encoding of a number is, with three
+exceptions. A \code{bool} byte other than 00 or 01 reads as \code{TRUE} and writes
+back as 01. An \verb{s<n>} reads up to its first NUL, so the bytes after it
+write back as NULs. And an \code{i64} or \code{u64} beyond 2^53 does not decode as
+a double at all: ask for \code{int64 = "integer64"}. A NaN keeps its payload
+through \code{f64}, but the narrower floats may not.
 }
 \examples{
 bin_encode(c(1, 2, 65535), "u16")
 bin_encode(1:3, "i32", endian = "big")
 bin_encode(c(0.1, 1e5), "f16")
 try(bin_encode(300, "u8"))
+
+# bytes that are not the canonical encoding do not survive a round trip
+bin_encode(bin_decode(as.raw(2), "bool"), "bool")
 }

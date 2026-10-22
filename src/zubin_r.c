@@ -175,15 +175,16 @@ SEXP zubin_builder_put_raw(SEXP ptr, SEXP x)
 
 /* Appends strings: width < 0 is "z" (the UTF-8 bytes and a NUL), width >= 0
    is "s<width>" (NUL-padded to width; longer is ZB_ERR_RANGE). NA is
-   ZB_ERR_NA. Everything is checked before anything is written. */
+   ZB_ERR_NA. Everything is checked before anything is written, the bytes
+   are filled past the builder's end, and its length moves only once they
+   all are: an error or an interrupt from R on the way appends nothing. */
 SEXP zubin_builder_put_str(SEXP ptr, SEXP x, SEXP width)
 {
     zb_buf *b = builder(ptr);
     R_xlen_t i, n;
-    size_t total = 0, w = 0;
+    size_t total = 0, w = 0, done = 0, since = 0;
     int z;
     zb_status st;
-    uint8_t *slot;
     const void *vmax = vmaxget();
     if (!b || TYPEOF(x) != STRSXP || TYPEOF(width) != INTSXP || XLENGTH(width) != 1)
         return zubin_int_status(ZB_ERR_INVALID, -1);
@@ -204,24 +205,23 @@ SEXP zubin_builder_put_str(SEXP ptr, SEXP x, SEXP width)
         }
     }
     if (!z && zb_int_mul((size_t)n, w, &total)) return zubin_int_status(ZB_ERR_MEMORY, -1);
-    slot = zb_put_raw(b, total);
-    if (!slot) {
-        st = zb_buf_reserve(b, total);
-        return zubin_int_status(st ? st : ZB_ERR_MEMORY, -1);
-    }
+    st = zb_buf_reserve(b, total);
+    if (st) return zubin_int_status(st, -1);
     for (i = 0; i < n; i++) {
         const char *c = Rf_translateCharUTF8(STRING_ELT(x, i));
-        size_t len = strlen(c);
+        size_t len = strlen(c), step = z ? len + 1 : w;
+        uint8_t *slot = b->data + b->len + done;
         memcpy(slot, c, len);
-        if (z) {
-            slot[len] = 0;
-            slot += len + 1;
-        } else {
-            memset(slot + len, 0, w - len);
-            slot += w;
-        }
+        memset(slot + len, 0, step - len);
+        done += step;
+        since += step;
         vmaxset(vmax);
+        if (since >= ZUBIN_INTERRUPT_BYTES) {
+            since = 0;
+            R_CheckUserInterrupt();
+        }
     }
+    b->len += total;
     return R_NilValue;
 }
 
@@ -712,9 +712,12 @@ SEXP zubin_diff(SEXP a, SEXP b, SEXP n)
     la = (size_t)XLENGTH(a);
     lb = (size_t)XLENGTH(b);
     common = la < lb ? la : lb;
+    /* no more than common offsets can differ, whatever n asks for */
+    if (max > common) max = common;
     at = (size_t *)R_alloc(max ? max : 1, sizeof(size_t));
     for (i = 0; i < common && found < max; i++) {
         if (RAW(a)[i] != RAW(b)[i]) at[found++] = i;
+        if (i % ZUBIN_INTERRUPT_BYTES == ZUBIN_INTERRUPT_BYTES - 1) R_CheckUserInterrupt();
     }
     out = PROTECT(Rf_mkNamed(VECSXP, names));
     off = Rf_allocVector(REALSXP, (R_xlen_t)found); SET_VECTOR_ELT(out, 0, off);
@@ -731,29 +734,21 @@ SEXP zubin_diff(SEXP a, SEXP b, SEXP n)
 
 /* ---- serialization streams (Stage 10) --------------------------------------- */
 
-static void count_sink(void *state, const void *p, size_t n)
-{
-    (void)p;
-    *(size_t *)state += n;
-}
-
 /* Appends x's serialization to the builder. On ZB_ERR_LIMIT or
    ZB_ERR_MEMORY the status carries `size`, what the builder would have
-   held, measured by serializing again into a counter: the failure path pays
-   for it, the success path does not. */
+   held, counted on the same pass: x is serialized, and its refhook called,
+   once. */
 SEXP zubin_serialize(SEXP ptr, SEXP x, SEXP version, SEXP xdr, SEXP refhook)
 {
     zb_buf *b = zb_r_buf_get(ptr);
     int v = Rf_asInteger(version), x_dr = Rf_asLogical(xdr) == TRUE;
+    size_t need = 0;
     zb_status st;
     if (!b) return zubin_int_status(ZB_ERR_INVALID, -1);
-    st = zb_serialize(x, b, v, x_dr, refhook);
+    st = zb_r_int_serialize_buf(x, b, v, x_dr, refhook, &need);
     if (st == ZB_ERR_LIMIT || st == ZB_ERR_MEMORY) {
-        size_t need = 0;
-        SEXP out, size;
-        zb_r_int_serialize(x, count_sink, &need, v, x_dr, 0, refhook);
-        out = PROTECT(zubin_int_status(st, -1));
-        size = PROTECT(Rf_ScalarReal((double)b->len + (double)need));
+        SEXP out = PROTECT(zubin_int_status(st, -1));
+        SEXP size = PROTECT(Rf_ScalarReal((double)b->len + (double)need));
         Rf_setAttrib(out, Rf_install("size"), size);
         UNPROTECT(2);
         return out;

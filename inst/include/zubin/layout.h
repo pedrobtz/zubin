@@ -138,8 +138,10 @@ ZB_INLINE int zb_int_parse_count(const char *spec, size_t n, size_t *i, uint32_t
     size_t j = *i;
     if (j >= n || !zb_int_is_digit(spec[j])) return 1;
     for (; j < n && zb_int_is_digit(spec[j]); j++) {
-        v = v * 10 + (uint32_t)(spec[j] - '0');
-        if (v > ZB_LAYOUT_MAX) return 1;
+        uint32_t d = (uint32_t)(spec[j] - '0');
+        /* checked before it can wrap: 4294967297 must not read as 1 */
+        if (v > (ZB_LAYOUT_MAX - d) / 10) return 1;
+        v = v * 10 + d;
     }
     if (v == 0) return 1;
     *i = j;

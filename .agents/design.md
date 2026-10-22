@@ -756,7 +756,9 @@ is the one-field read at an offset, vectorised: `bin_decode(x, "u32", offset = 4
 header field, `bin_decode(x, "f32", offset = 64, n = 1e6)` is a column. `bin_encode` is
 `writeBin(x, raw(), size = 4)` generalised to every width, with rounding to f16/bf16/f32
 and an error, never a silent truncation, for an integer that does not fit.
-`bin_encode(bin_decode(b, t), t)` is the identity for every type, pinned by a property test.
+`bin_encode(bin_decode(b, t), t)` is the identity on canonical bytes, pinned by a property
+test; the exceptions are a `bool` byte other than 00 or 01, the bytes after an `s<n>`'s first
+NUL, and an `i64`/`u64` beyond 2^53 under `int64 = "double"`, which does not decode.
 
 ### 13.5 The builder
 
@@ -850,11 +852,16 @@ bin_hash_object(x, algo = c("xxh3_64", "xxh3_128"), version = 2L, seed = 0)
 `bin_serialize()` writes exactly what `serialize()` writes, and `bin_unserialize()` reads it.
 R's errors arrive as R raised them; a stream cut short is `zubin_bounds_error` (`offset`,
 `length`); a builder at its `max` is `zubin_limit_error` (`size`, `max`) and keeps its bytes.
-`bin_hash_object()` streams the headerless serialisation through `zuf_hasher_*`, so the
-digest is stable across R versions and the bytes are never allocated; the hex is zufast's
-`fast_hash()` form. `version = 2L` by default, because version 3 writes compact sequences
-as their ALTREP state and embeds the native encoding in the header. It is a content
-fingerprint, not a cryptographic digest.
+`bin_hash_object()` streams the headerless XDR serialisation through `zuf_hasher_*`, so
+the bytes are never allocated and the R version in the header does not reach the digest;
+the hex is zufast's `fast_hash()` form. The digest is stable only while R writes the same
+body for the object, which R does not promise across versions (`?serialize`), so the help
+page claims no more than that, and equal digests imply equal serialisations only up to a
+collision. `version = 2L` by default, because version 3 writes compact sequences as their
+ALTREP state and embeds the native encoding in the header. It is a content fingerprint,
+not a cryptographic digest and not a durable content address; a canonical serialisation
+owned by zubin, if content addressing across R versions is ever needed, is
+[`.agents/next.md`](next.md)'s.
 
 ## 14. Semantics decided once
 
