@@ -9,9 +9,10 @@
 #' value that has no exact R representation is a `zubin_range_error`
 #' carrying `field` and the 0-based record `index` of the first one, namely
 #' an `i32` of -2^31 (R's `NA_integer_`; allowed with `na = "allow"`), an
-#' `i64` or `u64` above 2^53 in magnitude when `int64 = "double"`, and a
-#' `u64` of 2^63 or more, or an `i64` of -2^63 (bit64's `NA`), when
-#' `int64 = "integer64"`. An `s<n>` field holds the bytes up to its first
+#' `i64`, `u64`, `i128` or `u128` above 2^53 in magnitude when
+#' `int64 = "double"`, and, when `int64 = "integer64"`, a value outside
+#' int64 or an `i64` of -2^63 (bit64's `NA`). `c64` and `c128` fields read as
+#' complex vectors. An `s<n>` field holds the bytes up to its first
 #' NUL; with `encoding = "UTF-8"` they must be valid UTF-8, or the call is a
 #' `zubin_encoding_error` carrying `field` and `index`.
 #'
@@ -31,7 +32,7 @@
 #'   columns `name.1`, `name.2`, ... and whose `b<n>` fields are list columns
 #'   wrapped in [I()]; or `"list"` for the columns as they are, array fields
 #'   as matrices.
-#' @param int64 How `i64` and `u64` fields are returned: `"double"`, exact or
+#' @param int64 How `i64`, `u64`, `i128` and `u128` fields are returned: `"double"`, exact or
 #'   an error; or `"integer64"`, a double vector carrying the 64-bit pattern
 #'   with class `integer64`, as the bit64 package defines it.
 #' @param na `"error"`, or `"allow"` to read -2^31 in an `i32` field as
@@ -150,7 +151,7 @@ unpack_columns <- function(x, layout, offset, n, stride, int64, na, encoding,
   value <- !startsWith(layout$fields$type, "x")
   names(res) <- layout$fields$name[value]
   if (int64 == "integer64") {
-    wide <- layout$fields$type[value] %in% c("i64", "u64")
+    wide <- layout$fields$type[value] %in% c("i64", "u64", "i128", "u128")
     res[wide] <- lapply(res[wide], function(col) {
       class(col) <- "integer64"
       col

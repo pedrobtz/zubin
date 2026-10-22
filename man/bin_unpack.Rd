@@ -37,7 +37,7 @@ columns \code{name.1}, \code{name.2}, ... and whose \verb{b<n>} fields are list 
 wrapped in \code{\link[=I]{I()}}; or \code{"list"} for the columns as they are, array fields
 as matrices.}
 
-\item{int64}{How \code{i64} and \code{u64} fields are returned: \code{"double"}, exact or
+\item{int64}{How \code{i64}, \code{u64}, \code{i128} and \code{u128} fields are returned: \code{"double"}, exact or
 an error; or \code{"integer64"}, a double vector carrying the 64-bit pattern
 with class \code{integer64}, as the bit64 package defines it.}
 
@@ -61,9 +61,10 @@ million records cost one loop per field. Nothing is rounded or wrapped: a
 value that has no exact R representation is a \code{zubin_range_error}
 carrying \code{field} and the 0-based record \code{index} of the first one, namely
 an \code{i32} of -2^31 (R's \code{NA_integer_}; allowed with \code{na = "allow"}), an
-\code{i64} or \code{u64} above 2^53 in magnitude when \code{int64 = "double"}, and a
-\code{u64} of 2^63 or more, or an \code{i64} of -2^63 (bit64's \code{NA}), when
-\code{int64 = "integer64"}. An \verb{s<n>} field holds the bytes up to its first
+\code{i64}, \code{u64}, \code{i128} or \code{u128} above 2^53 in magnitude when
+\code{int64 = "double"}, and, when \code{int64 = "integer64"}, a value outside
+int64 or an \code{i64} of -2^63 (bit64's \code{NA}). \code{c64} and \code{c128} fields read as
+complex vectors. An \verb{s<n>} field holds the bytes up to its first
 NUL; with \code{encoding = "UTF-8"} they must be valid UTF-8, or the call is a
 \code{zubin_encoding_error} carrying \code{field} and \code{index}.
 

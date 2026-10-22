@@ -824,6 +824,40 @@ needs from zubin ships in 0.1.0 (#26).
   written, so never a race, but the rule is cheaper to keep without exceptions; it now
   points into the `zb_buf`.
 
+## Stage 12 — What the family needs · M
+
+**Status:** done (#38).
+
+**Goal:** everything a named sibling will call from zubin, in 0.1.0, by the maintainer's
+decision of 2026-10-22 while zubin, zuint and zuarrow are all unreleased (design decision
+26): zunpy, zumsgpack, zuint and zuarrow (design §3.2).
+
+**Do**
+
+- `rw.h`: `zb_f64_to_f32()` public (the internal name stays as an alias); `zb_u128` with
+  `zb_rd/wr_u128le/be`; `zb_rd_uintle/be`, `zb_rd_intle/be`, `zb_wr_uintle/be` for a width of
+  1 to 8 bytes chosen at run time.
+- `layout.h`: `u128`, `i128`, `c64`, `c128` (values 32 to 35), `zb_type_align()`, the
+  grammar's three-digit widths; the 64-bit kernels extended to the 128-bit types;
+  `zb_unpack_cplx`/`zb_pack_cplx`; `zb_unpack_native`/`zb_pack_native`.
+- `column.h` (new, design §11.6): bitmaps, bit-packed booleans, validity in both
+  directions, `zb_swap_copy()`.
+- `zubin-r.h`: the foreign buffer, `zb_r_extbuf_new/adopt/ptr/len/release` (design §12.2).
+- R: the four types in `bin_layout()`, `bin_unpack()`, `bin_pack()`, `bin_decode()`,
+  `bin_encode()` and typed `bin_put()`, by the table of design §13.1.
+- Not here: `int64 = "zuint"` (needs zuint on CRAN) and `bin_take(copy = FALSE)` (needs the
+  views of 0.3.0); both in next.md.
+
+**Exit**
+
+- Byte-explicit tests of every new function through the harness, against independent R
+  references (`rawToBits()` for bitmaps); the property round trip draws the new types.
+- The foreign buffer releases exactly once, eagerly or by the collector, and the live-buffer
+  count returns to baseline; a second adoption takes nothing.
+- `abi.yaml` green with every new function in the probes; the layout and unpack fuzzers know
+  the new types, and the unpack fuzzer checks that native unpack and pack restore every byte.
+- The full CI set green, s390x included (native order is the host's).
+
 ---
 
 ## Acceptance criteria against stages

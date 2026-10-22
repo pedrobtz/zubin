@@ -142,3 +142,32 @@ test_that("doubles beyond the float range narrow by rounding, not by undefined b
                    bytes(rep(c("ff ff 7f ff", "00 00 80 ff"), each = 3L)))
   expect_identical(rw_write("f32", "le", x), writeBin(x, raw(), size = 4L, endian = "little"))
 })
+
+test_that("u128 reads as two words, low first, and writes back", {
+  x <- bytes("01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10")
+  r <- .Call(zubin_test_rw_u128, "le", x)
+  expect_identical(bits(r[[1]]), x)
+  expect_identical(r[[2]], x)
+  r <- .Call(zubin_test_rw_u128, "be", x)
+  expect_identical(bits(r[[1]]), rev(x))
+  expect_identical(r[[2]], x)
+})
+
+test_that("a run-time width of 1 to 8 bytes reads zero- and sign-extended", {
+  for (w in 1:8) {
+    ones <- rep(as.raw(0xff), w)
+    top <- c(raw(w - 1L), as.raw(0x80))   # little-endian: the top byte last
+    for (e in c("le", "be")) {
+      x <- if (e == "le") c(ones, top) else c(ones, rev(top))
+      r <- .Call(zubin_test_rw_uint, e, w, x)
+      expect_identical(bits(r$u), c(ones, raw(8L - w), top, raw(8L - w)), label = paste(w, e))
+      expect_identical(bits(r$i), c(rep(as.raw(0xff), 8L), top, rep(as.raw(0xff), 8L - w)),
+                       label = paste(w, e))
+      expect_identical(r$back, x, label = paste(w, e))
+    }
+  }
+  # a width outside 1 to 8 reads 0 and writes nothing
+  r <- .Call(zubin_test_rw_uint, "le", 9L, rep(as.raw(0xff), 9L))
+  expect_identical(bits(c(r$u, r$i)), raw(16))
+  expect_identical(r$back, raw(9))
+})

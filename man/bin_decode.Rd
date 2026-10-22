@@ -26,7 +26,7 @@ bin_decode(
 
 \item{endian}{The byte order: \code{"little"}, \code{"big"}, or \code{"native"}.}
 
-\item{int64}{How \code{i64} and \code{u64} fields are returned: \code{"double"}, exact or
+\item{int64}{How \code{i64}, \code{u64}, \code{i128} and \code{u128} fields are returned: \code{"double"}, exact or
 an error; or \code{"integer64"}, a double vector carrying the 64-bit pattern
 with class \code{integer64}, as the bit64 package defines it.}
 

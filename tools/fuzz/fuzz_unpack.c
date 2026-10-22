@@ -62,18 +62,25 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
             free(d);
             break;
         }
-        case ZB_I64: case ZB_U64: {
+        case ZB_I64: case ZB_U64: case ZB_I128: case ZB_U128: {
             int64_t *d = (int64_t *)malloc((m ? m : 1) * sizeof *d);
             double *e = (double *)malloc((m ? m : 1) * sizeof *e);
             if (d && e) {
                 st = zb_unpack_i64(bytes, n, stride, f, d, &bad);
-                FUZZ_CHECK(st == ZB_OK || (st == ZB_ERR_RANGE && f->type == ZB_U64 && bad < n));
+                FUZZ_CHECK(st == ZB_OK || (st == ZB_ERR_RANGE && f->type != ZB_I64 && bad < n));
                 st = zb_unpack_f64x(bytes, n, stride, f, e, &bad);
                 FUZZ_CHECK(st == ZB_OK || (st == ZB_ERR_RANGE && bad < n));
                 if (st == ZB_OK) for (i = 0; i < m; i++) FUZZ_CHECK(e[i] <= 9007199254740992.0 && e[i] >= -9007199254740992.0);
             }
             free(d);
             free(e);
+            break;
+        }
+        case ZB_C64: case ZB_C128: {
+            double *d = (double *)malloc((m ? 2 * m : 1) * sizeof *d);
+            if (!d) break;
+            FUZZ_CHECK(zb_unpack_cplx(bytes, n, stride, f, d) == ZB_OK);
+            free(d);
             break;
         }
         case ZB_BYTES: case ZB_STR: {
@@ -93,6 +100,23 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         }
         default:
             FUZZ_CHECK(0);
+        }
+        /* every value field also round-trips through native order: unpack,
+           zero the field, pack, and the record bytes are as they were */
+        {
+            size_t nb = f->type == ZB_BYTES || f->type == ZB_STR ? n * f->size
+                                                                 : m * zb_type_width(f->type);
+            uint8_t *nat = (uint8_t *)malloc(nb ? nb : 1);
+            uint8_t *copy = (uint8_t *)malloc(len ? len : 1);
+            if (nat && copy) {
+                FUZZ_CHECK(zb_unpack_native(bytes, n, stride, f, nat) == ZB_OK);
+                if (len) memcpy(copy, bytes, len);
+                zb_pack_zeros(copy, n, stride, f);
+                FUZZ_CHECK(zb_pack_native(copy, n, stride, f, nat) == ZB_OK);
+                FUZZ_CHECK(len == 0 || memcmp(copy, bytes, len) == 0);
+            }
+            free(nat);
+            free(copy);
         }
     }
     free(bytes);

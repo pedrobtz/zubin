@@ -35,7 +35,8 @@ Columns are recycled to the longest; a length that does not divide it is a
 Each field accepts the R types of the table in \code{\link[=bin_layout]{bin_layout()}}: integer,
 whole double and logical for the small integer types; integer and whole
 double for \code{i32} and \code{u32}; integer, whole double and \code{integer64} for
-\code{i64} and \code{u64}; numeric for the floating types (rounded to nearest even);
+\code{i64}, \code{u64}, \code{i128} and \code{u128}; numeric for the floating types (rounded
+to nearest even); complex, or numeric as a real part, for \code{c64} and \code{c128};
 logical for \code{bool}; character for \verb{s<n>} (UTF-8, at most \code{n} bytes); and a
 list of raw vectors of exactly \code{n} bytes for \verb{b<n>}. Nothing is truncated,
 wrapped or rounded into an integer type: a value that does not fit is a

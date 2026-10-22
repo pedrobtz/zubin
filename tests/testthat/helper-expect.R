@@ -25,8 +25,8 @@ expect_bytes <- function(x, hex) {
 # A random layout: 1 to 8 fields of every kind, arrays of the numeric
 # types, padding, either byte order, packed or aligned.
 random_layout <- function() {
-  types <- c("u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f16", "bf16", "f32",
-             "f64", "bool", "s", "b", "x")
+  types <- c("u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "u128", "i128", "f16",
+             "bf16", "f32", "f64", "c64", "c128", "bool", "s", "b", "x")
   k <- sample(1:8, 1L)
   parts <- character()
   for (i in seq_len(k)) {
@@ -57,6 +57,10 @@ random_column <- function(type, count, n) {
     u32 = sample(c(0, 1, 2^32 - 1, round(runif(20, 0, 2^32 - 1))), m, TRUE),
     i64 = sample(c(-2^53, -1, 0, 2^53, round(runif(20, -2^53, 2^53))), m, TRUE),
     u64 = sample(c(0, 2^53, round(runif(20, 0, 2^53))), m, TRUE),
+    i128 = sample(c(-2^53, -1, 0, 2^53, round(runif(20, -2^53, 2^53))), m, TRUE),
+    u128 = sample(c(0, 2^53, round(runif(20, 0, 2^53))), m, TRUE),
+    c64 = complex(real = random_column("f32", 1L, m), imaginary = random_column("f32", 1L, m)),
+    c128 = complex(real = stats::rnorm(m), imaginary = c(-0, Inf, stats::rnorm(m))[seq_len(m)]),
     f16 = rw_read("f16", "le", u16_bytes(sample(c(0:31743, 32768:64511), m, TRUE), "le")),
     bf16 = rw_read("bf16", "le", u16_bytes(sample(c(0:32639, 32768:65407), m, TRUE), "le")),
     f32 = { x <- rw_read("f32", "le", as.raw(sample(0:255, 4 * m, TRUE))); x[is.nan(x)] <- 0.5; x },

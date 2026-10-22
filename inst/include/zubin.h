@@ -26,6 +26,7 @@
 #include "zubin/buf.h"
 #include "zubin/cursor.h"
 #include "zubin/layout.h"
+#include "zubin/column.h"
 #include <zufast/utf8.h>
 
 #endif /* ZUBIN_H */

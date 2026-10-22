@@ -117,7 +117,9 @@ domain ("binary"); `bytes_` and `raw_` were considered and rejected, the second 
 zuxml's review names skipping this inventory as its most expensive mistake. The inventory
 below is what exists on disk on 2026-10-04. No sibling can depend on zubin until zubin is on
 CRAN, so each adoption is an issue in the consumer's repository, gated on the release; the
-C API ships with a fixture consumer (§16.5) and no real one, and says so.
+C API ships with a fixture consumer (§16.5) and no real one, and says so. By 2026-10-22
+two siblings already link it from their development branches (zunpy and zumsgpack, below),
+and Stage 12 adds what zuint and zuarrow will call.
 
 | Package | What it carries today | What zubin would replace | Mode | Status |
 |---|---|---|---|---|
@@ -129,6 +131,10 @@ C API ships with a fixture consumer (§16.5) and no real one, and says so.
 | **zucsv** | — | `bin_split()` over views, later | R | 0.3.0 at the earliest |
 | **mdbx**, **quak**, **dastash** | byte-keyed stores, Parquet and Delta on object storage, a content-addressed store | `bin_pack()` for keys; `bin_unpack()` on footers and manifests | R | R-level users once on CRAN; nothing to shape in advance |
 | **decimal** (`../decimal`, libmpdec) | exact decimals | nothing: ideas.md §1.3 is already this package | — | zubin only has to pack and unpack `i64` scales |
+| **zunpy** | `.npy`/`.npz`: the header, typed array reads and writes, complex64 written element by element | already `LinkingTo: zubin`; Stage 12 adds the public `zb_f64_to_f32()` it was calling by its internal name, and `c64`/`c128` | C | **Consumer** (2026-10-22) |
+| **zumsgpack** | MessagePack encoding through `zb_buf` and `zubin-r.h`; a table-driven head reader | already `LinkingTo: zubin`; the run-time-width reads of §8 for heads | C | **Consumer** (2026-10-22) |
+| **zuint** | 64- and 128-bit integer vectors whose payload is the integers' bits | `i128`/`u128` fields and the native kernels fill its payload; the foreign buffer of §12.2 is its zero-copy path | C | **Planned** (Stage 12 shapes it); `int64 = "zuint"` waits for zuint on CRAN (next.md) |
+| **zuarrow** (RFC 0041) | Arrow C Data Interface and IPC over vendored nanoarrow | §11.6's bitmaps, validity and swaps, the native kernels, `i128`/`u128`, and §12.2's foreign buffer for zero-copy columns | C | **Planned** (Stage 12 shapes it) |
 
 Draft 1 named `amber` as the first consumer and shaped a serialisation layer around it. There
 is no `amber`; the idea exists as rdz, in Rust. Nothing in v0.1.0 is shaped around a
@@ -240,6 +246,7 @@ inst/include/
     ├── buf.h                §9  zb_buf: ownership, limits, growth, typed appends
     ├── cursor.h             §10 zb_cur: checked sequential reads
     ├── layout.h             §11 zb_type, zb_field, zb_layout, parse, unpack/pack kernels
+    ├── column.h             §11.6 bitmaps, validity, byte swapping for columnar buffers
     └── detail/
         └── portability.h    ZB_INLINE, ZB_STATIC_ASSERT; includes zufast's portability.h
 ```
@@ -316,6 +323,15 @@ through `float` with round-to-nearest-even at each step, which is what every oth
 language does and is documented as such (a double that is exactly halfway between two
 halfs after the first narrowing is a known double-rounding case; the test suite pins the
 behaviour rather than claiming single rounding).
+
+Stage 12 added three groups for the consumers of §3.2. A 128-bit integer has no portable C
+type, so `zb_u128` is a container of two native words, `lo` first (zuint's payload order,
+and an Arrow buffer's on a little-endian host), read and written by `zb_rd_u128le/be` and
+`zb_wr_u128le/be`; arithmetic on it is zufast's `wide.h` and zuint's, not zubin's. A width
+known only at run time, 1 to 8 bytes, as a MessagePack or CBOR head announces it, is
+`zb_rd_uintle/be(p, w)` (zero-extended), `zb_rd_intle/be(p, w)` (sign-extended) and
+`zb_wr_uintle/be(p, w, v)`; any other width reads 0 and writes nothing. And the narrowing
+below is public as `zb_f64_to_f32()`, which zunpy had been calling by its internal name.
 
 Two helpers sit beside the readers and writers. `zb_host_big_endian()` returns 1 on a
 big-endian host and is what `"native"` and the `=` prefix resolve to (§14.2). The double to
@@ -448,7 +464,8 @@ of next.md first.
 typedef enum {            /* values are permanent; 17..31 reserved for variable-length and bitfields */
     ZB_U8 = 1, ZB_I8 = 2, ZB_U16 = 3, ZB_I16 = 4, ZB_U32 = 5, ZB_I32 = 6,
     ZB_U64 = 7, ZB_I64 = 8, ZB_F16 = 9, ZB_BF16 = 10, ZB_F32 = 11, ZB_F64 = 12,
-    ZB_BOOL = 13, ZB_BYTES = 14, ZB_STR = 15, ZB_PAD = 16
+    ZB_BOOL = 13, ZB_BYTES = 14, ZB_STR = 15, ZB_PAD = 16,
+    ZB_U128 = 32, ZB_I128 = 33, ZB_C64 = 34, ZB_C128 = 35   /* Stage 12 */
 } zb_type;
 
 typedef struct {
@@ -482,8 +499,8 @@ layout  := [ endian ] field { sep field }
 endian  := "<" | ">" | "="                     little, big, host; default from the caller
 field   := [ name ":" ] type [ "[" count "]" ] [ "." order ]
          | "x" width                            padding: never read, written as zeros
-type    := "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64"
-         | "f16" | "bf16" | "f32" | "f64" | "bool"
+type    := "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" | "u128" | "i128"
+         | "f16" | "bf16" | "f32" | "f64" | "c64" | "c128" | "bool"
          | "b" width                            fixed bytes
          | "s" width                            fixed string, C semantics (§14.6)
 order   := "le" | "be"                          per-field override; multi-byte types only
@@ -507,6 +524,9 @@ or on `b`/`s`/`x`; a zero width or count; a duplicate name; a name on a padding 
 total size over 2^31 − 1; more fields than the caller's array holds (`ZB_ERR_LIMIT`). Also,
 from Stage 3: an empty spec, an empty field (`u8,,u8`), a leading or trailing comma, and any
 character after a field that is not a separator. A count of 1 (`u8[1]`) is a scalar.
+`c64` and `c128` are complex numbers, two `f32` or two `f64`, real part first, as C99's
+`float complex`, NumPy's `complex64` and Fortran's `COMPLEX` store them; an order suffix
+swaps each part, not the pair.
 
 Mnemonic widths rather than Python `struct` letters (decision 12): `u32` is read by anyone,
 `I` is not, and a translator for Python specs is a thirty-line function that can come when
@@ -536,7 +556,9 @@ its own copy of the spec and of every derived field (§13.2).
 
 With `align = 0` fields are packed at consecutive offsets. With `align = 1` each field is
 placed at the next multiple of its natural alignment, which is the element width for
-numeric types (1, 2, 4 or 8), 1 for `b`, `s`, `x` and `bool`, and the record size is
+numeric types (1, 2, 4, 8 or 16), except that a complex type aligns as its part (`c64` to 4,
+`c128` to 8, as C's `_Complex`), 1 for `b`, `s`, `x` and `bool` (`zb_type_align()`), and the
+record size is
 rounded up to the largest field alignment. This is the rule GCC and clang apply to a C
 struct on every 64-bit target R supports (x86-64 and AArch64 on Linux, macOS and Windows), so
 a `struct` dumped with `fwrite()` there reads back with `align = TRUE`. **32-bit x86 is the
@@ -557,14 +579,30 @@ static inline zb_status zb_unpack_f64 (const uint8_t *base, size_t n, size_t str
 static inline zb_status zb_unpack_i64 (const uint8_t *base, size_t n, size_t stride, const zb_field *f, int64_t *dst, size_t *bad);  /* i64; u64 while < 2^63 */
 static inline zb_status zb_unpack_f64x(const uint8_t *base, size_t n, size_t stride, const zb_field *f, double *dst, size_t *bad);   /* i64 u64 -> double, exact or ZB_ERR_RANGE at *bad */
 static inline zb_status zb_unpack_bytes(const uint8_t *base, size_t n, size_t stride, const zb_field *f, uint8_t *dst);              /* b s: n * size contiguous */
+static inline zb_status zb_unpack_cplx (const uint8_t *base, size_t n, size_t stride, const zb_field *f, double *dst);              /* c64 c128 -> (re, im) pairs */
+static inline zb_status zb_unpack_native(const uint8_t *base, size_t n, size_t stride, const zb_field *f, void *dst);               /* any value field, own width, host order */
 
 /* The inverses. *bad receives the index of the first value that does not fit. */
 static inline zb_status zb_pack_i32  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const int32_t *src, int allow_na, size_t *bad);  /* u8 i8 u16 i16 i32 bool */
 static inline zb_status zb_pack_f64  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const double  *src, int allow_na, size_t *bad);  /* every numeric type */
 static inline zb_status zb_pack_i64  (uint8_t *base, size_t n, size_t stride, const zb_field *f, const int64_t *src, int allow_na, size_t *bad);  /* i64 u64 */
 static inline zb_status zb_pack_bytes(uint8_t *base, size_t n, size_t stride, const zb_field *f, const uint8_t *src);
+static inline zb_status zb_pack_cplx (uint8_t *base, size_t n, size_t stride, const zb_field *f, const double  *src);                            /* c64 c128 */
+static inline zb_status zb_pack_native(uint8_t *base, size_t n, size_t stride, const zb_field *f, const void *src);                              /* inverse of zb_unpack_native */
 static inline void      zb_pack_zeros(uint8_t *base, size_t n, size_t stride, const zb_field *f);                                   /* x, and the alignment gaps */
 ```
+
+Stage 12 extended them to the new types: `zb_unpack_i64` and `zb_unpack_f64x` read `i128`
+and `u128` while the value fits `int64` or is exact as a double, else `ZB_ERR_RANGE`;
+`zb_pack_i64` writes them sign-extended; `zb_pack_f64` writes any whole double in range,
+exactly, since a double's 53 significant bits always fit. `zb_unpack_cplx` and
+`zb_pack_cplx` move R's `Rcomplex` layout, `(re, im)` pairs, column-major per element.
+
+`zb_unpack_native` is the kernel a columnar consumer wants: every value field as host-order
+values of its own width, with no widening and no range check, so `u16` stays `uint16_t`,
+`f16` its bits, `c64` two floats and the 128-bit types a `zb_u128`; `zb_pack_native` puts
+them back. Together they turn records into Arrow-shaped column buffers and back without an R
+vector in between, and the unpack fuzzer checks that the pair restores every byte.
 
 Array fields (`count > 1`) are written **column-major**: element k of record i lands at
 `dst[k * n + i]`, which is R's matrix layout, so the R glue hands the kernel a matrix's
@@ -586,6 +624,33 @@ garbage; and every kernel that can refuse a value writes the index of the first 
 holding one to `*bad`. The `i32` kernel's refusal of −2^31 is `ZB_ERR_RANGE`, the same as
 the other reading refusals. The kernels do not bounds-check: the caller has proved that the
 last record ends inside the buffer, `offset + (n − 1) × stride + size ≤ length`.
+
+### 11.6 `column.h` — bitmaps, validity and byte order (Stage 12)
+
+A columnar format keeps a buffer per column and marks missing values in a separate validity
+bitmap. `column.h` holds what turns such a column into the arrays the kernels and R use:
+
+```c
+int    zb_bit_get(const uint8_t *bm, size_t i);          void zb_bit_set(uint8_t *bm, size_t i, int v);
+int    zb_bit_get_msb(const uint8_t *bm, size_t i);      void zb_bit_set_msb(uint8_t *bm, size_t i, int v);
+size_t zb_bitmap_bytes(size_t nbits);                    size_t zb_bitmap_count(const uint8_t *bm, size_t offset, size_t n);
+void      zb_unpack_bits(const uint8_t *bm, size_t offset, size_t n, int32_t *dst);              /* -> 0 / 1 */
+zb_status zb_pack_bits(uint8_t *bm, size_t offset, size_t n, const int32_t *src, size_t *bad);  /* NA is ZB_ERR_NA */
+size_t zb_validity_apply(const uint8_t *valid, size_t offset, size_t n, void *dst, size_t width, const void *na);
+size_t zb_validity_apply_i32(...); size_t zb_validity_apply_f64(...);     /* cleared bit -> R's NA */
+size_t zb_validity_from(const void *src, size_t n, size_t width, const void *na, uint8_t *valid, size_t offset);
+size_t zb_validity_from_i32(...); size_t zb_validity_from_f64(...);       /* R's NA -> cleared bit */
+void   zb_swap_copy(void *dst, const void *src, size_t n, size_t width);  /* reverse each element */
+```
+
+Bit order is least significant first, Arrow's and Parquet's; the `_msb` pair is for PNG and
+the ISO 8583 bitmap. Every function takes a bit offset, since an Arrow array may begin inside
+its buffers. A set validity bit is a present value and a `NULL` bitmap means all present, as
+in Arrow. The markers are R's, as everywhere (§14.3): `INT32_MIN`, and `NA_real_` (a NaN
+whose low word is 1954; any other NaN is a value, as Arrow keeps them apart); other widths
+take the marker as bytes, which is how zuint's 128-bit sentinels and bit64's `INT64_MIN` are
+handled. The apply functions return the number of missing values, which an Arrow array
+reports as `null_count`. Nothing here allocates.
 
 ## 12. `zubin-r.h` — SEXP glue
 
@@ -661,6 +726,28 @@ zubin owns are statuses:
 A sink must not call `R_CheckUserInterrupt()` or anything else that can jump. The R
 functions are `bin_serialize()`, `bin_unserialize()` and `bin_hash_object()` (§13.9).
 
+### 12.2 Foreign buffers (Stage 12)
+
+Memory zubin did not allocate (an Arrow buffer with its `release` callback, a `malloc` block,
+a mapping) handed to R with the function that frees it:
+
+```c
+typedef void (*zb_release_fn)(void *data, void *ptr, size_t len);
+SEXP      zb_r_extbuf_new(SEXP prot, zb_status *st);    /* may jump; owns nothing yet */
+zb_status zb_r_extbuf_adopt(SEXP h, void *ptr, size_t len, zb_release_fn release, void *data);  /* cannot jump */
+void     *zb_r_extbuf_ptr(SEXP h);  size_t zb_r_extbuf_len(SEXP h);
+void      zb_r_extbuf_release(SEXP h);                  /* eager; the finalizer then does nothing */
+```
+
+The two steps are §12's rule applied to memory that already exists: everything that can
+`longjmp` happens before the handle owns anything, so a failed allocation leaks nothing and
+the caller still owns `ptr`. The release runs exactly once, eagerly or from the finalizer
+(registered with `onexit`), and must not call R. The handle is what an ALTREP class keeps in
+`data1` to present the memory as an R vector without a copy. The classes themselves stay in
+the packages that own the R types (zuint's for its integers, zuarrow's for Arrow columns,
+zubin's for raw views at 0.3.0), because R binds an ALTREP class to the package that
+registers it; what the family shares is this lifetime, not the classes.
+
 ## 13. R API
 
 Seventeen exports, plus S3 methods: fourteen as first designed, and the three of §13.9. Every argument is validated in R first with a classed
@@ -674,8 +761,10 @@ condition, and again in C where native safety depends on it.
 | `i32` | 4 | `integer` | integer, double (whole) | `-2^31` is `NA_integer_`: read is an error unless `na = "allow"`; write of `NA` likewise |
 | `u32` | 4 | `double` | integer, double (whole) | exact |
 | `i64 u64` | 8 | `double` (`int64 = "double"`, the default) or `integer64` (`int64 = "integer64"`) | integer, double (whole), `integer64` | double mode errors on a value above 2^53 in magnitude rather than rounding; `integer64` mode errors on `u64` ≥ 2^63 |
+| `i128 u128` | 16 | as `i64 u64`: `double` exact to 2^53, or `integer64` within its range | integer, double (whole), `integer64` | any whole double in range writes exactly; `integer64` sign-extends |
 | `f16 bf16` | 2 | `double` | numeric | round to nearest even on write (§8) |
 | `f32 f64` | 4, 8 | `double` | numeric | `NA_real_` survives `f64`; becomes `NaN` in `f32`/`f16` (payload lost), documented |
+| `c64 c128` | 8, 16 | `complex` | complex; numeric as a real part | `c64` rounds each part as `f32`; `NA` survives `c128` |
 | `bool` | 1 | `logical` | logical | non-zero reads `TRUE`; `NA` on write is `zubin_na_error` |
 | `b<n>` | n | `list` of `raw` | list of raw, each exactly n bytes | the `blob`-compatible shape |
 | `s<n>` | n | `character`, UTF-8 | character, at most n bytes | §14.6 |
@@ -1140,6 +1229,13 @@ Draft 1's eleven open questions, resolved, followed by the decisions revision 2 
 | 23 | Serial tests | No `Config/testthat/parallel`, so the gctorture and valgrind legs instrument this package's C (zujson's measurement). |
 | 24 | The first consumer | None named for the C API; rdz is a candidate, not a commitment (§3.2). The fixture stands in and the design says so. The 1.0.0 gate is a real one (next.md). |
 | 25 | Release plan | One release, v0.1.0, with everything in §2's first column; the mechanism (header-only delivery, kernels, builder ownership) is the risk, and it is proven by the fixture and the gates, not by breadth. |
+| 26 | What the family needs, before 0.1.0 | Stage 12, by the maintainer's decision of 2026-10-22, while zubin, zuint and zuarrow are all unreleased: everything a named consumer will call goes in now (§3.2), so that no consumer starts on internal names or waits a CRAN cycle. Additions only; nothing shipped changed. |
+| 27 | Type values for the new types | 32 to 35, leaving 17 to 31 to variable-length fields and bitfields as reserved. |
+| 28 | 128-bit integers | A two-word container, `zb_u128`, with readers, writers and conversions, and no arithmetic: zufast's `wide.h` (0.1.1, not yet on CRAN) and zuint own that. In R they follow `i64`'s rules, exact or an error, because R has no 128-bit type of its own. |
+| 29 | Complex alignment | As the part, not the whole (`c64` to 4, `c128` to 8): C's `_Complex` rule, so a dumped struct reads back with `align = TRUE`. |
+| 30 | Bitmaps and validity | Least significant bit first with `_msb` variants; a `NULL` bitmap is all valid; markers are R's, or bytes for other widths (§11.6). Arrow's conventions, because Arrow is the consumer. |
+| 31 | Shared foreign memory | One lifetime primitive in `zubin-r.h`, two-step so it cannot leak (§12.2); ALTREP classes stay with the package that owns each R type. Settles next.md's question of one home for views, mappings and zero-copy columns without a `zuview` package. |
+| 32 | `int64 = "zuint"` | Deferred: a CRAN package cannot suggest one that is not on CRAN. The kernels and §12.2 are what it will be built on (next.md). |
 
 ## 20. Deferred
 

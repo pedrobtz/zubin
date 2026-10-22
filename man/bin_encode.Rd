@@ -12,8 +12,8 @@ bin_encode(
 )
 }
 \arguments{
-\item{x}{A vector: numeric, logical, \code{integer64}, character for \verb{s<n>}, or
-a list of raw vectors for \verb{b<n>}.}
+\item{x}{A vector: numeric, logical, \code{integer64}, complex for \code{c64} and
+\code{c128}, character for \verb{s<n>}, or a list of raw vectors for \verb{b<n>}.}
 
 \item{type}{One type token of \code{\link[=bin_layout]{bin_layout()}}: \code{"u8"} to \code{"f64"}, \code{"bool"},
 \code{"b<n>"} or \code{"s<n>"}, optionally with a \code{.le} or \code{.be} suffix.}
@@ -36,9 +36,10 @@ integer that does not fit.
 encoding of its values, which every encoding of a number is, with three
 exceptions. A \code{bool} byte other than 00 or 01 reads as \code{TRUE} and writes
 back as 01. An \verb{s<n>} reads up to its first NUL, so the bytes after it
-write back as NULs. And an \code{i64} or \code{u64} beyond 2^53 does not decode as
-a double at all: ask for \code{int64 = "integer64"}. A NaN keeps its payload
-through \code{f64}, but the narrower floats may not.
+write back as NULs. And an \code{i64}, \code{u64}, \code{i128} or \code{u128} beyond 2^53
+does not decode as a double at all: ask for \code{int64 = "integer64"} (which
+holds 64 bits). A NaN keeps its payload through \code{f64} and \code{c128}, but the
+narrower floats may not.
 }
 \examples{
 bin_encode(c(1, 2, 65535), "u16")

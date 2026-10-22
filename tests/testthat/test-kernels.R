@@ -54,3 +54,46 @@ test_that("bytes and strings come out contiguous, record after record", {
   expect_identical(k[[2]]$values, as.raw(c(2, 3, 8, 9)))
   expect_identical(k[[4]]$values, as.raw(c(5, 6, 11, 12)))
 })
+
+test_that("i128 and u128 read into int64 or an exact double while they fit", {
+  ones <- rep(as.raw(0xff), 16)
+  five <- c(as.raw(5), raw(15))
+  two64 <- c(raw(8), as.raw(1), raw(7))
+  k <- kernel(c(five, ones, two64), "v:i128")[[1]]
+  expect_identical(k$status, "ZB_ERR_RANGE")   # 2^64 is past int64
+  expect_identical(k$bad, 2)
+  expect_identical(k$status2, "ZB_ERR_RANGE")
+  k <- kernel(c(five, ones), "v:i128")[[1]]
+  expect_identical(bits(k$values), c(as.raw(5), raw(7), rep(as.raw(0xff), 8)))
+  expect_identical(k$values2, c(5, -1))
+  k <- kernel(c(five, ones), "v:u128")[[1]]
+  expect_identical(k$status, "ZB_ERR_RANGE")   # all ones is 2^128 - 1
+  expect_identical(k$bad, 1)
+  k <- kernel(c(raw(15), as.raw(5)), "v:u128.be")[[1]]
+  expect_identical(k$values2, 5)
+})
+
+test_that("c64 and c128 read as real and imaginary pairs, exactly", {
+  x <- c(bytes("00 00 c0 3f"), bytes("00 00 80 be"))   # 1.5, -0.25
+  k <- kernel(x, "v:c64")[[1]]
+  expect_identical(k$values, c(1.5, -0.25))
+  x <- c(writeBin(c(2.5, -3), raw(), size = 8L, endian = "big"))
+  expect_identical(kernel(x, "v:c128.be")[[1]]$values, c(2.5, -3))
+})
+
+test_that("native unpack keeps each value's width in host order, and packs back", {
+  rec <- c(bytes("01 02"), c(raw(14), bytes("01 02")), bytes("3f 80 00 00 40 00 00 00"),
+           bytes("aa"), bytes("61 62"))
+  k <- kernel(c(rec, rec), "a:u16.be b:u128.be c:c64.be d:bool e:s2")
+  expect_identical(k[[1]]$native, rep(host_order(bytes("02 01"), 2L), 2))
+  lo <- host_order(c(bytes("02 01"), raw(6)), 8L)
+  expect_identical(k[[2]]$native, rep(c(lo, raw(8)), 2))
+  expect_identical(k[[3]]$native, rep(host_order(bytes("00 00 80 3f 00 00 00 40"), 4L), 2))
+  expect_identical(k[[4]]$native, bytes("aa aa"))
+  expect_identical(k[[5]]$native, bytes("61 62 61 62"))
+  for (f in k) expect_true(f$roundtrip, label = f$type)
+  # an array field is column-major, as every kernel
+  k <- kernel(bytes("01 00 02 00 03 00 04 00"), "v:u16[2]")
+  expect_identical(k[[1]]$native, host_order(bytes("01 00 03 00 02 00 04 00"), 2L))
+  expect_true(k[[1]]$roundtrip)
+})

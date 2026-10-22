@@ -40,7 +40,8 @@ One string of fields separated by whitespace or a comma:
 endian  := "<" | ">" | "="          little, big, host; default `endian`
 field   := [ name ":" ] type [ "[" count "]" ] [ "." order ]
          | "x" width                padding: never read, written as zeros
-type    := u8 i8 u16 i16 u32 i32 u64 i64 f16 bf16 f32 f64 bool
+type    := u8 i8 u16 i16 u32 i32 u64 i64 u128 i128
+         | f16 bf16 f32 f64 c64 c128 bool
          | "b" width                fixed bytes
          | "s" width                fixed string
 order   := "le" | "be"              multi-byte numeric types only
@@ -72,9 +73,15 @@ integer, whole double; \code{NA} only with \code{na = "allow"} \cr
 \verb{i64 u64} \tab 8 \tab double, an error above 2^53 in magnitude; or
 \code{integer64} (\code{int64 = "integer64"}), an error for \code{u64} from 2^63 \tab
 integer, whole double, \code{integer64} \cr
+\verb{i128 u128} \tab 16 \tab as \code{i64}: double, an error above 2^53 in
+magnitude; or \code{integer64}, an error outside its range \tab integer,
+whole double (any whole value in range is exact), \code{integer64} \cr
 \verb{f16 bf16} \tab 2 \tab double \tab numeric, rounded to nearest even \cr
 \verb{f32 f64} \tab 4, 8 \tab double \tab numeric; \code{NA} survives \code{f64} and is
 a NaN in the others \cr
+\verb{c64 c128} \tab 8, 16 \tab complex: two \code{f32} or two \code{f64}, real part
+first \tab complex, or numeric as a real part; \code{c64} rounds each part
+as \code{f32} \cr
 \code{bool} \tab 1 \tab logical; any non-zero byte is \code{TRUE} \tab logical, not
 \code{NA} \cr
 \verb{b<n>} \tab n \tab a list of raw vectors \tab a list of raw vectors of
@@ -95,7 +102,8 @@ integer. See \link{zubin-conditions}.
 
 With \code{align = FALSE} fields are packed at consecutive offsets. With
 \code{align = TRUE} each field starts at the next multiple of its element width
-(1 for \code{bool}, \code{b}, \code{s} and \code{x}) and the record size is rounded up to the
+(1 for \code{bool}, \code{b}, \code{s} and \code{x}; a complex type aligns as its part, \code{c64}
+to 4 and \code{c128} to 8; \code{i128} and \code{u128} to 16) and the record size is rounded up to the
 largest of them: the rule C compilers apply to a \code{struct} on 64-bit
 targets, so a struct written with \code{fwrite()} reads back with
 \code{align = TRUE}. (32-bit x86 aligns 8-byte members to 4 inside a struct;
