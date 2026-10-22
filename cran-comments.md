@@ -29,3 +29,8 @@ The checks below ran on the release commit in the package's continuous integrati
 0 errors | 0 warnings | 1 note
 
 * This is a new release.
+
+## Method References
+
+There are no published references describing the methods in this package; it
+implements binary record layouts and conversions of its own design.

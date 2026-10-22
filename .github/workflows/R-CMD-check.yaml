@@ -30,6 +30,8 @@ jobs:
          {"os": "windows-latest", "r": "devel"},
          {"os": "ubuntu-latest", "r": "release"},
          {"os": "ubuntu-latest", "r": "oldrel-1"}]
+      # CRAN's noSuggests flavour: nothing in Suggests installed
+      nosuggests: true
       profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
       # The full profile also runs the sweeps and the big inputs (a raw
       # vector above 2^31 bytes, growth past 64 MiB): roadmap, testing strategy.
