@@ -66,4 +66,6 @@ test_that("equal inputs and a prefix have no differing bytes, only lengths", {
 test_that("a huge n on tiny inputs allocates for the inputs, not for n", {
   d <- bin_diff(bytes("01 02"), bytes("01 03"), n = 2^52)
   expect_identical(d$offset, 1)
+  # past a 32-bit size_t, too
+  expect_identical(bin_hexdump(bytes("01 02"), n = 2^52), bin_hexdump(bytes("01 02")))
 })
