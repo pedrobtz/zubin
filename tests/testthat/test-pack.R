@@ -140,6 +140,23 @@ test_that("columns are matched by name; missing, extra and unnamed ones are erro
   expect_bytes(bin_pack("u8 x1 u8", V1 = 1, V2 = 2), "01 00 02")
 })
 
+test_that("two columns with one name are an error, never the first silently", {
+  e <- expect_error(bin_pack("a:u8", a = 1, a = 2), class = "zubin_invalid_argument")
+  expect_identical(e$arg, "a")
+  x <- structure(list(1L, 2L), names = c("a", "a"))
+  expect_error(bin_pack("a:u8", x), class = "zubin_invalid_argument")
+  e <- expect_error(bin_pack("v:u8[2]", v.1 = 1, v.2 = 2, v.2 = 3), class = "zubin_invalid_argument")
+  expect_identical(e$arg, "v.2")
+})
+
+test_that("bin_encode() inverts bin_decode() for canonical bytes only", {
+  expect_bytes(bin_encode(bin_decode(bytes("01 00"), "bool"), "bool"), "01 00")
+  # any nonzero byte reads as TRUE, which writes as 01
+  expect_bytes(bin_encode(bin_decode(bytes("02"), "bool"), "bool"), "01")
+  # an s<n> reads up to its first NUL, and writes NULs after it
+  expect_bytes(bin_encode(bin_decode(bytes("61 00 62"), "s3"), "s3"), "61 00 00")
+})
+
 test_that("the range error names the field and the record", {
   l <- bin_layout("<a:u8 b:u16 c:u8[2]")
   e <- expect_error(bin_pack(l, a = 1:3, b = c(1, 2, 70000), c = matrix(1, 3, 2)),

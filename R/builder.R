@@ -115,7 +115,10 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
         invalid_argument(sprintf("`x` must be character for type \"%s\".", type), arg = "x")
       }
       res <- .Call(zubin_builder_put_str, ptr, x, width)
-      n <- if (width < 0L) sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1) else length(x) * width
+      # the byte count is for the message alone: worked out only on failure
+      if (is_status(res)) {
+        n <- if (width < 0L) sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1) else length(x) * width
+      }
     }
   }
   if (is_status(res)) builder_fail(res, b, n, x)

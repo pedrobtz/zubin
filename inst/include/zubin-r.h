@@ -265,12 +265,11 @@ ZB_INLINE void zb_r_int_ser_clean(void *data, Rboolean jump)
     if (jump) s->b->len = s->len0;   /* an error or an interrupt appends nothing */
 }
 
-/* Appends x's serialization to b. ZB_ERR_INVALID for a version other than 2
-   or 3; ZB_ERR_LIMIT or ZB_ERR_MEMORY when b cannot hold it, with
-   *size, when size is not NULL, set to the length b would have needed. On any
-   failure, and when R_Serialize raises (b's memory must then be owned by R, as
-   zb_r_buf_new() makes it), b holds exactly what it held. */
-ZB_INLINE zb_status zb_serialize(SEXP x, zb_buf *b, int version, int xdr, SEXP refhook)
+/* zb_serialize, also reporting in *total the bytes R produced, whether they
+   fitted or not: on ZB_ERR_LIMIT or ZB_ERR_MEMORY, b's length plus *total is
+   what b would have needed. One pass, so a refhook runs once per reference. */
+ZB_INLINE zb_status zb_r_int_serialize_buf(SEXP x, zb_buf *b, int version, int xdr,
+                                           SEXP refhook, size_t *total)
 {
     zb_r_int_ser s;
     SEXP cont;
@@ -286,7 +285,17 @@ ZB_INLINE zb_status zb_serialize(SEXP x, zb_buf *b, int version, int xdr, SEXP r
     R_UnwindProtect(zb_r_int_ser_body, &s, zb_r_int_ser_clean, &s, cont);
     UNPROTECT(1);
     if (s.st) b->len = s.len0;
+    if (total) *total = s.total;
     return s.st;
+}
+
+/* Appends x's serialization to b. ZB_ERR_INVALID for a version other than 2
+   or 3; ZB_ERR_LIMIT or ZB_ERR_MEMORY when b cannot hold it. On any failure,
+   and when R_Serialize raises (b's memory must then be owned by R, as
+   zb_r_buf_new() makes it), b holds exactly what it held. */
+ZB_INLINE zb_status zb_serialize(SEXP x, zb_buf *b, int version, int xdr, SEXP refhook)
+{
+    return zb_r_int_serialize_buf(x, b, version, xdr, refhook, NULL);
 }
 
 /* zb_unserialize: the cursor as the in-stream. */

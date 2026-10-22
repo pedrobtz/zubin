@@ -105,6 +105,22 @@ test_that("a builder that cannot hold the stream is a limit error and keeps its 
   expect_identical(bin_unserialize(bin_take(b), offset = 2), 1L)
 })
 
+test_that("a limit error calls the refhook once per reference, not again to size it", {
+  e <- new.env(parent = emptyenv())
+  calls <- 0L
+  hook <- function(x) {
+    calls <<- calls + 1L
+    if (calls > 1L) stop(structure(class = c("second_pass_error", "error", "condition"),
+                                   list(message = "called twice", call = NULL)))
+    "env-id"
+  }
+  b <- bin_builder(max = 1)
+  err <- expect_error(bin_serialize(e, b, refhook = hook), class = "zubin_limit_error")
+  expect_identical(calls, 1L)
+  expect_identical(err$size, as.double(length(serialize(e, NULL, refhook = function(x) "env-id"))))
+  expect_identical(bin_size(b), 0)
+})
+
 test_that("the sink form equals the builder form at every chunk size", {
   x <- serialize_corpus()[c("frame", "chr", "compact", "attrs")]
   for (version in 2:3) {

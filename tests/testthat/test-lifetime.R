@@ -63,6 +63,26 @@ test_that("an interrupted bin_put() leaves the builder unchanged", {
   expect_identical(as.raw(b), bytes("01"))
 })
 
+test_that("an interrupted string bin_put() leaves the builder unchanged", {
+  skip_on_cran()
+  skip_if_no_slow_tests()
+  b <- bin_builder()
+  bin_put(b, bytes("01"))
+  big <- rep("abc", 2^24)   # 1 GiB as s64
+  cut_short <- FALSE
+  for (limit in c(0.02, 0.05, 0.1)) {
+    if (interrupted_by_time_limit(function() bin_put(b, big, type = "s64"), limit)) {
+      cut_short <- TRUE
+      break
+    }
+    bin_reset(b)
+    bin_put(b, bytes("01"))
+  }
+  skip_if_not(cut_short, "the 1 GiB append finished inside every limit")
+  expect_identical(bin_size(b), 1)
+  expect_identical(as.raw(b), bytes("01"))
+})
+
 test_that("a buffer stranded by an erroring refhook during serialization is freed", {
   gc()
   before <- live_buffers()

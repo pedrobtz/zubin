@@ -75,6 +75,16 @@ test_that("each grammar error is a spec error at the offending byte", {
   expect_identical(spec_error_at("u8[0]"), 3)
   expect_identical(spec_error_at("u8[2147483648]"), 3)
   expect_identical(spec_error_at("b2147483648"), 1)
+  # past 2^32 - 1: the parser must not wrap these back into range
+  for (d in c("4294967295", "4294967296", "4294967297", "8589934593",
+              "99999999999999999999999999999999")) {
+    expect_identical(spec_error_at(paste0("x", d)), 1)
+    expect_identical(spec_error_at(paste0("s", d)), 1)
+    expect_identical(spec_error_at(paste0("b", d)), 1)
+    expect_identical(spec_error_at(paste0("v:u8[", d, "]")), 5)
+  }
+  expect_identical(bin_layout("x2147483647")$fields$size, 2147483647L)
+  expect_identical(bin_layout("v:u8[2147483647]")$fields$count, 2147483647L)
   expect_identical(spec_error_at("u8[]"), 3)
   expect_identical(spec_error_at("u8[3"), 4)
   # duplicate names, a name on padding, malformed names

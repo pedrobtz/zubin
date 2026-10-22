@@ -9,9 +9,10 @@ tryCatch({
   for (i in 1:40) bin_put(b, as.raw(seq_len(256) %% 256))      # growth from 0
   bin_put(b, c(1.5, 2.5), type = "f64", endian = "big")        # typed, in place
   bin_put(b, c("abc", "de"), type = "z")
+  bin_put(b, c("abc", "d\u00e9"), type = "s4")                  # translated, then padded
   bin_reserve(b, 3e6)
   x <- bin_take(b)
-  stopifnot(length(x) == 40 * 256 + 16 + 7)
+  stopifnot(length(x) == 40 * 256 + 16 + 7 + 8)
   l <- bin_layout("<id:u32 v:f64 s:s4")
   y <- bin_pack(l, id = 1:1000, v = 0.5, s = "ab")
   stopifnot(identical(bin_unpack(y, l)$id, as.double(1:1000)))

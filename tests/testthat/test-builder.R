@@ -85,6 +85,18 @@ test_that("max is a hard cap: exactly max fits, one byte more is a limit error",
   expect_identical(bin_take(b), as.raw(1:10))
 })
 
+test_that("a string append past max reports its size and appends nothing", {
+  b <- bin_builder(max = 6)
+  bin_put(b, bytes("01 02"))
+  e <- expect_error(bin_put(b, c("ab", "cé"), type = "z"), class = "zubin_limit_error")
+  expect_identical(e$size, 2 + 3 + 4)
+  e <- expect_error(bin_put(b, c("ab", "c"), type = "s3"), class = "zubin_limit_error")
+  expect_identical(e$size, 2 + 6)
+  expect_identical(as.raw(b), bytes("01 02"))
+  bin_put(b, c("ab", "c"), type = "s2")
+  expect_identical(as.raw(b), bytes("01 02 61 62 63 00"))
+})
+
 test_that("bin_builder() validates reserve and max", {
   expect_error(bin_builder(reserve = -1), class = "zubin_invalid_argument")
   expect_error(bin_builder(reserve = 1.5), class = "zubin_invalid_argument")
