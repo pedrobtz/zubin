@@ -40,8 +40,9 @@ becomes `# zubin 0.1.0` when it is submitted).
   [`bin_unserialize()`](https://pedrobtz.github.io/zubin/reference/bin_serialize.md)
   reads one from a raw vector at a 0-based offset;
   [`bin_hash_object()`](https://pedrobtz.github.io/zubin/reference/bin_hash_object.md)
-  gives an XXH3 fingerprint of an object that does not change with the R
-  version, streamed so that the serialization is never allocated
+  gives an XXH3 fingerprint of an object’s serialization, without the
+  header that records the R version, streamed so that the serialization
+  is never allocated
   ([\#25](https://github.com/pedrobtz/zubin/issues/25)).
 - Nothing is silently wrong: a value that does not fit its field, an
   `NA` with no bytes, a 64-bit integer that a double cannot hold
