@@ -758,8 +758,9 @@ SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
             size_t nb = f->type == ZB_BYTES || f->type == ZB_STR ? nrec * f->size
                                                                  : m * zb_type_width(f->type);
             SEXP nat = Rf_allocVector(RAWSXP, (R_xlen_t)nb);
-            uint8_t *copy = (uint8_t *)R_alloc(len ? len : 1, 1);
-            SET_VECTOR_ELT(one, 7, nat);
+            uint8_t *copy;
+            SET_VECTOR_ELT(one, 7, nat);   /* reachable from `out` before R_alloc can collect */
+            copy = (uint8_t *)R_alloc(len ? len : 1, 1);
             if (zb_unpack_native(base, nrec, rs, f, RAW(nat))) Rf_error("unpack_native failed");
             if (len) memcpy(copy, base, len);
             zb_pack_zeros(copy, nrec, rs, f);
