@@ -58,7 +58,20 @@
 </h1></div>
 <!-- badges: start -->
 
-<p>zubin reads and writes structured binary data in R. Describe a fixed binary record once, as a layout, and read or write millions of them in one call; convert typed vectors to and from bytes at any width and byte order, exactly or with an error, never silently rounded; append to a growable byte buffer that is not quadratic. The same machinery is a header-only C99 library that other packages use through <code>LinkingTo</code>.</p>
+<p>Every binary format, from an image header to a market data feed to a C struct dumped to disk, is specified the same way: a table of fields, each with a name, a type, a width and an offset. Base R reads such data one <code><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin()</a></code> call at a time, loops over the records itself, has no unsigned 32-bit integer and no half-precision float, and reads an 8-byte integer silently wrong once it outgrows 32 bits.</p>
+<p>zubin lets you write the table down once, as a <em>layout</em>, and then read or write any number of records in one call.</p>
+<ul>
+<li>
+<strong>Describe once, read millions.</strong> A layout is one string, <code>"&lt;id:u32 ts:i64 price:f64 side:u8"</code>, and <code><a href="reference/bin_unpack.html">bin_unpack()</a></code> turns a raw vector into a data frame of every record in it, one tight loop per field.</li>
+<li>
+<strong>Every type a format uses.</strong> Integers from 8 to 128 bits, signed and unsigned; <code>f16</code>, <code>bf16</code>, <code>f32</code> and <code>f64</code>; complex numbers; booleans; fixed bytes and strings; arrays; padding; either byte order, per field; and C struct alignment.</li>
+<li>
+<strong>Exact, or an error.</strong> Nothing is silently rounded, wrapped or truncated. A 64-bit integer that a double cannot hold, or a value too large for its field, is an error that names the field and the record.</li>
+<li>
+<strong>Writing too.</strong> <code><a href="reference/bin_pack.html">bin_pack()</a></code> and <code><a href="reference/bin_encode.html">bin_encode()</a></code> are the inverses, and a byte builder appends without quadratic copying, up to a hard cap.</li>
+<li>
+<strong>A C library underneath.</strong> The same buffers, cursors and kernels are a header-only C99 library that other packages use through <code>LinkingTo</code> alone.</li>
+</ul>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -70,107 +83,82 @@
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"pedrobtz/zubin"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="example">Example<a class="anchor" aria-label="anchor" href="#example"></a>
+<h2 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a>
 </h2>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://pedrobtz.github.io/zubin/">zubin</a></span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://pedrobtz.github.io/zubin/">zubin</a></span><span class="op">)</span></span></code></pre></div>
+<p><strong>Read a real header.</strong> A PNG file opens with an 8-byte signature and then an <code>IHDR</code> chunk, big-endian, as its specification lays it out. That table, written down, reads the image’s size from the file R just wrote:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">png_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".png"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/grDevices/png.html" class="external-link">png</a></span><span class="op">(</span><span class="va">png_file</span>, width <span class="op">=</span> <span class="fl">640</span>, height <span class="op">=</span> <span class="fl">480</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">pressure</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/invisible.html" class="external-link">invisible</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/grDevices/dev.html" class="external-link">dev.off</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">hdr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&gt;magic:u32 version:u16 count:u32"</span><span class="op">)</span></span>
-<span><span class="va">rec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&lt;id:u32 ts:i64 price:f64 qty:i32 side:u8 x3"</span><span class="op">)</span></span>
+<span><span class="va">ihdr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&gt;x8 length:u32 type:s4 width:u32 height:u32 depth:u8 colour:u8"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin</a></span><span class="op">(</span><span class="va">png_file</span>, <span class="st">"raw"</span>, <span class="fl">64</span><span class="op">)</span>, <span class="va">ihdr</span>, n <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   length type width height depth colour</span></span>
+<span><span class="co">#&gt; 1     13 IHDR   640    480     8      6</span></span></code></pre></div>
+<p><strong>The types base R lacks.</strong> <code><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin()</a></code> has no unsigned 32-bit integers and no half floats; zubin decodes both, in either byte order:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">as.raw</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0xff</span>, <span class="fl">0xff</span>, <span class="fl">0xff</span>, <span class="fl">0xff</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin</a></span><span class="op">(</span><span class="va">x</span>, <span class="st">"integer"</span>, size <span class="op">=</span> <span class="fl">4</span>, signed <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Warning in readBin(x, "integer", size = 4, signed = FALSE): 'signed = FALSE' is</span></span>
+<span><span class="co">#&gt; only valid for integers of sizes 1 and 2</span></span>
+<span><span class="co">#&gt; [1] -1</span></span>
+<span><span class="fu"><a href="reference/bin_decode.html">bin_decode</a></span><span class="op">(</span><span class="va">x</span>, <span class="st">"u32"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 4294967295</span></span>
 <span></span>
-<span><span class="va">trades</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, ts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1e12</span>, <span class="fl">1e12</span> <span class="op">+</span> <span class="fl">5</span>, <span class="fl">1e12</span> <span class="op">+</span> <span class="fl">9</span><span class="op">)</span>,</span>
-<span>                     price <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">101.5</span>, <span class="fl">101.25</span>, <span class="fl">101.75</span><span class="op">)</span>, qty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100L</span>, <span class="fl">50L</span>, <span class="fl">75L</span><span class="op">)</span>,</span>
-<span>                     side <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">2L</span>, <span class="fl">1L</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
+<span><span class="co"># half-precision floats, as machine-learning weights are stored</span></span>
+<span><span class="fu"><a href="reference/bin_decode.html">bin_decode</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">as.raw</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0x00</span>, <span class="fl">0x3c</span>, <span class="fl">0x00</span>, <span class="fl">0xc0</span>, <span class="fl">0x00</span>, <span class="fl">0x7c</span><span class="op">)</span><span class="op">)</span>, <span class="st">"f16"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1]   1  -2 Inf</span></span></code></pre></div>
+<p><strong>Exact, or an error.</strong> <code><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin()</a></code> reads the 8-byte integer 2^32 as 0, without a word. zubin reads it exactly, and refuses a value above 2^53, which has no exact double, naming the record rather than handing back a neighbouring number (<code>int64 = "integer64"</code> returns the exact bits instead):</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">counts</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_encode.html">bin_encode</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span><span class="op">^</span><span class="fl">32</span>, <span class="fl">2</span><span class="op">^</span><span class="fl">53</span> <span class="op">+</span> <span class="fl">2</span><span class="op">)</span>, <span class="st">"u64"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin</a></span><span class="op">(</span><span class="va">counts</span>, <span class="st">"integer"</span>, size <span class="op">=</span> <span class="fl">8</span>, n <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0 2</span></span>
+<span><span class="fu"><a href="reference/bin_decode.html">bin_decode</a></span><span class="op">(</span><span class="va">counts</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">8</span><span class="op">]</span>, <span class="st">"u64"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 4294967296</span></span>
+<span><span class="fu"><a href="reference/bin_decode.html">bin_decode</a></span><span class="op">(</span><span class="va">counts</span>, <span class="st">"u64"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Error in `bin_decode()`:</span></span>
+<span><span class="co">#&gt; ! The value of record 1 has no exact R value.</span></span></code></pre></div>
+<p><strong>A million records in one call.</strong> Packing a data frame and unpacking it again is one call each way, and the round trip is exact:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
+<span><span class="va">rec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&lt;id:i32 price:f64 qty:i16 x2"</span><span class="op">)</span></span>
+<span><span class="va">trades</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">1e6</span>, price <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">1e6</span>, <span class="fl">90</span>, <span class="fl">110</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span>,</span>
+<span>                     qty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">500</span>, <span class="fl">1e6</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">bytes</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_pack.html">bin_pack</a></span><span class="op">(</span><span class="va">rec</span>, <span class="va">trades</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">bytes</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 16000000</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="va">bytes</span>, <span class="va">rec</span><span class="op">)</span>, <span class="va">trades</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+<p><strong>Write a file format.</strong> A builder collects a header and the records after it, and <code><a href="reference/bin_hexdump.html">bin_hexdump()</a></code> shows the bytes with their 0-based offsets:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">hdr</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&gt;magic:u32 version:u16 count:u32"</span><span class="op">)</span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_builder.html">bin_builder</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/bin_put.html">bin_put</a></span><span class="op">(</span><span class="va">b</span>, <span class="fu"><a href="reference/bin_pack.html">bin_pack</a></span><span class="op">(</span><span class="va">hdr</span>, magic <span class="op">=</span> <span class="fl">0xCAFEBABE</span>, version <span class="op">=</span> <span class="fl">1</span>, count <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">trades</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/bin_put.html">bin_put</a></span><span class="op">(</span><span class="va">b</span>, <span class="fu"><a href="reference/bin_pack.html">bin_pack</a></span><span class="op">(</span><span class="va">rec</span>, <span class="va">trades</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_builder.html">bin_take</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">h</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">hdr</span>, n <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">rec</span>, offset <span class="op">=</span> <span class="fu"><a href="reference/bin_size.html">bin_size</a></span><span class="op">(</span><span class="va">hdr</span><span class="op">)</span>, n <span class="op">=</span> <span class="va">h</span><span class="op">$</span><span class="va">count</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/bin_hexdump.html">bin_hexdump</a></span><span class="op">(</span><span class="va">x</span>, n <span class="op">=</span> <span class="fl">32</span><span class="op">)</span></span></code></pre></div>
-<p>Offsets are 0-based everywhere. Every field type, its R type, and the specification grammar are in <code><a href="reference/bin_layout.html">?bin_layout</a></code>.</p>
+<span><span class="fu"><a href="reference/bin_put.html">bin_put</a></span><span class="op">(</span><span class="va">b</span>, <span class="fu"><a href="reference/bin_pack.html">bin_pack</a></span><span class="op">(</span><span class="va">hdr</span>, magic <span class="op">=</span> <span class="fl">0x5A55424E</span>, version <span class="op">=</span> <span class="fl">1</span>, count <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/bin_put.html">bin_put</a></span><span class="op">(</span><span class="va">b</span>, <span class="fu"><a href="reference/bin_pack.html">bin_pack</a></span><span class="op">(</span><span class="va">rec</span>, <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">trades</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/bin_hexdump.html">bin_hexdump</a></span><span class="op">(</span><span class="fu"><a href="reference/bin_builder.html">bin_take</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; 00000000: 5a55 424e 0001 0000 0002 0100 0000 a470  ZUBN...........p</span></span>
+<span><span class="co">#&gt; 00000010: 3d0a d7d3 5740 df01 0000 0200 0000 5c8f  =...W@........\.</span></span>
+<span><span class="co">#&gt; 00000020: c2f5 285c 5840 1500 0000                 ..(\X@....</span></span></code></pre></div>
+<p>Every function is prefixed <code>bin_</code>, and offsets are 0-based everywhere, as in every format specification.</p>
 </div>
 <div class="section level2">
-<h2 id="using-zubin-from-c">Using zubin from C<a class="anchor" aria-label="anchor" href="#using-zubin-from-c"></a>
+<h2 id="learn-more">Learn more<a class="anchor" aria-label="anchor" href="#learn-more"></a>
 </h2>
-<p>This is the whole recipe. The fixture package <code>tools/zubintest</code> follows it verbatim, and it is built, checked and tested on Linux, macOS and Windows on every change, then tested again with zubin and zufast uninstalled.</p>
-<p><strong>1. <code>DESCRIPTION</code></strong>: list zubin <em>and</em> zufast in <code>LinkingTo</code>, and nothing else: no <code>Imports:</code>, no <code>importFrom()</code>, no <code>configure</code>, no <code>PKG_LIBS</code>.</p>
-<!-- recipe: DESCRIPTION LinkingTo -->
-<pre><code>LinkingTo: zubin, zufast</code></pre>
-<p>Both, because <code>LinkingTo</code> is not transitive and zubin’s headers include zufast’s. Neither is needed when your package <em>runs</em>: your shared object carries its own copy of every zubin function it uses, and keeps working if both are removed.</p>
-<p><strong>2. <code>NAMESPACE</code></strong>: only your own <code>useDynLib</code>.</p>
-<!-- recipe: NAMESPACE -->
-<pre><code><span><span class="fu">useDynLib</span><span class="op">(</span><span class="va">zubintest</span>, .registration <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre>
-<p><strong>3. <code>src/Makevars</code></strong>: hide your symbols, as the zu family does. Every function zubin emits is already <code>static inline</code>, so two packages that both use zubin never bind to each other’s copies; this is defence in depth.</p>
-<!-- recipe: src/Makevars -->
-<pre class="make"><code>PKG_CFLAGS = $(C_VISIBILITY)</code></pre>
-<p><strong>4. Include and call.</strong> <code>&lt;zubin.h&gt;</code> for everything, or one area at a time (<code>&lt;zubin/cursor.h&gt;</code>, <code>&lt;zubin/buf.h&gt;</code>, <code>&lt;zubin/layout.h&gt;</code>, …). Any number of translation units may include them; there is nothing to link and no implementation macro. They compile as C99 and as C++11. A checked sequential read of a header:</p>
-<!-- recipe: src/cursor.c -->
-<div class="sourceCode" id="cb7"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co">/* Translation unit 2: a checked sequential read of a header. Includes one</span></span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">   area header, then the umbrella, the two ways the README allows. */</span></span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin/cursor.h&gt;</span></span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin.h&gt;</span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="pp">#include </span><span class="im">"zubintest.h"</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a></span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">/* magic:u32be version:u16le count:u32le name:6 bytes; returns c(magic,</span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">   version, count, the position after the header), or the status's name and</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">   the position where the read failed. */</span></span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>SEXP zt_header<span class="op">(</span>SEXP x<span class="op">)</span></span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="op">{</span></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>    zb_cur c<span class="op">;</span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>    <span class="dt">uint32_t</span> magic <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>    <span class="dt">uint16_t</span> version <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">uint8_t</span> <span class="op">*</span>name <span class="op">=</span> NULL<span class="op">;</span></span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>    zb_status st<span class="op">;</span></span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>    SEXP out<span class="op">;</span></span>
-<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>    zb_cur_init<span class="op">(&amp;</span>c<span class="op">,</span> XLENGTH<span class="op">(</span>x<span class="op">)</span> <span class="op">?</span> RAW<span class="op">(</span>x<span class="op">)</span> <span class="op">:</span> NULL<span class="op">,</span> <span class="op">(</span><span class="dt">size_t</span><span class="op">)</span>XLENGTH<span class="op">(</span>x<span class="op">));</span></span>
-<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">((</span>st <span class="op">=</span> zb_cur_u32be<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>magic<span class="op">))</span> <span class="op">||</span> <span class="op">(</span>st <span class="op">=</span> zb_cur_u16le<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>version<span class="op">))</span> <span class="op">||</span></span>
-<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>        <span class="op">(</span>st <span class="op">=</span> zb_cur_u32le<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>count<span class="op">))</span> <span class="op">||</span> <span class="op">(</span>st <span class="op">=</span> zb_cur_bytes<span class="op">(&amp;</span>c<span class="op">,</span> <span class="op">&amp;</span>name<span class="op">,</span> <span class="dv">6</span><span class="op">)))</span> <span class="op">{</span></span>
-<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a>        out <span class="op">=</span> PROTECT<span class="op">(</span>Rf_allocVector<span class="op">(</span>STRSXP<span class="op">,</span> <span class="dv">2</span><span class="op">));</span></span>
-<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a>        SET_STRING_ELT<span class="op">(</span>out<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> Rf_mkChar<span class="op">(</span>zb_status_string<span class="op">(</span>st<span class="op">)));</span></span>
-<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a>        SET_STRING_ELT<span class="op">(</span>out<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> Rf_mkChar<span class="op">(</span>c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">0</span> <span class="op">?</span> <span class="st">"0"</span> <span class="op">:</span> c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">4</span> <span class="op">?</span> <span class="st">"4"</span> <span class="op">:</span> c<span class="op">.</span>pos <span class="op">==</span> <span class="dv">6</span> <span class="op">?</span> <span class="st">"6"</span> <span class="op">:</span> <span class="st">"10"</span><span class="op">));</span></span>
-<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a>        UNPROTECT<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
-<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a>        <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a>    out <span class="op">=</span> Rf_allocVector<span class="op">(</span>REALSXP<span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
-<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> magic<span class="op">;</span></span>
-<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> version<span class="op">;</span></span>
-<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">2</span><span class="op">]</span> <span class="op">=</span> count<span class="op">;</span></span>
-<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a>    REAL<span class="op">(</span>out<span class="op">)[</span><span class="dv">3</span><span class="op">]</span> <span class="op">=</span> <span class="op">(</span><span class="dt">double</span><span class="op">)</span>c<span class="op">.</span>pos<span class="op">;</span></span>
-<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>Every function that can fail returns a <code>zb_status</code> (<code>ZB_OK</code> is 0), and on failure its inputs are unchanged: a cursor that returns <code>ZB_ERR_EOF</code> has not moved.</p>
-<p><strong>5. Buffers owned by R.</strong> <code>&lt;zubin-r.h&gt;</code> is the one header that includes R’s, and is not part of <code>&lt;zubin.h&gt;</code>. <code>zb_r_buf_new()</code> hands you a buffer owned by an external pointer whose finalizer is registered before the buffer exists, so an <code>Rf_error()</code> or an interrupt cannot leak it:</p>
-<!-- recipe: src/buffer.c -->
-<div class="sourceCode" id="cb8"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co">/* Translation unit 3: a buffer owned by R, through &lt;zubin-r.h&gt;. */</span></span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;zubin-r.h&gt;</span></span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="pp">#include </span><span class="im">"zubintest.h"</span></span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">/* Appends the doubles in `values` as f32be, then borrows the raw vector</span></span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">   `tail` and appends its bytes, and returns the buffer's bytes. The buffer is</span></span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">   owned by an external pointer from before it exists, so the error below</span></span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">   cannot leak it. */</span></span>
-<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>SEXP zt_build<span class="op">(</span>SEXP values<span class="op">,</span> SEXP tail<span class="op">)</span></span>
-<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="op">{</span></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>    zb_status st<span class="op">;</span></span>
-<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>    zb_buf view<span class="op">,</span> <span class="op">*</span>b<span class="op">;</span></span>
-<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>    R_xlen_t i<span class="op">;</span></span>
-<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>    SEXP out<span class="op">,</span> ptr <span class="op">=</span> PROTECT<span class="op">(</span>zb_r_buf_new<span class="op">(</span><span class="dv">16</span><span class="op">,</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">20</span><span class="op">,</span> <span class="op">&amp;</span>st<span class="op">));</span></span>
-<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>st<span class="op">)</span> Rf_error<span class="op">(</span><span class="st">"zt_build: </span><span class="sc">%s</span><span class="st">"</span><span class="op">,</span> zb_status_string<span class="op">(</span>st<span class="op">));</span></span>
-<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>    b <span class="op">=</span> zb_r_buf_get<span class="op">(</span>ptr<span class="op">);</span></span>
-<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> XLENGTH<span class="op">(</span>values<span class="op">);</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>zb_put_f32be<span class="op">(</span>b<span class="op">,</span> <span class="op">(</span><span class="dt">float</span><span class="op">)</span>REAL<span class="op">(</span>values<span class="op">)[</span>i<span class="op">]))</span> Rf_error<span class="op">(</span><span class="st">"zt_build: put failed"</span><span class="op">);</span></span>
-<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a>    zb_r_buf_borrow<span class="op">(&amp;</span>view<span class="op">,</span> tail<span class="op">);</span></span>
-<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>zb_put_bytes<span class="op">(</span>b<span class="op">,</span> view<span class="op">.</span>data<span class="op">,</span> view<span class="op">.</span>len<span class="op">))</span> Rf_error<span class="op">(</span><span class="st">"zt_build: the cap was reached"</span><span class="op">);</span></span>
-<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a>    out <span class="op">=</span> PROTECT<span class="op">(</span>zb_r_buf_to_raw<span class="op">(</span>b<span class="op">));</span></span>
-<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a>    zb_r_buf_free<span class="op">(</span>ptr<span class="op">);</span></span>
-<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a>    UNPROTECT<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb8-25"><a href="#cb8-25" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
-<span id="cb8-26"><a href="#cb8-26" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>The C API, buffer ownership and the layout kernels are described in the <code>c-api</code> article on the package website.</p>
+<ul>
+<li>
+<a href="https://pedrobtz.github.io/zubin/articles/zubin.html">Structured binary data with zubin</a>, the getting-started guide: layouts, a WAV file written and read back, C structs, arrays, 64-bit integers and errors.</li>
+<li>
+<a href="https://pedrobtz.github.io/zubin/articles/c-api.html">The C API</a>, for package authors: the <code>LinkingTo</code> recipe, the cursor, the record kernels, and buffers owned by R.</li>
+<li>The <a href="https://pedrobtz.github.io/zubin/reference/">reference index</a>, with the full type table under <code><a href="reference/bin_layout.html">?bin_layout</a></code>.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="related-work">Related work<a class="anchor" aria-label="anchor" href="#related-work"></a>
+</h2>
+<p>zubin’s integer loads and stores, half-float conversions and UTF-8 validation come from <a href="https://github.com/pedrobtz/zufast" class="external-link">zufast</a>. Python’s <a href="https://docs.python.org/3/library/struct.html" class="external-link"><code>struct</code></a> module and the structured dtypes of NumPy are the nearest equivalents in other languages.</p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">

@@ -127,8 +127,8 @@ value that has no exact R representation is a <code>zubin_range_error</code>
 carrying <code>field</code> and the 0-based record <code>index</code> of the first one, namely
 an <code>i32</code> of -2^31 (R's <code>NA_integer_</code>; allowed with <code>na = "allow"</code>), an
 <code>i64</code>, <code>u64</code>, <code>i128</code> or <code>u128</code> above 2^53 in magnitude when
-<code>int64 = "double"</code>, and, when <code>int64 = "integer64"</code>, a value outside
-int64 or an <code>i64</code> of -2^63 (bit64's <code>NA</code>). <code>c64</code> and <code>c128</code> fields read as
+<code>int64 = "double"</code>, and, when <code>int64 = "integer64"</code>, a value outside the
+signed 64-bit range or an <code>i64</code> of -2^63 (bit64's <code>NA</code>). <code>c64</code> and <code>c128</code> fields read as
 complex vectors. An <code>s&lt;n&gt;</code> field holds the bytes up to its first
 NUL; with <code>encoding = "UTF-8"</code> they must be valid UTF-8, or the call is a
 <code>zubin_encoding_error</code> carrying <code>field</code> and <code>index</code>.</p>

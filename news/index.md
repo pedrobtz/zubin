@@ -68,7 +68,7 @@ The first release.
   share a buffer or cursor
   ([\#26](https://github.com/pedrobtz/zubin/issues/26)). Source
   compatibility within major version 1; see the `c-api` article on the
-  package website and “Using zubin from C” in the README.
+  package website.
 - `zubin-r.h` also points R’s serialization at these containers:
   `zb_serialize()` into a buffer, `zb_unserialize()` from a cursor, and
   `zb_serialize_to_sink()` through any sink, as a block pipeline
@@ -80,5 +80,5 @@ The first release.
 
 Variable-length fields, a cursor-style reader from R, byte search and
 splitting, zero-copy views, memory-mapped files, connections, bitfields
-and zuint’s integers as an `int64` mode are planned, each with the
+and the integers of zuint as an `int64` mode are planned, each with the
 condition that admits it, in `.agents/next.md` in the source repository.

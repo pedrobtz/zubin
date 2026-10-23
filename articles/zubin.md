@@ -40,10 +40,11 @@ bin_size(wav)
 #> [1] 44
 ```
 
-The types are the integers `u8` to `i64`, the floats `f16`, `bf16`,
-`f32` and `f64`, `bool`, fixed bytes `b<n>` and fixed strings `s<n>`,
-padding `x<n>`, and arrays of the numeric types, `f32[3]`. A field can
-override the prefix with `.le` or `.be`.
+The types are the integers `u8` to `i128`, the floats `f16`, `bf16`,
+`f32` and `f64`, the complex numbers `c64` and `c128`, `bool`, fixed
+bytes `b<n>` and fixed strings `s<n>`, padding `x<n>`, and arrays of the
+numeric types, `f32[3]`. A field can override the prefix with `.le` or
+`.be`.
 
 | Spec | Bytes | R type on unpack | On pack, accepts |
 |----|----|----|----|
@@ -51,7 +52,9 @@ override the prefix with `.le` or `.be`.
 | `i32` | 4 | integer; −2^31 is an error unless `na = "allow"` | integer, whole double |
 | `u32` | 4 | double | integer, whole double |
 | `i64 u64` | 8 | double, exact to 2^53, or `integer64` | integer, whole double, `integer64` |
+| `i128 u128` | 16 | as `i64 u64` | integer, whole double, `integer64` |
 | `f16 bf16 f32 f64` | 2–8 | double | numeric, rounded to nearest even |
+| `c64 c128` | 8, 16 | complex | complex, or numeric as a real part |
 | `bool` | 1 | logical | logical |
 | `b<n>` | n | list of raw | list of raw, each n bytes |
 | `s<n>` | n | character, up to the first NUL | character of at most n UTF-8 bytes |

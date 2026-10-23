@@ -41,6 +41,12 @@ its `zb_*` function, never by aggregate initialisation, so an appended
 field has a defined value. `ZUBIN_VERSION_NUMBER` is
 `10000 * major + 100 * minor + patch`.
 
+Any number of translation units may include the headers; there is no
+implementation macro to define, and they compile as C99 and as C++11.
+The fixture package `tools/zubintest`, whose files are what this page
+shows, is built, checked and tested on Linux, macOS and Windows on every
+change, and then tested again with zubin and zufast uninstalled.
+
 ## The headers
 
 | Header | What it holds |

@@ -98,6 +98,12 @@ struct fields are only ever appended. Initialise every struct through
 its <code>zb_*</code> function, never by aggregate initialisation, so an
 appended field has a defined value. <code>ZUBIN_VERSION_NUMBER</code> is
 <code>10000 * major + 100 * minor + patch</code>.</p>
+<p>Any number of translation units may include the headers; there is no
+implementation macro to define, and they compile as C99 and as C++11.
+The fixture package <code>tools/zubintest</code>, whose files are what
+this page shows, is built, checked and tested on Linux, macOS and
+Windows on every change, and then tested again with zubin and zufast
+uninstalled.</p>
 </div>
 <div class="section level2">
 <h2 id="the-headers">The headers<a class="anchor" aria-label="anchor" href="#the-headers"></a>

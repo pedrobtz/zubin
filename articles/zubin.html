@@ -100,11 +100,12 @@ big, <code>=</code> the host’s.</p>
 <span><span class="co">#&gt;  data_size   u32  1     4    40     little</span></span>
 <span><span class="fu"><a href="../reference/bin_size.html">bin_size</a></span><span class="op">(</span><span class="va">wav</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 44</span></span></code></pre></div>
-<p>The types are the integers <code>u8</code> to <code>i64</code>, the
+<p>The types are the integers <code>u8</code> to <code>i128</code>, the
 floats <code>f16</code>, <code>bf16</code>, <code>f32</code> and
-<code>f64</code>, <code>bool</code>, fixed bytes <code>b&lt;n&gt;</code>
-and fixed strings <code>s&lt;n&gt;</code>, padding
-<code>x&lt;n&gt;</code>, and arrays of the numeric types,
+<code>f64</code>, the complex numbers <code>c64</code> and
+<code>c128</code>, <code>bool</code>, fixed bytes
+<code>b&lt;n&gt;</code> and fixed strings <code>s&lt;n&gt;</code>,
+padding <code>x&lt;n&gt;</code>, and arrays of the numeric types,
 <code>f32[3]</code>. A field can override the prefix with
 <code>.le</code> or <code>.be</code>.</p>
 <table class="table">
@@ -149,10 +150,24 @@ and fixed strings <code>s&lt;n&gt;</code>, padding
 </td>
 </tr>
 <tr class="odd">
+<td><code>i128 u128</code></td>
+<td>16</td>
+<td>as <code>i64 u64</code>
+</td>
+<td>integer, whole double, <code>integer64</code>
+</td>
+</tr>
+<tr class="even">
 <td><code>f16 bf16 f32 f64</code></td>
 <td>2–8</td>
 <td>double</td>
 <td>numeric, rounded to nearest even</td>
+</tr>
+<tr class="odd">
+<td><code>c64 c128</code></td>
+<td>8, 16</td>
+<td>complex</td>
+<td>complex, or numeric as a real part</td>
 </tr>
 <tr class="even">
 <td><code>bool</code></td>
