@@ -48,9 +48,9 @@ native-order kernels and the foreign buffer. Gates:
 the builder (`bin_builder()`, `bin_put()` raw/typed/`"z"`/`"s<n>"`, `bin_reserve()`,
 `bin_reset()`, `bin_take()`, `as.raw()`), `bin_hexdump()`/`bin_diff()`, and the
 serialisation streams. zufast comes from CRAN; the workflows without R (the header gate,
-the fuzzers) check out its `0.1.0` tag, never its `main`. `tools/zubintest` is the consumer fixture (`consumer.yaml`); the README's
-"Using zubin from C" quotes it, and `tools/check-recipe` keeps the two identical: edit the
-fixture, then copy the change into the README. Next: submit 0.1.0 (the maintainer's step),
+the fuzzers) check out its `0.1.0` tag, never its `main`. `tools/zubintest` is the consumer fixture (`consumer.yaml`); the `c-api` article renders
+its recipe from the fixture's files, so the fixture is the one place to edit. `README.md` is
+generated: edit `README.Rmd` and run `devtools::build_readme()`. Next: submit 0.1.0 (the maintainer's step),
 then Stage 9's post-acceptance steps; #32 and `.agents/next.md` hold what follows.
 
 In C, `zb_field.count` is the byte width for `b`, `s` and `x` fields; the element count of a

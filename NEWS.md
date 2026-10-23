@@ -36,7 +36,7 @@ The first release.
   also read and write values in their own width and the host's order, and `rw.h` adds
   128-bit integers and reads at a width chosen at run time. Every header but `zubin-r.h` may be used from any thread, as long as
   no two threads share a buffer or cursor (#26). Source compatibility within major version 1; see the `c-api` article
-  on the package website and "Using zubin from C" in the README.
+  on the package website.
 * `zubin-r.h` also points R's serialization at these containers: `zb_serialize()` into a
   buffer, `zb_unserialize()` from a cursor, and `zb_serialize_to_sink()` through any sink,
   as a block pipeline consumes it (#25). R's own errors reach the caller unchanged; a
@@ -45,6 +45,6 @@ The first release.
 ## Not in this release
 
 Variable-length fields, a cursor-style reader from R, byte search and splitting, zero-copy
-views, memory-mapped files, connections, bitfields and zuint's integers as an `int64` mode
+views, memory-mapped files, connections, bitfields and the integers of zuint as an `int64` mode
 are planned, each with the condition that admits it, in `.agents/next.md` in the source
 repository.

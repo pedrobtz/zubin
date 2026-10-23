@@ -1,15 +1,40 @@
+
+<!-- README.md is generated from README.Rmd. Please edit that file. -->
+
 # zubin
 
 <!-- badges: start -->
+
 [![R-CMD-check](https://github.com/pedrobtz/zubin/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/pedrobtz/zubin/actions/workflows/R-CMD-check.yaml)
 [![coverage](https://raw.githubusercontent.com/pedrobtz/zubin/main/.github/badges/coverage.svg)](https://github.com/pedrobtz/zubin/actions/workflows/coverage.yaml)
 <!-- badges: end -->
 
-zubin reads and writes structured binary data in R. Describe a fixed binary record once, as
-a layout, and read or write millions of them in one call; convert typed vectors to and from
-bytes at any width and byte order, exactly or with an error, never silently rounded; append
-to a growable byte buffer that is not quadratic. The same machinery is a header-only C99
-library that other packages use through `LinkingTo`.
+Every binary format, from an image header to a market data feed to a C
+struct dumped to disk, is specified the same way: a table of fields,
+each with a name, a type, a width and an offset. Base R reads such data
+one `readBin()` call at a time, loops over the records itself, has no
+unsigned 32-bit integer and no half-precision float, and reads an 8-byte
+integer silently wrong once it outgrows 32 bits.
+
+zubin lets you write the table down once, as a *layout*, and then read
+or write any number of records in one call.
+
+- **Describe once, read millions.** A layout is one string,
+  `"<id:u32 ts:i64 price:f64 side:u8"`, and `bin_unpack()` turns a raw
+  vector into a data frame of every record in it, one tight loop per
+  field.
+- **Every type a format uses.** Integers from 8 to 128 bits, signed and
+  unsigned; `f16`, `bf16`, `f32` and `f64`; complex numbers; booleans;
+  fixed bytes and strings; arrays; padding; either byte order, per
+  field; and C struct alignment.
+- **Exact, or an error.** Nothing is silently rounded, wrapped or
+  truncated. A 64-bit integer that a double cannot hold, or a value too
+  large for its field, is an error that names the field and the record.
+- **Writing too.** `bin_pack()` and `bin_encode()` are the inverses, and
+  a byte builder appends without quadratic copying, up to a hard cap.
+- **A C library underneath.** The same buffers, cursors and kernels are
+  a header-only C99 library that other packages use through `LinkingTo`
+  alone.
 
 ## Installation
 
@@ -24,144 +49,111 @@ or the development version from GitHub:
 pak::pak("pedrobtz/zubin")
 ```
 
-## Example
+## Usage
 
 ``` r
 library(zubin)
+```
 
+**Read a real header.** A PNG file opens with an 8-byte signature and
+then an `IHDR` chunk, big-endian, as its specification lays it out. That
+table, written down, reads the image’s size from the file R just wrote:
+
+``` r
+png_file <- tempfile(fileext = ".png")
+png(png_file, width = 640, height = 480)
+plot(pressure)
+invisible(dev.off())
+
+ihdr <- bin_layout(">x8 length:u32 type:s4 width:u32 height:u32 depth:u8 colour:u8")
+bin_unpack(readBin(png_file, "raw", 64), ihdr, n = 1)
+#>   length type width height depth colour
+#> 1     13 IHDR   640    480     8      6
+```
+
+**The types base R lacks.** `readBin()` has no unsigned 32-bit integers
+and no half floats; zubin decodes both, in either byte order:
+
+``` r
+x <- as.raw(c(0xff, 0xff, 0xff, 0xff))
+readBin(x, "integer", size = 4, signed = FALSE)
+#> Warning in readBin(x, "integer", size = 4, signed = FALSE): 'signed = FALSE' is
+#> only valid for integers of sizes 1 and 2
+#> [1] -1
+bin_decode(x, "u32")
+#> [1] 4294967295
+
+# half-precision floats, as machine-learning weights are stored
+bin_decode(as.raw(c(0x00, 0x3c, 0x00, 0xc0, 0x00, 0x7c)), "f16")
+#> [1]   1  -2 Inf
+```
+
+**Exact, or an error.** `readBin()` reads the 8-byte integer 2^32 as 0,
+without a word. zubin reads it exactly, and refuses a value above 2^53,
+which has no exact double, naming the record rather than handing back a
+neighbouring number (`int64 = "integer64"` returns the exact bits
+instead):
+
+``` r
+counts <- bin_encode(c(2^32, 2^53 + 2), "u64")
+readBin(counts, "integer", size = 8, n = 2)
+#> [1] 0 2
+bin_decode(counts[1:8], "u64")
+#> [1] 4294967296
+bin_decode(counts, "u64")
+#> Error in `bin_decode()`:
+#> ! The value of record 1 has no exact R value.
+```
+
+**A million records in one call.** Packing a data frame and unpacking it
+again is one call each way, and the round trip is exact:
+
+``` r
+set.seed(1)
+rec <- bin_layout("<id:i32 price:f64 qty:i16 x2")
+trades <- data.frame(id = 1:1e6, price = round(runif(1e6, 90, 110), 2),
+                     qty = sample(1:500, 1e6, replace = TRUE))
+bytes <- bin_pack(rec, trades)
+length(bytes)
+#> [1] 16000000
+identical(bin_unpack(bytes, rec), trades)
+#> [1] TRUE
+```
+
+**Write a file format.** A builder collects a header and the records
+after it, and `bin_hexdump()` shows the bytes with their 0-based
+offsets:
+
+``` r
 hdr <- bin_layout(">magic:u32 version:u16 count:u32")
-rec <- bin_layout("<id:u32 ts:i64 price:f64 qty:i32 side:u8 x3")
-
-trades <- data.frame(id = 1:3, ts = c(1e12, 1e12 + 5, 1e12 + 9),
-                     price = c(101.5, 101.25, 101.75), qty = c(100L, 50L, 75L),
-                     side = c(1L, 2L, 1L))
-
 b <- bin_builder()
-bin_put(b, bin_pack(hdr, magic = 0xCAFEBABE, version = 1, count = nrow(trades)))
-bin_put(b, bin_pack(rec, trades))
-x <- bin_take(b)
-
-h <- bin_unpack(x, hdr, n = 1)
-bin_unpack(x, rec, offset = bin_size(hdr), n = h$count)
-bin_hexdump(x, n = 32)
+bin_put(b, bin_pack(hdr, magic = 0x5A55424E, version = 1, count = 2))
+bin_put(b, bin_pack(rec, head(trades, 2)))
+bin_hexdump(bin_take(b))
+#> 00000000: 5a55 424e 0001 0000 0002 0100 0000 a470  ZUBN...........p
+#> 00000010: 3d0a d7d3 5740 df01 0000 0200 0000 5c8f  =...W@........\.
+#> 00000020: c2f5 285c 5840 1500 0000                 ..(\X@....
 ```
 
-Offsets are 0-based everywhere. Every field type, its R type, and the specification
-grammar are in `?bin_layout`.
+Every function is prefixed `bin_`, and offsets are 0-based everywhere,
+as in every format specification.
 
-## Using zubin from C
+## Learn more
 
-This is the whole recipe. The fixture package `tools/zubintest` follows it verbatim, and
-it is built, checked and tested on Linux, macOS and Windows on every change, then tested
-again with zubin and zufast uninstalled.
+- [Structured binary data with
+  zubin](https://pedrobtz.github.io/zubin/articles/zubin.html), the
+  getting-started guide: layouts, a WAV file written and read back, C
+  structs, arrays, 64-bit integers and errors.
+- [The C API](https://pedrobtz.github.io/zubin/articles/c-api.html), for
+  package authors: the `LinkingTo` recipe, the cursor, the record
+  kernels, and buffers owned by R.
+- The [reference index](https://pedrobtz.github.io/zubin/reference/),
+  with the full type table under `?bin_layout`.
 
-**1. `DESCRIPTION`**: list zubin *and* zufast in `LinkingTo`, and nothing else: no
-`Imports:`, no `importFrom()`, no `configure`, no `PKG_LIBS`.
+## Related work
 
-<!-- recipe: DESCRIPTION LinkingTo -->
-```
-LinkingTo: zubin, zufast
-```
-
-Both, because `LinkingTo` is not transitive and zubin's headers include zufast's. Neither is
-needed when your package *runs*: your shared object carries its own copy of every zubin
-function it uses, and keeps working if both are removed.
-
-**2. `NAMESPACE`**: only your own `useDynLib`.
-
-<!-- recipe: NAMESPACE -->
-```
-useDynLib(zubintest, .registration = TRUE)
-```
-
-**3. `src/Makevars`**: hide your symbols, as the zu family does. Every function zubin emits
-is already `static inline`, so two packages that both use zubin never bind to each other's
-copies; this is defence in depth.
-
-<!-- recipe: src/Makevars -->
-```make
-PKG_CFLAGS = $(C_VISIBILITY)
-```
-
-**4. Include and call.** `<zubin.h>` for everything, or one area at a time
-(`<zubin/cursor.h>`, `<zubin/buf.h>`, `<zubin/layout.h>`, …). Any number of translation
-units may include them; there is nothing to link and no implementation macro. They compile
-as C99 and as C++11. A checked sequential read of a header:
-
-<!-- recipe: src/cursor.c -->
-```c
-/* Translation unit 2: a checked sequential read of a header. Includes one
-   area header, then the umbrella, the two ways the README allows. */
-#include <zubin/cursor.h>
-#include <zubin.h>
-#include "zubintest.h"
-
-/* magic:u32be version:u16le count:u32le name:6 bytes; returns c(magic,
-   version, count, the position after the header), or the status's name and
-   the position where the read failed. */
-SEXP zt_header(SEXP x)
-{
-    zb_cur c;
-    uint32_t magic = 0, count = 0;
-    uint16_t version = 0;
-    const uint8_t *name = NULL;
-    zb_status st;
-    SEXP out;
-    zb_cur_init(&c, XLENGTH(x) ? RAW(x) : NULL, (size_t)XLENGTH(x));
-    if ((st = zb_cur_u32be(&c, &magic)) || (st = zb_cur_u16le(&c, &version)) ||
-        (st = zb_cur_u32le(&c, &count)) || (st = zb_cur_bytes(&c, &name, 6))) {
-        out = PROTECT(Rf_allocVector(STRSXP, 2));
-        SET_STRING_ELT(out, 0, Rf_mkChar(zb_status_string(st)));
-        SET_STRING_ELT(out, 1, Rf_mkChar(c.pos == 0 ? "0" : c.pos == 4 ? "4" : c.pos == 6 ? "6" : "10"));
-        UNPROTECT(1);
-        return out;
-    }
-    out = Rf_allocVector(REALSXP, 4);
-    REAL(out)[0] = magic;
-    REAL(out)[1] = version;
-    REAL(out)[2] = count;
-    REAL(out)[3] = (double)c.pos;
-    return out;
-}
-```
-
-Every function that can fail returns a `zb_status` (`ZB_OK` is 0), and on failure its
-inputs are unchanged: a cursor that returns `ZB_ERR_EOF` has not moved.
-
-**5. Buffers owned by R.** `<zubin-r.h>` is the one header that includes R's, and is not
-part of `<zubin.h>`. `zb_r_buf_new()` hands you a buffer owned by an external pointer whose
-finalizer is registered before the buffer exists, so an `Rf_error()` or an interrupt
-cannot leak it:
-
-<!-- recipe: src/buffer.c -->
-```c
-/* Translation unit 3: a buffer owned by R, through <zubin-r.h>. */
-#include <zubin-r.h>
-#include "zubintest.h"
-
-/* Appends the doubles in `values` as f32be, then borrows the raw vector
-   `tail` and appends its bytes, and returns the buffer's bytes. The buffer is
-   owned by an external pointer from before it exists, so the error below
-   cannot leak it. */
-SEXP zt_build(SEXP values, SEXP tail)
-{
-    zb_status st;
-    zb_buf view, *b;
-    R_xlen_t i;
-    SEXP out, ptr = PROTECT(zb_r_buf_new(16, 1 << 20, &st));
-    if (st) Rf_error("zt_build: %s", zb_status_string(st));
-    b = zb_r_buf_get(ptr);
-    for (i = 0; i < XLENGTH(values); i++) {
-        if (zb_put_f32be(b, (float)REAL(values)[i])) Rf_error("zt_build: put failed");
-    }
-    zb_r_buf_borrow(&view, tail);
-    if (zb_put_bytes(b, view.data, view.len)) Rf_error("zt_build: the cap was reached");
-    out = PROTECT(zb_r_buf_to_raw(b));
-    zb_r_buf_free(ptr);
-    UNPROTECT(2);
-    return out;
-}
-```
-
-The C API, buffer ownership and the layout kernels are described in the `c-api` article on
-the package website.
+zubin’s integer loads and stores, half-float conversions and UTF-8
+validation come from [zufast](https://github.com/pedrobtz/zufast).
+Python’s [`struct`](https://docs.python.org/3/library/struct.html)
+module and the structured dtypes of NumPy are the nearest equivalents in
+other languages.

@@ -10,8 +10,8 @@
 #' carrying `field` and the 0-based record `index` of the first one, namely
 #' an `i32` of -2^31 (R's `NA_integer_`; allowed with `na = "allow"`), an
 #' `i64`, `u64`, `i128` or `u128` above 2^53 in magnitude when
-#' `int64 = "double"`, and, when `int64 = "integer64"`, a value outside
-#' int64 or an `i64` of -2^63 (bit64's `NA`). `c64` and `c128` fields read as
+#' `int64 = "double"`, and, when `int64 = "integer64"`, a value outside the
+#' signed 64-bit range or an `i64` of -2^63 (bit64's `NA`). `c64` and `c128` fields read as
 #' complex vectors. An `s<n>` field holds the bytes up to its first
 #' NUL; with `encoding = "UTF-8"` they must be valid UTF-8, or the call is a
 #' `zubin_encoding_error` carrying `field` and `index`.
