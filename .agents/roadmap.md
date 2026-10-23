@@ -4,7 +4,8 @@ Companion to [design.md](design.md) revision 2. Section references (§) point th
 [next.md](next.md) holds everything after 0.1.0.
 
 Status: adopted 2026-10-04. Nothing below is implemented; the repository is the `usethis`
-skeleton plus these documents.
+skeleton plus these documents. Stage 13 added 2026-10-23 by the joint design review of
+zubin, zuint and zuarrow (`zubin-zuint-zuarrow-2026-10-22.md` in `pedrobtz/packages`).
 
 ## Sequencing principles
 
@@ -133,6 +134,8 @@ step; both remain available to reproduce a CRAN failure.
 | 9 — Release 0.1.0 | S | 8, and zufast on CRAN | the submission |
 | 10 — Serialisation streams | M | 8 | `zb_serialize`, `zb_unserialize`, `zb_serialize_to_sink`; `bin_serialize()`, `bin_unserialize()`, `bin_hash_object()` |
 | 11 — What else rdz needs | S | 10 | public size arithmetic, `zb_buf_adopt()`, the thread statement and its gate, rdz's codec in the fixture |
+| 12 — What the family needs | M | 5 | 128-bit and complex types, native-order kernels, `column.h`, run-time-width reads, the foreign buffer |
+| 13 — The foreign-buffer contract | S | 12 | `zb_r_int_extbuf` frozen as the one ABI promise, in design §4.4 and `abi.yaml`; the shared-owner lifetime rule in §12.2 |
 
 Stage 6 is off the critical path and can be done in any spare sitting after Stage 1.
 
@@ -855,6 +858,44 @@ decision of 2026-10-22 while zubin, zuint and zuarrow are all unreleased (design
 - `abi.yaml` green with every new function in the probes; the layout and unpack fuzzers know
   the new types, and the unpack fuzzer checks that native unpack and pack restore every byte.
 - The full CI set green, s390x included (native order is the host's).
+
+---
+
+## Stage 13 — The foreign-buffer contract · S
+
+**Status:** planned (#40). Independent of Stage 9's release; lands before any sibling's
+zero-copy stage (zuint's ALTREP views, zuarrow's `copy = FALSE` columns), which are the
+first readers of the handle from another shared object.
+
+**Goal:** the foreign buffer of `zubin-r.h` (design §12.2) is created by one package and read
+by another, each compiled against its own copy of the header through inline functions over
+`zb_r_int_extbuf`. That makes the struct and the `zubin_extbuf` tag an ABI, the one exception
+to §4.4's source-only promise. State it, gate it, and fix the lifetime rule for buffers that
+share one owner (the review's X3 and its "shared-buffer lifetime" section).
+
+**Do**
+
+- design §4.4: the exception in one paragraph. The fields of `zb_r_int_extbuf`, their order
+  and the tag are frozen within major version 1; anything added goes at the end, and a
+  reader never assumes more than the fields of the version it was compiled against. Record
+  it as a design decision.
+- design §12.2: the shared-owner convention. A handle over memory that something else alive
+  in R owns (an Arrow array's buffers, a mapping's slices) holds that owner in `prot` and
+  adopts with a release that does nothing, so the owner's finalizer frees everything once
+  and no column handle frees anything. Decide whether `zb_r_extbuf_adopt()` accepts a `NULL`
+  release for this or needs a documented no-op, and test the one chosen.
+- `abi.yaml` and the harness: a probe with `sizeof` and `offsetof` assertions for every field
+  of `zb_r_int_extbuf`, so a layout change fails the gate; its canary (a planted field) seen
+  to fail once (principle 7) and recorded in the PR.
+- `next.md`: zuint's `LinkingTo: zubin` arrives with its zero-copy milestone, so the
+  `Suggests` and `LinkingTo` pair between the two packages is expected, not a mistake.
+- `NEWS.md`: one line under the development heading. Nothing user-facing changes.
+
+**Exit**
+
+- The probe fails with the planted field and passes without it.
+- design §4.4 and §12.2 say the above; next.md updated.
+- The full CI set green, `abi.yaml` and the harness on every leg.
 
 ---
 
