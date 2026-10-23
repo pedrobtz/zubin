@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   coverage:
-    uses: pedrobtz/r-actions/.github/workflows/coverage.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
+    uses: pedrobtz/r-actions/.github/workflows/coverage.yml@17264ce002a9359a492e0183852a555a5bb866e7 # v1.23.0
     with:
       # gcov line and branch coverage of src/ and the headers it includes
       native: true

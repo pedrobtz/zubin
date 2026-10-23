@@ -17,25 +17,25 @@ concurrency:
 
 jobs:
   sanitizers:
-    uses: pedrobtz/r-actions/.github/workflows/sanitizers.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
+    uses: pedrobtz/r-actions/.github/workflows/sanitizers.yml@17264ce002a9359a492e0183852a555a5bb866e7 # v1.23.0
     with:
       asan: true
       profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
 
   valgrind:
-    uses: pedrobtz/r-actions/.github/workflows/valgrind.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
+    uses: pedrobtz/r-actions/.github/workflows/valgrind.yml@17264ce002a9359a492e0183852a555a5bb866e7 # v1.23.0
     with:
       profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
 
   lto:
-    uses: pedrobtz/r-actions/.github/workflows/lto.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
+    uses: pedrobtz/r-actions/.github/workflows/lto.yml@17264ce002a9359a492e0183852a555a5bb866e7 # v1.23.0
 
   # Quick (step 500) on every pull request, the full-ci label included, and
   # step 20 on main (roadmap, CI table): at step 20 the suite takes over an
   # hour, which is a price for a merge, not for each push. The exhaustive
   # sweeps skip here (ZUBIN_SKIP_HEAVY); they test values, not protection.
   gctorture:
-    uses: pedrobtz/r-actions/.github/workflows/gctorture.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
+    uses: pedrobtz/r-actions/.github/workflows/gctorture.yml@17264ce002a9359a492e0183852a555a5bb866e7 # v1.23.0
     with:
       profile: ${{ github.event_name == 'pull_request' && 'quick' || 'full' }}
       timeout-minutes: 240
@@ -43,9 +43,9 @@ jobs:
         ZUBIN_SKIP_HEAVY=true
 
   analyzers:
-    uses: pedrobtz/r-actions/.github/workflows/analyzers.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
+    uses: pedrobtz/r-actions/.github/workflows/analyzers.yml@17264ce002a9359a492e0183852a555a5bb866e7 # v1.23.0
 
   rchk:
-    uses: pedrobtz/r-actions/.github/workflows/rchk.yml@70cdfd7c6d62f42828e931a7f061ce998bb0e8f5 # v1.21.0
+    uses: pedrobtz/r-actions/.github/workflows/rchk.yml@17264ce002a9359a492e0183852a555a5bb866e7 # v1.23.0
     with:
       fail-on-findings: true
