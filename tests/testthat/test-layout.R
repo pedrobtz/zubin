@@ -97,6 +97,10 @@ test_that("each grammar error is a spec error at the offending byte", {
   expect_identical(spec_error_at("b2147483647 u8"), 12)
   expect_identical(spec_error_at("u64[268435456]"), 0)
   expect_identical(spec_error_at("u8 b2147483647", align = TRUE), 3)
+  # fields that fit, and a final round-up to the record's alignment that
+  # does not: the error is at the end of the spec
+  expect_identical(bin_size(bin_layout("u32 b2147483643")), 2147483647L)
+  expect_identical(spec_error_at("u32 b2147483643", align = TRUE), 15)
   # empty specs and stray separators
   expect_identical(spec_error_at(""), 0)
   expect_identical(spec_error_at("   "), 3)
@@ -126,6 +130,30 @@ test_that("a field array that is too small is a limit, not a spec error", {
     r <- c_layout(s)
     expect_true(r$count_bound >= r$nfields, label = s)
   }
+  # the bound counts runs of separators, so padding does not inflate it
+  expect_identical(c_layout("  u8     u8 ,\t u8  ")$count_bound, 5)
+  expect_identical(c_layout("u8 , u8")$count_bound, 2)
+})
+
+test_that("a duplicate name is found at its position in a wide spec", {
+  spec <- paste(c(paste0("f", 1:5000, ":u8"), "f17:u16"), collapse = " ")
+  e <- expect_error(bin_layout(spec), class = "zubin_spec_error")
+  expect_identical(e$position, as.double(nchar(spec) - 7L))
+  # names are checked once in R: the C parser is linear without the check
+  r <- c_layout("a:u8 a:u16")
+  expect_identical(r$status, "ZB_ERR_SPEC")
+})
+
+test_that("a layout of tens of thousands of fields parses and unpacks in linear time", {
+  skip_if_no_slow_tests()
+  spec <- paste0("f", 1:40000, ":u8", collapse = " ")
+  # quadratic, this took seconds to parse and again on every unpack
+  elapsed <- system.time({
+    l <- bin_layout(spec)
+    cols <- bin_unpack(raw(40000), l, as = "list")
+  })[["elapsed"]]
+  expect_length(cols, 40000L)
+  expect_lt(elapsed, 5)
 })
 
 test_that("an unnamed field's default name may not shadow an explicit one", {
@@ -218,7 +246,7 @@ test_that("bin_layout() validates its other arguments", {
   expect_error(bin_layout(NA_character_), class = "zubin_invalid_argument")
   expect_error(bin_layout(character()), class = "zubin_invalid_argument")
   expect_error(bin_layout("u8", align = NA), class = "zubin_invalid_argument")
-  expect_error(bin_layout("u8", endian = "middle"))
+  expect_error(bin_layout("u8", endian = "middle"), class = "zubin_invalid_argument")
 })
 
 test_that("length, names, as.data.frame and bin_size describe the layout", {

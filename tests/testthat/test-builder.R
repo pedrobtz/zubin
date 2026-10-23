@@ -65,7 +65,7 @@ test_that("bin_put() refuses what it cannot append", {
   expect_error(bin_put(b, 1, type = "z"), class = "zubin_invalid_argument")
   expect_error(bin_put(b, "a", type = c("z", "z")), class = "zubin_invalid_argument")
   expect_error(bin_put(raw(1), raw(1)), class = "zubin_invalid_argument")
-  expect_error(bin_size(bytes("00")), class = "error")
+  expect_error(bin_size(bytes("00")), class = "zubin_invalid_argument")
 })
 
 test_that("max is a hard cap: exactly max fits, one byte more is a limit error", {
@@ -156,4 +156,41 @@ test_that("builder operations survive gctorture", {
   gctorture(FALSE)
   expect_identical(x, bytes("01 02 03 04 05 61 00 62 63 00 78 00"))
   expect_identical(y, raw(0))
+})
+
+test_that("an allocation that fails is a memory error and changes nothing", {
+  skip_if(.Machine$sizeof.pointer < 8, "2^53 bytes are not addressable")
+  # an allocation of 2^53 bytes is fatal under ASan rather than NULL, and
+  # valgrind warns on it
+  skip_if(nzchar(Sys.getenv("ASAN_OPTIONS")), "ASan aborts on an oversized allocation")
+  skip_if(grepl("vgpreload", Sys.getenv("LD_PRELOAD")), "running under valgrind")
+  b <- bin_builder()
+  bin_put(b, bytes("01 02 03"))
+  before <- format(b)
+  # realloc() refuses 8 PiB on any machine, overcommit or not
+  expect_error(bin_reserve(b, 2^53), class = "zubin_memory_error")
+  expect_identical(as.raw(b), bytes("01 02 03"))
+  expect_identical(format(b), before)
+  bin_put(b, bytes("04"))
+  expect_identical(as.raw(b), bytes("01 02 03 04"))
+  expect_error(bin_builder(reserve = 2^53), class = "zubin_memory_error")
+})
+
+test_that("a buffer that cannot be allocated is freed before zb_r_buf_new() returns", {
+  gc()
+  before <- live_buffers()
+  r <- .Call(zubin_test_buf_new_fail)
+  expect_identical(r[[1L]], "ZB_ERR_MEMORY")
+  expect_true(r[[2L]])
+  expect_identical(live_buffers(), before)
+  gc()
+  expect_identical(live_buffers(), before)
+})
+
+test_that("a pack too large for a raw vector is a memory error before allocating", {
+  skip_if(.Machine$sizeof.pointer < 8, "the size check is the 32-bit one there")
+  # (2^22 + 1) records of 2^31 - 1 bytes: past R's largest vector, 2^52
+  e <- expect_error(bin_pack("a:u8 x2147483646", a = integer(2^22 + 1)),
+                    class = "zubin_memory_error")
+  expect_identical(e$call, quote(bin_pack()))
 })

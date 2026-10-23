@@ -1,10 +1,14 @@
 # bin_hexdump() and bin_diff() (design 13.6).
 
+# fixtures/xxd-*.txt are xxd's own output for these 64 bytes, written once
+# outside the package (xxd from vim, macOS): `xxd x.bin`, `xxd -c 8 x.bin`
+# and `xxd -s 37 -l 20 x.bin`.
 test_that("a known 64-byte input dumps as xxd does, at widths 16 and 8", {
   x <- as.raw((0:63 * 5 + 7) %% 256)
-  expect_snapshot(bin_hexdump(x))
-  expect_snapshot(bin_hexdump(x, width = 8))
-  expect_snapshot(bin_hexdump(x, offset = 37, n = 20))
+  xxd <- function(name) readLines(test_path("fixtures", name))
+  expect_identical(unclass(bin_hexdump(x)), xxd("xxd-16.txt"))
+  expect_identical(unclass(bin_hexdump(x, width = 8)), xxd("xxd-8.txt"))
+  expect_identical(unclass(bin_hexdump(x, offset = 37, n = 20)), xxd("xxd-37-20.txt"))
 })
 
 test_that("each line holds its absolute offset, its bytes, and their ASCII", {

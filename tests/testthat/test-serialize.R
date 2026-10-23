@@ -170,7 +170,27 @@ test_that("the serialization functions validate their arguments", {
   expect_error(bin_serialize(1, raw(1)), class = "zubin_invalid_argument")
   expect_error(bin_unserialize("x"), class = "zubin_invalid_argument")
   expect_error(bin_unserialize(raw(1), offset = -1), class = "zubin_invalid_argument")
-  expect_error(bin_hash_object(1, "md5"))
+  expect_error(bin_hash_object(1, "md5"), class = "zubin_invalid_argument")
   expect_error(bin_hash_object(1, version = 4), class = "zubin_invalid_argument")
   expect_error(bin_hash_object(1, seed = -1), class = "zubin_invalid_argument")
+})
+
+test_that("an object that looks like a status unserialises as itself", {
+  st <- structure("ZB_ERR_EOF", class = "zubin_status")
+  expect_identical(bin_unserialize(serialize(st, NULL)), st)
+  b <- bin_builder()
+  bin_serialize(st, b)
+  bin_serialize(NULL, b)
+  x <- bin_take(b)
+  expect_identical(bin_unserialize(x), st)
+  expect_null(bin_unserialize(x, offset = length(serialize(st, NULL))))
+})
+
+test_that("the digest follows a string's encoding mark, and enc2utf8() removes it", {
+  utf8 <- "é"
+  latin1 <- iconv(utf8, "UTF-8", "latin1")
+  expect_identical(utf8, latin1)
+  # as documented: identical text, different marks, different digests
+  expect_false(identical(bin_hash_object(utf8), bin_hash_object(latin1)))
+  expect_identical(bin_hash_object(enc2utf8(latin1)), bin_hash_object(utf8))
 })

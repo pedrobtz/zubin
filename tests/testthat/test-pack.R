@@ -213,3 +213,88 @@ test_that("a typed bin_put() that fails appends nothing", {
   expect_error(bin_put(b, 1:3, type = "u16"), class = "zubin_limit_error")
   expect_identical(bin_size(b), 0)
 })
+
+test_that("integer64 keeps its class through recycling, arrays and typed bin_put()", {
+  five <- structure(rw_read("i64", "le", bytes("05 00 00 00 00 00 00 00")), class = "integer64")
+  # recycled to the longest column
+  expect_bytes(bin_pack("<a:i64 b:u8", a = five, b = 1:2),
+               "05 00 00 00 00 00 00 00 01  05 00 00 00 00 00 00 00 02")
+  # appended to a builder, in either order
+  b <- bin_builder()
+  bin_put(b, five, type = "i64", endian = "big")
+  bin_put(b, five, type = "u64")
+  expect_bytes(bin_take(b), "00 00 00 00 00 00 00 05  05 00 00 00 00 00 00 00")
+  # an array field from name.1, name.2 columns, and one record's array
+  # as a vector
+  v <- "05 00 00 00 00 00 00 00 05 00 00 00 00 00 00 00"
+  expect_bytes(bin_pack("<v:i64[2]", list(v.1 = five, v.2 = five)), v)
+  expect_bytes(bin_pack("<v:i64[2]", v = c(five, five)), v)
+  # an array matrix recycled to the longest column
+  m <- structure(matrix(unclass(c(five, five)), nrow = 1L), class = "integer64")
+  expect_bytes(bin_pack("<v:i64[2] b:u8", v = m, b = 1:2),
+               paste(v, "01", v, "02"))
+  # and unpacked as a data frame: integer64 columns with the exact bits,
+  # which pack back to the bytes they came from
+  x <- bytes(paste(v, "07 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00"))
+  df <- bin_unpack(x, "<v:i64[2]", int64 = "integer64")
+  expect_named(df, c("v.1", "v.2"))
+  expect_s3_class(df$v.1, "integer64")
+  expect_s3_class(df$v.2, "integer64")
+  expect_identical(bits(unclass(df$v.1)), bits(rw_read("i64", "le", bytes(
+    "05 00 00 00 00 00 00 00 07 00 00 00 00 00 00 00"))))
+  expect_identical(bin_pack("<v:i64[2]", df), x)
+})
+
+test_that("strings marked bytes write as their bytes, and pack back what was read", {
+  x <- bytes("63 e9 00 00  ff fe 41 00")
+  d <- bin_unpack(x, "a:s4", encoding = "bytes")
+  expect_identical(Encoding(d$a), c("bytes", "bytes"))
+  expect_identical(bin_pack("a:s4", d), x)
+  expect_identical(bin_encode(d$a, "s4"), x)
+  b <- bin_builder()
+  bin_put(b, d$a, type = "z")
+  bin_put(b, d$a, type = "s4")
+  expect_bytes(bin_take(b), "63 e9 00 ff fe 41 00  63 e9 00 00 ff fe 41 00")
+  # still at most n bytes
+  expect_error(bin_encode(d$a, "s1"), class = "zubin_range_error")
+})
+
+test_that("a string that is not valid UTF-8 is an encoding error on every write path", {
+  # marked UTF-8 but not: R passes it through translation unchecked, in any
+  # locale, as it does an unmarked string in a UTF-8 locale
+  bad <- rawToChar(bytes("ff fe"))
+  Encoding(bad) <- "UTF-8"
+  x <- c("ok", bad)
+  e <- expect_error(bin_encode(x, "s4"), class = "zubin_encoding_error")
+  expect_identical(e$index, 1)
+  expect_identical(e$field, NA_character_)
+  e <- expect_error(bin_pack("<id:u8 name:s4", id = 1:2, name = x), class = "zubin_encoding_error")
+  expect_identical(e$field, "name")
+  expect_identical(e$index, 1)
+  b <- bin_builder()
+  bin_put(b, bytes("aa"))
+  for (type in c("z", "s4")) {
+    e <- expect_error(bin_put(b, x, type = type), class = "zubin_encoding_error")
+    expect_identical(e$index, 1)
+  }
+  expect_identical(as.raw(b), bytes("aa"))
+  # latin1 is translated, so it writes as valid UTF-8
+  l1 <- iconv("é", "UTF-8", "latin1")
+  expect_identical(Encoding(l1), "latin1")
+  expect_bytes(bin_encode(l1, "s2"), "c3 a9")
+})
+
+test_that("i16 big-endian packs from a double", {
+  expect_bytes(bin_encode(c(-2, 258), "i16", endian = "big"), "ff fe 01 02")
+})
+
+test_that("a typed bin_put() failing past its first chunk reports the right index", {
+  skip_if_no_slow_tests()
+  skip_heavy()
+  b <- bin_builder()
+  bin_put(b, bytes("aa"))
+  # u8 is written 2^26 elements a chunk: the bad value opens the second
+  e <- expect_error(bin_put(b, c(integer(2^26), 300L), type = "u8"), class = "zubin_range_error")
+  expect_identical(e$index, 2^26)
+  expect_identical(as.raw(b), bytes("aa"))
+})
