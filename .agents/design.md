@@ -1165,8 +1165,9 @@ Deliverables:
 3. `tools/zubintest` and `consumer.yaml` (§16.5);
 4. the gates of §16.1–§16.6, each with a log showing it exercised its target and a canary
    that failed;
-5. `README.md` with a "Using zubin from C" section that is the consumer recipe in full,
-   followed verbatim by the fixture;
+5. the consumer recipe in full in the `c-api` article, rendered from the fixture's own files
+   so that it cannot drift from them, and linked from the README (decision 33; until
+   2026-10-23 the README carried it, kept equal to the fixture by `tools/check-recipe`);
 6. the shipped vignette `zubin` (layouts, unpack and pack, codecs, builder, hexdump, the
    WAV and big-endian examples) and the pkgdown-only article `c-api` (§5, §9–§12 for a
    package author);
@@ -1236,6 +1237,7 @@ Draft 1's eleven open questions, resolved, followed by the decisions revision 2 
 | 30 | Bitmaps and validity | Least significant bit first with `_msb` variants; a `NULL` bitmap is all valid; markers are R's, or bytes for other widths (§11.6). Arrow's conventions, because Arrow is the consumer. |
 | 31 | Shared foreign memory | One lifetime primitive in `zubin-r.h`, two-step so it cannot leak (§12.2); ALTREP classes stay with the package that owns each R type. Settles next.md's question of one home for views, mappings and zero-copy columns without a `zuview` package. |
 | 32 | `int64 = "zuint"` | Deferred: a CRAN package cannot suggest one that is not on CRAN. The kernels and §12.2 are what it will be built on (next.md). |
+| 33 | Where the C recipe lives | The `c-api` article, which renders the fixture's files as they are, not the README (2026-10-23). The README is the front page for R users and links to the article; a copy in two places needed `tools/check-recipe` to keep it honest, and the article needs nothing. |
 
 ## 20. Deferred
 

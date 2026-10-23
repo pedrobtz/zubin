@@ -62,8 +62,8 @@ value that has no exact R representation is a \code{zubin_range_error}
 carrying \code{field} and the 0-based record \code{index} of the first one, namely
 an \code{i32} of -2^31 (R's \code{NA_integer_}; allowed with \code{na = "allow"}), an
 \code{i64}, \code{u64}, \code{i128} or \code{u128} above 2^53 in magnitude when
-\code{int64 = "double"}, and, when \code{int64 = "integer64"}, a value outside
-int64 or an \code{i64} of -2^63 (bit64's \code{NA}). \code{c64} and \code{c128} fields read as
+\code{int64 = "double"}, and, when \code{int64 = "integer64"}, a value outside the
+signed 64-bit range or an \code{i64} of -2^63 (bit64's \code{NA}). \code{c64} and \code{c128} fields read as
 complex vectors. An \verb{s<n>} field holds the bytes up to its first
 NUL; with \code{encoding = "UTF-8"} they must be valid UTF-8, or the call is a
 \code{zubin_encoding_error} carrying \code{field} and \code{index}.
