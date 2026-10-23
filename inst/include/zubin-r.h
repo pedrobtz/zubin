@@ -133,6 +133,108 @@ ZB_INLINE SEXP zb_r_buf_to_raw(const zb_buf *b)
     return out;
 }
 
+/* ---- foreign buffers (design 12.2) ---------------------------------------------
+
+   Memory zubin did not allocate (an Arrow buffer, a malloc block, a
+   mapping) handed to R with the function that releases it. The external
+   pointer is what an ALTREP class keeps in data1 to present that memory as
+   an R vector without a copy; the class is the consumer's, since R binds an
+   ALTREP class to the package that registers it.
+
+   Two steps, so that nothing is ever leaked: zb_r_extbuf_new() allocates
+   the external pointer and registers its finalizer, either of which can
+   longjmp, while it owns nothing; zb_r_extbuf_adopt() then takes the memory
+   and cannot jump. The release function runs exactly once, from
+   zb_r_extbuf_release() or from the finalizer (at the latest when R exits),
+   and must not raise or call R's API: it may run inside the collector. */
+
+typedef void (*zb_release_fn)(void *data, void *ptr, size_t len);
+
+typedef struct {
+    void *ptr;
+    size_t len;
+    zb_release_fn release;
+    void *data;
+} zb_r_int_extbuf;
+
+ZB_INLINE void zb_r_int_extbuf_finalize(SEXP h)
+{
+    zb_r_int_extbuf *e = (zb_r_int_extbuf *)R_ExternalPtrAddr(h);
+    if (!e) return;
+    R_ClearExternalPtr(h);
+    if (e->release) e->release(e->data, e->ptr, e->len);
+    free(e);
+    ZB_INT_R_ON_FREE();
+}
+
+/* A new foreign-buffer handle holding nothing yet; prot (R_NilValue, or an
+   object the memory depends on) is kept alive with it. R_NilValue with *st
+   ZB_ERR_MEMORY when its small state cannot be allocated; unprotected. */
+ZB_INLINE SEXP zb_r_extbuf_new(SEXP prot, zb_status *st)
+{
+    zb_r_int_extbuf *e;
+    SEXP h = PROTECT(R_MakeExternalPtr(NULL, Rf_install("zubin_extbuf"), prot));
+    R_RegisterCFinalizerEx(h, zb_r_int_extbuf_finalize, TRUE);
+    e = (zb_r_int_extbuf *)malloc(sizeof *e);
+    if (!e) {
+        UNPROTECT(1);
+        *st = ZB_ERR_MEMORY;
+        return R_NilValue;
+    }
+    memset(e, 0, sizeof *e);
+    R_SetExternalPtrAddr(h, e);
+    ZB_INT_R_ON_NEW();
+    UNPROTECT(1);
+    *st = ZB_OK;
+    return h;
+}
+
+/* The state behind h, or NULL when h is not a foreign-buffer handle or has
+   been released. Allocates nothing. */
+ZB_INLINE zb_r_int_extbuf *zb_r_int_extbuf_get(SEXP h)
+{
+    SEXP tag;
+    if (TYPEOF(h) != EXTPTRSXP) return NULL;
+    tag = R_ExternalPtrTag(h);
+    if (TYPEOF(tag) != SYMSXP || strcmp(CHAR(PRINTNAME(tag)), "zubin_extbuf") != 0) return NULL;
+    return (zb_r_int_extbuf *)R_ExternalPtrAddr(h);
+}
+
+/* Hands ptr and its len bytes to h, with release (NULL: nothing to do) and
+   its data. Cannot jump. ZB_ERR_INVALID, and nothing taken, when h is not a
+   live, empty handle; the caller then still owns ptr. */
+ZB_INLINE zb_status zb_r_extbuf_adopt(SEXP h, void *ptr, size_t len, zb_release_fn release,
+                                      void *data)
+{
+    zb_r_int_extbuf *e = zb_r_int_extbuf_get(h);
+    if (!e || e->ptr || e->release) return ZB_ERR_INVALID;
+    e->ptr = ptr;
+    e->len = len;
+    e->release = release;
+    e->data = data;
+    return ZB_OK;
+}
+
+/* The adopted memory and its length; NULL and 0 once released, before
+   adoption, or for anything that is not a handle. */
+ZB_INLINE void *zb_r_extbuf_ptr(SEXP h)
+{
+    zb_r_int_extbuf *e = zb_r_int_extbuf_get(h);
+    return e ? e->ptr : NULL;
+}
+ZB_INLINE size_t zb_r_extbuf_len(SEXP h)
+{
+    zb_r_int_extbuf *e = zb_r_int_extbuf_get(h);
+    return e ? e->len : 0;
+}
+
+/* Releases the memory now; the handle stays valid and empty, and the
+   finalizer then does nothing. Safe to call twice. */
+ZB_INLINE void zb_r_extbuf_release(SEXP h)
+{
+    if (zb_r_int_extbuf_get(h)) zb_r_int_extbuf_finalize(h);
+}
+
 /* ---- serialization streams (Stage 10, issue #25) -------------------------------
 
    R's own serialization pointed at zubin's byte containers instead of a raw

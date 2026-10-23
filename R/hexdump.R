@@ -39,7 +39,8 @@ bin_hexdump <- function(x, offset = 0, n = NULL, width = 16L) {
   if (!is.null(n)) check_size(n, "n")
   check_size(width, "width")
   if (width < 1 || width > 256) invalid_argument("`width` must be between 1 and 256.", arg = "width")
-  res <- .Call(zubin_hexdump, x, as.double(offset), if (is.null(n)) -1 else as.double(n),
+  # n past the end shows the rest: capped, so that it fits a 32-bit size_t
+  res <- .Call(zubin_hexdump, x, as.double(offset), if (is.null(n)) -1 else as.double(min(n, length(x))),
                as.double(width))
   if (is_status(res)) {
     zubin_abort(sprintf("`offset` %s is past the end of `x`, which has %s bytes.",
@@ -67,7 +68,9 @@ bin_diff <- function(a, b, n = 10L) {
   if (!is.raw(a)) invalid_argument("`a` must be a raw vector.", arg = "a")
   if (!is.raw(b)) invalid_argument("`b` must be a raw vector.", arg = "b")
   check_size(n, "n")
-  res <- .Call(zubin_diff, a, b, as.double(n))
+  # no more offsets can differ than the inputs share, and a cap there keeps
+  # n inside size_t where size_t is 32 bits
+  res <- .Call(zubin_diff, a, b, as.double(min(n, length(a), length(b))))
   structure(res, row.names = .set_row_names(length(res$offset)), class = "data.frame",
             length_a = as.double(length(a)), length_b = as.double(length(b)))
 }

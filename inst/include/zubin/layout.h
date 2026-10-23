@@ -15,7 +15,8 @@
  *     endian  := "<" | ">" | "="            little, big, host; default from the caller
  *     field   := [ name ":" ] type [ "[" count "]" ] [ "." order ]
  *              | "x" width                   padding: never read, written as zeros
- *     type    := u8 i8 u16 i16 u32 i32 u64 i64 f16 bf16 f32 f64 bool
+ *     type    := u8 i8 u16 i16 u32 i32 u64 i64 u128 i128 f16 bf16 f32 f64
+ *              | c64 c128 bool               c: complex, two f32 or two f64
  *              | "b" width                   fixed bytes
  *              | "s" width                   fixed string
  *     order   := "le" | "be"                 multi-byte numeric types only
@@ -50,7 +51,8 @@
 typedef enum {
     ZB_U8 = 1, ZB_I8 = 2, ZB_U16 = 3, ZB_I16 = 4, ZB_U32 = 5, ZB_I32 = 6,
     ZB_U64 = 7, ZB_I64 = 8, ZB_F16 = 9, ZB_BF16 = 10, ZB_F32 = 11, ZB_F64 = 12,
-    ZB_BOOL = 13, ZB_BYTES = 14, ZB_STR = 15, ZB_PAD = 16
+    ZB_BOOL = 13, ZB_BYTES = 14, ZB_STR = 15, ZB_PAD = 16,
+    ZB_U128 = 32, ZB_I128 = 33, ZB_C64 = 34, ZB_C128 = 35
 } zb_type;
 
 typedef struct {
@@ -73,18 +75,31 @@ typedef struct {
 /* The largest record and the largest count or width. */
 #define ZB_LAYOUT_MAX ((uint32_t)0x7FFFFFFF)
 
-/* The width in bytes of one element: 1, 2, 4 or 8 for the numeric types and
-   bool, and 1 for b, s and x, whose count is their width. 0 for a value
-   outside the enumeration. */
+/* The width in bytes of one element: 1, 2, 4, 8 or 16 for the numeric types
+   and bool (c64 is 8: two f32), and 1 for b, s and x, whose count is their
+   width. 0 for a value outside the enumeration. */
 ZB_INLINE uint32_t zb_type_width(zb_type t)
 {
     switch (t) {
     case ZB_U8: case ZB_I8: case ZB_BOOL: case ZB_BYTES: case ZB_STR: case ZB_PAD: return 1;
     case ZB_U16: case ZB_I16: case ZB_F16: case ZB_BF16: return 2;
     case ZB_U32: case ZB_I32: case ZB_F32: return 4;
-    case ZB_U64: case ZB_I64: case ZB_F64: return 8;
+    case ZB_U64: case ZB_I64: case ZB_F64: case ZB_C64: return 8;
+    case ZB_U128: case ZB_I128: case ZB_C128: return 16;
     }
     return 0;
+}
+
+/* The natural alignment of one element (design 11.4): its width, except
+   that a complex aligns as its component (c64 to 4, c128 to 8), and 1 for
+   bool, b, s and x. 0 outside the enumeration. */
+ZB_INLINE uint32_t zb_type_align(zb_type t)
+{
+    switch (t) {
+    case ZB_C64: return 4;
+    case ZB_C128: return 8;
+    default: return zb_type_width(t);
+    }
 }
 
 /* The type's token in the grammar ("u32", "bf16"), with "b", "s" and "x" for
@@ -100,6 +115,8 @@ ZB_INLINE const char *zb_type_name(zb_type t)
     case ZB_F32: return "f32";   case ZB_F64: return "f64";
     case ZB_BOOL: return "bool"; case ZB_BYTES: return "b";
     case ZB_STR: return "s";     case ZB_PAD: return "x";
+    case ZB_U128: return "u128"; case ZB_I128: return "i128";
+    case ZB_C64: return "c64";   case ZB_C128: return "c128";
     }
     return "?";
 }
@@ -163,16 +180,19 @@ ZB_INLINE int zb_int_type_of(const char *spec, size_t a, size_t b, size_t c, uin
         return l[0] == 'b' ? ZB_BYTES : l[0] == 's' ? ZB_STR : ZB_PAD;
     }
     if (nl == 4 && memcmp(l, "bool", 4) == 0 && nd == 0) return ZB_BOOL;
-    if (nd == 0 || nd > 2) return 0;
+    if (nd == 0 || nd > 3) return 0;
     for (j = b; j < c; j++) bits = bits * 10 + (uint32_t)(spec[j] - '0');
-    if (nd == 2 && spec[b] == '0') return 0;
+    if (nd > 1 && spec[b] == '0') return 0;
     if (nl == 1 && l[0] == 'u') {
-        return bits == 8 ? ZB_U8 : bits == 16 ? ZB_U16 : bits == 32 ? ZB_U32 : bits == 64 ? ZB_U64 : 0;
+        return bits == 8 ? ZB_U8 : bits == 16 ? ZB_U16 : bits == 32 ? ZB_U32 : bits == 64 ? ZB_U64
+             : bits == 128 ? ZB_U128 : 0;
     }
     if (nl == 1 && l[0] == 'i') {
-        return bits == 8 ? ZB_I8 : bits == 16 ? ZB_I16 : bits == 32 ? ZB_I32 : bits == 64 ? ZB_I64 : 0;
+        return bits == 8 ? ZB_I8 : bits == 16 ? ZB_I16 : bits == 32 ? ZB_I32 : bits == 64 ? ZB_I64
+             : bits == 128 ? ZB_I128 : 0;
     }
     if (nl == 1 && l[0] == 'f') return bits == 16 ? ZB_F16 : bits == 32 ? ZB_F32 : bits == 64 ? ZB_F64 : 0;
+    if (nl == 1 && l[0] == 'c') return bits == 64 ? ZB_C64 : bits == 128 ? ZB_C128 : 0;
     if (nl == 2 && l[0] == 'b' && l[1] == 'f') return bits == 16 ? ZB_BF16 : 0;
     return 0;
 }
@@ -274,7 +294,7 @@ ZB_INLINE zb_status zb_layout_parse(const char *spec, size_t n,
         } else {
             size = (uint64_t)count * elem;
         }
-        a = align ? elem : 1;   /* 1 for bool, b, s and x */
+        a = align ? zb_type_align((zb_type)t) : 1;   /* 1 for bool, b, s and x */
         off = (off + a - 1) / a * a;
         if (size > ZB_LAYOUT_MAX || off + size > ZB_LAYOUT_MAX) ZB_INT_SPEC_FAIL(start);
         if (a > maxalign) maxalign = a;
@@ -327,6 +347,58 @@ ZB_INLINE zb_status zb_layout_parse(const char *spec, size_t n,
    A kernel that can refuse a value returns its status and writes the index
    of the first record holding one to *bad; what it wrote to dst is then
    unspecified. A field of the wrong type for the kernel is ZB_ERR_INVALID. */
+
+/* ---- 128-bit helpers ------------------------------------------------------------- */
+
+/* The u128 or i128 at p as an int64_t, when it is one: 0 and *out set, or 1
+   when the value lies outside int64. */
+ZB_INLINE int zb_int_u128_to_i64(zb_u128 v, int is_signed, int64_t *out)
+{
+    if (is_signed) {
+        uint64_t ext = (v.lo >> 63) ? ~(uint64_t)0 : 0;
+        if (v.hi != ext) return 1;
+    } else if (v.hi != 0 || v.lo > (uint64_t)INT64_MAX) {
+        return 1;
+    }
+    *out = zb_int_u64_i64(v.lo);
+    return 0;
+}
+
+/* int64_t to the bits of an i128 (sign-extended) or a u128. */
+ZB_INLINE zb_u128 zb_int_i64_to_u128(int64_t x)
+{
+    zb_u128 v;
+    v.lo = (uint64_t)x;
+    v.hi = x < 0 ? ~(uint64_t)0 : 0;
+    return v;
+}
+
+/* A whole double, |v| < 2^128, to two's complement bits. Exact: a double
+   has at most 53 significant bits, so the quotient by 2^64 and the remainder
+   are both representable. */
+ZB_INLINE zb_u128 zb_int_f64_to_u128(double v)
+{
+    const double two64 = 18446744073709551616.0;
+    double m = v < 0 ? -v : v, h = m / two64;
+    zb_u128 r;
+    r.hi = (uint64_t)h;
+    r.lo = (uint64_t)(m - (double)r.hi * two64);
+    if (v < 0) {
+        r.lo = ~r.lo + 1;
+        r.hi = ~r.hi + (r.lo == 0);
+    }
+    return r;
+}
+
+ZB_INLINE zb_u128 zb_int_rd_u128(const uint8_t *p, int be)
+{
+    return be ? zb_rd_u128be(p) : zb_rd_u128le(p);
+}
+
+ZB_INLINE void zb_int_wr_u128(uint8_t *p, int be, zb_u128 v)
+{
+    if (be) zb_wr_u128be(p, v); else zb_wr_u128le(p, v);
+}
 
 /* The element of record i at array position k. */
 #define ZB_INT_ELEM(base, i, stride, f, k, w) \
@@ -410,13 +482,31 @@ ZB_INLINE zb_status zb_unpack_f64(const uint8_t *base, size_t n, size_t stride,
     return ZB_OK;
 }
 
-/* i64 into int64_t; u64 too while it is below 2^63, ZB_ERR_RANGE from it. */
+/* i64 into int64_t; u64 too while it is below 2^63, ZB_ERR_RANGE from it;
+   i128 and u128 while they lie inside int64. */
 ZB_INLINE zb_status zb_unpack_i64(const uint8_t *base, size_t n, size_t stride,
                                   const zb_field *f, int64_t *dst, size_t *bad)
 {
     uint32_t k;
     size_t i, first = n;
     int be = f->big_endian;
+    if (f->type == ZB_I128 || f->type == ZB_U128) {
+        for (k = 0; k < f->count; k++) {
+            int64_t *d = dst + (size_t)k * n;
+            for (i = 0; i < n; i++) {
+                zb_u128 v = zb_int_rd_u128(ZB_INT_ELEM(base, i, stride, f, k, 16), be);
+                if (zb_int_u128_to_i64(v, f->type == ZB_I128, &d[i])) {
+                    if (i < first) first = i;
+                    break;
+                }
+            }
+        }
+        if (first < n) {
+            *bad = first;
+            return ZB_ERR_RANGE;
+        }
+        return ZB_OK;
+    }
     if (f->type != ZB_I64 && f->type != ZB_U64) return ZB_ERR_INVALID;
     for (k = 0; k < f->count; k++) {
         int64_t *d = dst + (size_t)k * n;
@@ -442,8 +532,8 @@ ZB_INLINE zb_status zb_unpack_i64(const uint8_t *base, size_t n, size_t stride,
     return ZB_OK;
 }
 
-/* i64 u64 into double, exactly: a value above 2^53 in magnitude is
-   ZB_ERR_RANGE rather than rounded (design 14.4). */
+/* i64 u64 i128 u128 into double, exactly: a value above 2^53 in magnitude
+   is ZB_ERR_RANGE rather than rounded (design 14.4). */
 ZB_INLINE zb_status zb_unpack_f64x(const uint8_t *base, size_t n, size_t stride,
                                    const zb_field *f, double *dst, size_t *bad)
 {
@@ -451,6 +541,25 @@ ZB_INLINE zb_status zb_unpack_f64x(const uint8_t *base, size_t n, size_t stride,
     uint32_t k;
     size_t i, first = n;
     int be = f->big_endian;
+    if (f->type == ZB_I128 || f->type == ZB_U128) {
+        for (k = 0; k < f->count; k++) {
+            double *d = dst + (size_t)k * n;
+            for (i = 0; i < n; i++) {
+                zb_u128 v = zb_int_rd_u128(ZB_INT_ELEM(base, i, stride, f, k, 16), be);
+                int64_t x;
+                uint64_t mag;
+                if (zb_int_u128_to_i64(v, f->type == ZB_I128, &x)) { if (i < first) first = i; break; }
+                mag = x < 0 ? (uint64_t)0 - (uint64_t)x : (uint64_t)x;
+                if (mag > lim) { if (i < first) first = i; break; }
+                d[i] = (double)x;
+            }
+        }
+        if (first < n) {
+            *bad = first;
+            return ZB_ERR_RANGE;
+        }
+        return ZB_OK;
+    }
     if (f->type != ZB_I64 && f->type != ZB_U64) return ZB_ERR_INVALID;
     for (k = 0; k < f->count; k++) {
         double *d = dst + (size_t)k * n;
@@ -482,6 +591,87 @@ ZB_INLINE zb_status zb_unpack_bytes(const uint8_t *base, size_t n, size_t stride
     size_t i;
     if (f->type != ZB_BYTES && f->type != ZB_STR) return ZB_ERR_INVALID;
     for (i = 0; i < n; i++) memcpy(dst + i * f->size, base + i * stride + f->offset, f->size);
+    return ZB_OK;
+}
+
+/* c64 c128 into pairs of doubles, real then imaginary: R's Rcomplex layout.
+   Element k of record i is the pair at dst + 2 * (k * n + i). Every value is
+   exact (c64's floats widen). */
+ZB_INLINE zb_status zb_unpack_cplx(const uint8_t *base, size_t n, size_t stride,
+                                   const zb_field *f, double *dst)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i;
+    int be = f->big_endian;
+    if (f->type != ZB_C64 && f->type != ZB_C128) return ZB_ERR_INVALID;
+    for (k = 0; k < f->count; k++) {
+        double *d = dst + 2 * (size_t)k * n;
+        for (i = 0; i < n; i++) {
+            const uint8_t *p = ZB_INT_ELEM(base, i, stride, f, k, w);
+            if (f->type == ZB_C64) {
+                d[2 * i] = be ? zb_rd_f32be(p) : zb_rd_f32le(p);
+                d[2 * i + 1] = be ? zb_rd_f32be(p + 4) : zb_rd_f32le(p + 4);
+            } else {
+                d[2 * i] = be ? zb_rd_f64be(p) : zb_rd_f64le(p);
+                d[2 * i + 1] = be ? zb_rd_f64be(p + 8) : zb_rd_f64le(p + 8);
+            }
+        }
+    }
+    return ZB_OK;
+}
+
+/* One element between the record's byte order and the host's: a component
+   of width cw (1, 2, 4 or 8) at a time, so a complex swaps each half; the
+   128-bit types become a zb_u128 (lo first). */
+ZB_INLINE void zb_int_to_native(uint8_t *dst, const uint8_t *src, zb_type t, uint32_t w, int be)
+{
+    uint32_t cw = t == ZB_C64 || t == ZB_C128 ? w / 2 : w, j;
+    if (t == ZB_U128 || t == ZB_I128) {
+        zb_u128 v = zb_int_rd_u128(src, be);
+        memcpy(dst, &v, 16);
+        return;
+    }
+    if (cw == 1 || be == zb_host_big_endian()) {
+        memcpy(dst, src, w);
+        return;
+    }
+    for (j = 0; j < w; j += cw) {
+        uint32_t b;
+        for (b = 0; b < cw; b++) dst[j + b] = src[j + cw - 1 - b];
+    }
+}
+
+ZB_INLINE void zb_int_from_native(uint8_t *dst, const uint8_t *src, zb_type t, uint32_t w, int be)
+{
+    if (t == ZB_U128 || t == ZB_I128) {
+        zb_u128 v;
+        memcpy(&v, src, 16);
+        zb_int_wr_u128(dst, be, v);
+        return;
+    }
+    zb_int_to_native(dst, src, t, w, be);   /* a swap is its own inverse */
+}
+
+/* Any field but x, as host-order values of the field's own width: no
+   widening and no range check, so u16 stays uint16_t, f16 and bf16 their
+   uint16_t bits, c64 two floats, and u128 and i128 a zb_u128. Element k of
+   record i lands at dst + (k * n + i) * width (column-major, as the other
+   kernels); b and s are copied as zb_unpack_bytes copies them. What a
+   columnar consumer (an Arrow buffer) wants from a record. */
+ZB_INLINE zb_status zb_unpack_native(const uint8_t *base, size_t n, size_t stride,
+                                     const zb_field *f, void *dst)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i;
+    uint8_t *d = (uint8_t *)dst;
+    if (f->type == ZB_BYTES || f->type == ZB_STR) return zb_unpack_bytes(base, n, stride, f, d);
+    if (f->type == ZB_PAD || w == 0) return ZB_ERR_INVALID;
+    for (k = 0; k < f->count; k++) {
+        for (i = 0; i < n; i++) {
+            zb_int_to_native(d + ((size_t)k * n + i) * w, ZB_INT_ELEM(base, i, stride, f, k, w),
+                             f->type, w, f->big_endian);
+        }
+    }
     return ZB_OK;
 }
 
@@ -577,19 +767,37 @@ ZB_INLINE zb_status zb_pack_f64(uint8_t *base, size_t n, size_t stride, const zb
     int be = f->big_endian;
     switch (f->type) {
     case ZB_U8: case ZB_I8: case ZB_U16: case ZB_I16: case ZB_U32: case ZB_I32:
-    case ZB_U64: case ZB_I64: case ZB_F16: case ZB_BF16: case ZB_F32: case ZB_F64: break;
+    case ZB_U64: case ZB_I64: case ZB_F16: case ZB_BF16: case ZB_F32: case ZB_F64:
+    case ZB_U128: case ZB_I128: break;
     default: return ZB_ERR_INVALID;
     }
     for (k = 0; k < f->count; k++) {
         const double *s = src + (size_t)k * n;
         size_t off = f->offset + (size_t)k * w;
         switch (f->type) {
+        case ZB_I128: case ZB_U128: {
+            /* i128 [-2^127, 2^127), u128 [0, 2^128); a double is whole from
+               2^52 on, and below it whole when its int64 is */
+            const double two63 = 9223372036854775808.0, two64 = 18446744073709551616.0;
+            double lo = f->type == ZB_I128 ? -(two63 * two64) : 0.0;
+            double hi = f->type == ZB_I128 ? two63 * two64 : two64 * two64;
+            for (i = 0; i < n; i++) {
+                uint8_t *p = base + i * stride + off;
+                double v = s[i];
+                if (v != v) { *bad = i; return ZB_ERR_NA; }
+                if (v - v != 0 || v < lo || v >= hi) { *bad = i; return ZB_ERR_RANGE; }
+                if (v > -4503599627370496.0 && v < 4503599627370496.0 &&
+                    (double)(int64_t)v != v) { *bad = i; return ZB_ERR_RANGE; }
+                zb_int_wr_u128(p, be, zb_int_f64_to_u128(v));
+            }
+            break;
+        }
         case ZB_F64:
             if (be) ZB_INT_PACK_FLOATS(zb_wr_f64be(p, v)) else ZB_INT_PACK_FLOATS(zb_wr_f64le(p, v))
             break;
         case ZB_F32:
-            if (be) ZB_INT_PACK_FLOATS(zb_wr_f32be(p, zb_int_f64_to_f32(v)))
-            else    ZB_INT_PACK_FLOATS(zb_wr_f32le(p, zb_int_f64_to_f32(v)))
+            if (be) ZB_INT_PACK_FLOATS(zb_wr_f32be(p, zb_f64_to_f32(v)))
+            else    ZB_INT_PACK_FLOATS(zb_wr_f32le(p, zb_f64_to_f32(v)))
             break;
         case ZB_F16:
             if (be) ZB_INT_PACK_FLOATS(zb_wr_f16be(p, v)) else ZB_INT_PACK_FLOATS(zb_wr_f16le(p, v))
@@ -663,14 +871,27 @@ ZB_INLINE zb_status zb_pack_f64(uint8_t *base, size_t n, size_t stride, const zb
 #undef ZB_INT_PACK_INTS
 #undef ZB_INT_PACK_FLOATS
 
-/* int64_t into i64 and u64 (u64 takes no negative value). INT64_MIN is
-   ZB_ERR_NA, except into i64 with allow_na. */
+/* int64_t into i64, u64, i128 and u128 (the unsigned ones take no negative
+   value). INT64_MIN is ZB_ERR_NA, except into i64 with allow_na. */
 ZB_INLINE zb_status zb_pack_i64(uint8_t *base, size_t n, size_t stride, const zb_field *f,
                                 const int64_t *src, int allow_na, size_t *bad)
 {
     uint32_t k;
     size_t i;
     int be = f->big_endian;
+    if (f->type == ZB_I128 || f->type == ZB_U128) {
+        for (k = 0; k < f->count; k++) {
+            const int64_t *s = src + (size_t)k * n;
+            for (i = 0; i < n; i++) {
+                int64_t v = s[i];
+                if (v == INT64_MIN) { *bad = i; return ZB_ERR_NA; }
+                if (f->type == ZB_U128 && v < 0) { *bad = i; return ZB_ERR_RANGE; }
+                zb_int_wr_u128(base + i * stride + f->offset + (size_t)k * 16, be,
+                               zb_int_i64_to_u128(v));
+            }
+        }
+        return ZB_OK;
+    }
     if (f->type != ZB_I64 && f->type != ZB_U64) return ZB_ERR_INVALID;
     for (k = 0; k < f->count; k++) {
         const int64_t *s = src + (size_t)k * n;
@@ -692,6 +913,53 @@ ZB_INLINE zb_status zb_pack_bytes(uint8_t *base, size_t n, size_t stride, const 
     size_t i;
     if (f->type != ZB_BYTES && f->type != ZB_STR) return ZB_ERR_INVALID;
     for (i = 0; i < n; i++) memcpy(base + i * stride + f->offset, src + i * f->size, f->size);
+    return ZB_OK;
+}
+
+/* Pairs of doubles (real, imaginary; R's Rcomplex) into c64 and c128, laid
+   out as zb_unpack_cplx reads them. c64 rounds each part to nearest even; a
+   NaN, R's NA among them, stays a NaN (its payload survives c128 only). */
+ZB_INLINE zb_status zb_pack_cplx(uint8_t *base, size_t n, size_t stride, const zb_field *f,
+                                 const double *src)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i;
+    int be = f->big_endian;
+    if (f->type != ZB_C64 && f->type != ZB_C128) return ZB_ERR_INVALID;
+    for (k = 0; k < f->count; k++) {
+        const double *s = src + 2 * (size_t)k * n;
+        for (i = 0; i < n; i++) {
+            uint8_t *p = base + i * stride + f->offset + (size_t)k * w;
+            if (f->type == ZB_C64) {
+                float re = zb_f64_to_f32(s[2 * i]), im = zb_f64_to_f32(s[2 * i + 1]);
+                if (be) { zb_wr_f32be(p, re); zb_wr_f32be(p + 4, im); }
+                else    { zb_wr_f32le(p, re); zb_wr_f32le(p + 4, im); }
+            } else {
+                if (be) { zb_wr_f64be(p, s[2 * i]); zb_wr_f64be(p + 8, s[2 * i + 1]); }
+                else    { zb_wr_f64le(p, s[2 * i]); zb_wr_f64le(p + 8, s[2 * i + 1]); }
+            }
+        }
+    }
+    return ZB_OK;
+}
+
+/* The inverse of zb_unpack_native: host-order values of the field's own
+   width, column-major, into the records' byte order. Writes every bit as
+   given, with no range check, since nothing was widened. */
+ZB_INLINE zb_status zb_pack_native(uint8_t *base, size_t n, size_t stride, const zb_field *f,
+                                   const void *src)
+{
+    uint32_t k, w = zb_type_width(f->type);
+    size_t i;
+    const uint8_t *s = (const uint8_t *)src;
+    if (f->type == ZB_BYTES || f->type == ZB_STR) return zb_pack_bytes(base, n, stride, f, s);
+    if (f->type == ZB_PAD || w == 0) return ZB_ERR_INVALID;
+    for (k = 0; k < f->count; k++) {
+        for (i = 0; i < n; i++) {
+            zb_int_from_native(base + i * stride + f->offset + (size_t)k * w,
+                               s + ((size_t)k * n + i) * w, f->type, w, f->big_endian);
+        }
+    }
     return ZB_OK;
 }
 

@@ -87,3 +87,21 @@ interrupted_by_time_limit <- function(f, limit) {
     FALSE
   }, error = function(e) grepl("time limit", conditionMessage(e)))
 }
+
+# The host's byte order, for expectations about native-order output.
+host_little <- function() identical(.Platform$endian, "little")
+
+# Bytes in host order, from bytes written little-endian in `width`-byte
+# components.
+host_order <- function(le, width) {
+  if (host_little() || width == 1L) {
+    return(le)
+  }
+  as.vector(apply(matrix(le, nrow = width), 2L, rev))
+}
+
+# The column.h bitmap harness: bits read, counted and set.
+bitmap_run <- function(x, offset = 0, n = length(x) * 8, msb = FALSE, idx = double(),
+                       val = logical()) {
+  .Call(zubin_test_bitmap, x, as.double(offset), as.double(n), msb, as.double(idx), val)
+}

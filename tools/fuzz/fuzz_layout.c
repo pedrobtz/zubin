@@ -14,11 +14,13 @@ static void check_layout(const char *spec, size_t n, int align, const zb_layout 
     FUZZ_CHECK(l->fields == fields);
     FUZZ_CHECK(l->nfields >= 1 && l->nfields <= zb_layout_count_fields(spec, n));
     FUZZ_CHECK(l->size <= ZB_LAYOUT_MAX);
-    FUZZ_CHECK(l->align == 1 || (align && (l->align == 2 || l->align == 4 || l->align == 8)));
+    FUZZ_CHECK(l->align == 1 || (align && (l->align == 2 || l->align == 4 || l->align == 8 ||
+                                          l->align == 16)));
     for (i = 0; i < l->nfields; i++) {
         const zb_field *f = &l->fields[i];
         uint32_t w = zb_type_width(f->type);
-        FUZZ_CHECK(f->type >= ZB_U8 && f->type <= ZB_PAD && w >= 1);
+        FUZZ_CHECK(((f->type >= ZB_U8 && f->type <= ZB_PAD) ||
+                    (f->type >= ZB_U128 && f->type <= ZB_C128)) && w >= 1);
         FUZZ_CHECK(f->count >= 1);
         if (f->type == ZB_BYTES || f->type == ZB_STR || f->type == ZB_PAD) {
             FUZZ_CHECK(f->size == f->count);
@@ -27,7 +29,10 @@ static void check_layout(const char *spec, size_t n, int align, const zb_layout 
         }
         FUZZ_CHECK(f->offset >= end);
         if (!align) FUZZ_CHECK(f->offset == end);
-        else FUZZ_CHECK(f->offset % (f->type == ZB_BOOL ? 1 : w) == 0 && f->offset - end < w + 0u);
+        else {
+            uint32_t a = zb_type_align(f->type);
+            FUZZ_CHECK(a >= 1 && f->offset % a == 0 && f->offset - end < a);
+        }
         FUZZ_CHECK((uint64_t)f->offset + f->size <= l->size);
         end = f->offset + f->size;
         if (w == 1) FUZZ_CHECK(f->big_endian == 0);

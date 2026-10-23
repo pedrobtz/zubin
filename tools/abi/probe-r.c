@@ -46,3 +46,25 @@ SEXP zb_probe_r_serial(SEXP x)
     UNPROTECT(2);
     return counted ? out : R_NilValue;
 }
+
+/* Foreign buffers (Stage 12). */
+static void zb_probe_release(void *data, void *ptr, size_t len)
+{
+    (void)data;
+    (void)len;
+    free(ptr);
+}
+
+SEXP zb_probe_r_extbuf(void);
+SEXP zb_probe_r_extbuf(void)
+{
+    zb_status st;
+    SEXP h = PROTECT(zb_r_extbuf_new(R_NilValue, &st));
+    void *p = malloc(8);
+    zb_release_fn fn = zb_probe_release;
+    if (st || !p || zb_r_extbuf_adopt(h, p, 8, fn, NULL) != ZB_OK) free(p);
+    st = zb_r_extbuf_ptr(h) && zb_r_extbuf_len(h) == 8 ? ZB_OK : ZB_ERR_INVALID;
+    zb_r_extbuf_release(h);
+    UNPROTECT(1);
+    return Rf_ScalarInteger((int)st);
+}

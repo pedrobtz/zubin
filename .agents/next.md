@@ -25,7 +25,7 @@ Nothing here is promised. The rules:
 | **0.2.0** | variable-length fields; the cursor-style reader from R; the Python `struct` translator | a format with length-prefixed or NUL-terminated fields that someone is reading in R (ISO 8583, SBE var data, copybook `OCCURS DEPENDING ON`); or rdz's C rewrite | 0.1.0 |
 | **0.3.0** | zero-copy views, typed reinterpretation views, byte search and splitting over them, zero-copy `bin_take()` | a reader that holds a file larger than it wants to copy (zucsv; rdz's selective reads) | 0.1.0 |
 | **0.4.0** | memory-mapped files; custom connections over views and builders | the same reader, past memory; connection-only consumers (`read.csv`, `readRDS`) over a view | 0.3.0 |
-| **when asked** | nanoarrow bridge; bitfields; `blob` and `float` outputs; a `bigint` for `u64`; the POD-in-`RAWSXP` helper; explicit offsets and unions in the grammar | one named consumer each | varies |
+| **when asked** | bitfields; `blob` and `float` outputs; `int64 = "zuint"`; the POD-in-`RAWSXP` helper; explicit offsets and unions in the grammar | one named consumer each | varies |
 | **1.0.0** | the header API frozen | a real C consumer, not the fixture, has shipped against the headers | any of the above |
 
 ## 0.2.0 — Variable-length fields and the cursor reader
@@ -130,11 +130,10 @@ it if a parallel user asks.
 
 | Item | What | Trigger | Builds on |
 |---|---|---|---|
-| nanoarrow bridge | `as_nanoarrow_buffer(view)` wrapping a `zb_buf` as an `ArrowBuffer` with a release callback that drops the R reference, and `zb_buf_from_nanoarrow()`; the byte-level zero-copy bridge | a user moving bytes between Arrow and raw without a copy | 0.3.0, `Suggests: nanoarrow` |
 | bitfields | `name:u32:12` fields; vectorised extraction with scale and offset | CAN/DBC decoding (domains.md §5.1), every signal is one | 0.1.0 grammar reservation |
 | explicit offsets and unions | `name:u32@12`; overlapping fields | COBOL `REDEFINES`, C unions | 0.2.0 |
 | `blob` and `float` outputs | `b<n>` columns as `blob`; `f32` as the `float` package's `float32` (bit-identical storage) | a user of either package asks | `Suggests` only |
-| `bigint` for `u64` | an exact class for values at or above 2^63, following `zuyaml_bigint` / `cbor_bigint` | someone has such a file | 0.1.0 |
+| `int64 = "zuint"` | `bin_unpack()` and `bin_decode()` returning zuint's `uint64`, `int128` and `uint128` (and `int64`), exact over the whole range, built from the native kernels and handed to `zuint::zu_from_storage()`; packing them back. Replaces the `bigint`-for-`u64` idea: the family has one exact wide-integer class, zuint's | zuint on CRAN (a CRAN package cannot suggest one that is not) | 0.1.0's Stage 12 kernels; `Suggests: zuint` |
 | POD in a `RAWSXP` | `zb_pod_alloc()`, `zb_pod_ptr()`, `zb_pod_check()`: plain-old-data state in a raw vector instead of an external pointer; copy-on-modify and serialisation for free; alignment and pointer caveats stated | a family package wants finaliser-free state | `zubin-r.h` |
 | `bin_write()` in place | write one field into a copy of a raw vector at an offset | a patching use case | 0.1.0 |
 | canonical object hash | a serialisation owned and versioned by zubin for a stated subset of objects (atomic vectors, lists, attributes), so that `bin_hash_object()`'s digest can be a durable content address across R versions; 0.1.0 hashes R's own serialisation body and promises no more (design §13.9, #31) | a user keys persistent storage by the digest | 0.1.0 |
@@ -158,6 +157,8 @@ what decides the order of the ladder above.
 | Package or idea | Source | Needs from zubin | Earliest | Notes |
 |---|---|---|---|---|
 | **rdz in C** | design §3.2 | layouts, builder, cursor, the serialisation sink (all 0.1.0, #26); views and mmap for selective reads | 0.1.0, then 0.3.0 and 0.4.0 for selective reads | The largest candidate consumer; what it needs is in 0.1.0 (#26) |
+| **zuarrow** | RFC 0041 | `column.h`'s validity, bitmaps and swaps; the native kernels; `i128`/`u128`; the foreign buffer for zero-copy columns (all Stage 12); records straight into Arrow from a layout | 0.1.0 | the Arrow side (C Data Interface, IPC) is zuarrow's own, through nanoarrow |
+| **zuint** | RFC 0009 | `i128`/`u128` and the native kernels for its payloads; the foreign buffer for its zero-copy path (Stage 12); `int64 = "zuint"` here once it is on CRAN | 0.1.0 | arithmetic stays zuint's and zufast's |
 | COBOL copybooks | domains §1.1 | fixed layouts with `align`, `OCCURS` as arrays (0.1.0); `OCCURS DEPENDING ON` (0.2.0); `REDEFINES` (explicit offsets) | 0.2.0 | EBCDIC tables and packed decimal belong to the copybook package or zufast; `decimal` exists for exact values |
 | ISO 8583 | domains §1.2 | cursor reader, `p*` fields | 0.2.0 | bitmap walk is `rawToBits()` |
 | SBE / ITCH decoders | domains §2.1 | fixed layouts, type-byte dispatch (0.1.0); groups and var data (0.2.0); mmap (0.4.0) | 0.1.0 for ITCH | a schema compiler from SBE XML through `zuxml` |
@@ -192,7 +193,7 @@ bitwise operators on raw (base R), `.rds` helpers (one line of base R), a serial
 | Decision | Taken when |
 |---|---|
 | Is rdz rewritten in C? | rdz's, before zubin 0.2.0 is planned, so the sink item can ride with it or wait |
-| Views inside zubin or as `zuview`? | when 0.3.0 opens (above) |
+| Views inside zubin or as `zuview`? | Decided at Stage 12 (design decision 31): the lifetime primitive is `zubin-r.h`'s foreign buffer, and each package keeps its own ALTREP classes; raw views stay zubin's |
 | Does `bin_cursor()` return values or a value plus bytes consumed? | at 0.2.0 planning; the external-pointer design above makes "consumed" a `bin_tell()` difference and needs no second return |
-| `u64` above 2^63: class, or stay an error? | when a file with one appears |
+| `u64` above 2^63: class, or stay an error? | zuint's class, through `int64 = "zuint"` once zuint is on CRAN (above) |
 | Which views serialise lazily? | mappings only, decided above; revisit only if a consumer needs a lazy `bin_view()` |

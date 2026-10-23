@@ -84,7 +84,7 @@ static void wr_one(int k, int be, uint8_t *p, int iv, double dv)
     case K_F16:  if (be) zb_wr_f16be(p, dv); else zb_wr_f16le(p, dv); break;
     case K_BF16: if (be) zb_wr_bf16be(p, dv); else zb_wr_bf16le(p, dv); break;
     case K_F32:  {
-        float f = zb_int_f64_to_f32(dv);
+        float f = zb_f64_to_f32(dv);
         if (be) zb_wr_f32be(p, f); else zb_wr_f32le(p, f);
     } break;
     case K_F64:  if (be) zb_wr_f64be(p, dv); else zb_wr_f64le(p, dv); break;
@@ -380,7 +380,7 @@ SEXP zubin_test_buf_put(SEXP type, SEXP endian, SEXP values, SEXP vectorised)
                            st = be ? zb_put_i64be(b, v) : zb_put_i64le(b, v); } break;
             case K_F16:  st = be ? zb_put_f16be(b, dv) : zb_put_f16le(b, dv); break;
             case K_BF16: st = be ? zb_put_bf16be(b, dv) : zb_put_bf16le(b, dv); break;
-            case K_F32:  { float f = zb_int_f64_to_f32(dv);
+            case K_F32:  { float f = zb_f64_to_f32(dv);
                            st = be ? zb_put_f32be(b, f) : zb_put_f32le(b, f); } break;
             case K_F64:  st = be ? zb_put_f64be(b, dv) : zb_put_f64le(b, dv); break;
             }
@@ -399,7 +399,7 @@ SEXP zubin_test_buf_put(SEXP type, SEXP endian, SEXP values, SEXP vectorised)
             case K_U32:  ((uint32_t *)tmp)[i] = (uint32_t)dv; break;
             case K_I32:  ((int32_t *)tmp)[i] = iv; break;
             case K_U64: case K_I64: memcpy((uint64_t *)tmp + i, &dv, 8); break;
-            case K_F32:  ((float *)tmp)[i] = zb_int_f64_to_f32(dv); break;
+            case K_F32:  ((float *)tmp)[i] = zb_f64_to_f32(dv); break;
             default:     ((double *)tmp)[i] = dv; break;
             }
         }
@@ -691,11 +691,14 @@ SEXP zubin_test_struct_offsets(void)
    n < 0), `stride` apart (the record size when stride < 0), with no R glue
    in between. Per value field: the kernel's output as C sees it (int32,
    double, int64 bits in a double, or raw bytes) and its status and *bad;
-   for i32 the strict (allow_na = 0) run's status, for i64/u64 also the
-   exact-double kernel's output. */
+   for i32 the strict (allow_na = 0) run's status, for i64/u64/i128/u128 also
+   the exact-double kernel's output, and for c64/c128 the (re, im) pairs. For
+   every field, also zb_unpack_native's bytes, and whether zb_pack_native puts
+   them back exactly where they came from. */
 SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
 {
-    const char *names[] = {"type", "values", "status", "bad", "values2", "status2", "bad2", ""};
+    const char *names[] = {"type", "values", "status", "bad", "values2", "status2", "bad2",
+                           "native", "roundtrip", ""};
     zb_layout l;
     size_t err = 0, rs, nrec, len = (size_t)XLENGTH(bytes);
     uint32_t j;
@@ -730,13 +733,18 @@ SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
             SET_VECTOR_ELT(one, 1, v);
             s1 = zb_unpack_f64(base, nrec, rs, f, REAL(v));
             break;
-        case ZB_I64: case ZB_U64:
+        case ZB_I64: case ZB_U64: case ZB_I128: case ZB_U128:
             v = Rf_allocVector(REALSXP, (R_xlen_t)m);
             SET_VECTOR_ELT(one, 1, v);
             s1 = zb_unpack_i64(base, nrec, rs, f, (int64_t *)(void *)REAL(v), &bad);
             v2 = Rf_allocVector(REALSXP, (R_xlen_t)m);
             SET_VECTOR_ELT(one, 4, v2);
             s2 = zb_unpack_f64x(base, nrec, rs, f, REAL(v2), &bad2);
+            break;
+        case ZB_C64: case ZB_C128:
+            v = Rf_allocVector(REALSXP, (R_xlen_t)(2 * m));
+            SET_VECTOR_ELT(one, 1, v);
+            s1 = zb_unpack_cplx(base, nrec, rs, f, REAL(v));
             break;
         case ZB_BYTES: case ZB_STR:
             v = Rf_allocVector(RAWSXP, (R_xlen_t)(nrec * f->size));
@@ -746,12 +754,262 @@ SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
         default:
             break;
         }
+        if (f->type != ZB_PAD) {
+            size_t nb = f->type == ZB_BYTES || f->type == ZB_STR ? nrec * f->size
+                                                                 : m * zb_type_width(f->type);
+            SEXP nat = Rf_allocVector(RAWSXP, (R_xlen_t)nb);
+            uint8_t *copy;
+            SET_VECTOR_ELT(one, 7, nat);   /* reachable from `out` before R_alloc can collect */
+            copy = (uint8_t *)R_alloc(len ? len : 1, 1);
+            if (zb_unpack_native(base, nrec, rs, f, RAW(nat))) Rf_error("unpack_native failed");
+            if (len) memcpy(copy, base, len);
+            zb_pack_zeros(copy, nrec, rs, f);
+            if (zb_pack_native(copy, nrec, rs, f, RAW(nat))) Rf_error("pack_native failed");
+            SET_VECTOR_ELT(one, 8, Rf_ScalarLogical(len == 0 || memcmp(copy, base, len) == 0));
+        }
         SET_VECTOR_ELT(one, 2, Rf_mkString(zb_status_string(s1)));
         SET_VECTOR_ELT(one, 3, Rf_ScalarReal(bad == (size_t)-1 ? NA_REAL : (double)bad));
         SET_VECTOR_ELT(one, 5, Rf_mkString(zb_status_string(s2)));
         SET_VECTOR_ELT(one, 6, Rf_ScalarReal(bad2 == (size_t)-1 ? NA_REAL : (double)bad2));
     }
     UNPROTECT(1);
+    return out;
+}
+
+/* ---- rw.h, wide and run-time widths ---------------------------------------------- */
+
+/* Every whole 16-byte element of `bytes` as zb_u128: lo and hi as their bit
+   patterns in doubles, 2 per element; and written back with zb_wr_u128 in
+   the same order, which must give the bytes again. */
+SEXP zubin_test_rw_u128(SEXP endian, SEXP bytes)
+{
+    int be = scalar_big(endian);
+    R_xlen_t i, n = XLENGTH(bytes) / 16;
+    SEXP out = PROTECT(Rf_allocVector(VECSXP, 2)), words, back;
+    words = Rf_allocVector(REALSXP, 2 * n);
+    SET_VECTOR_ELT(out, 0, words);
+    back = Rf_allocVector(RAWSXP, 16 * n);
+    SET_VECTOR_ELT(out, 1, back);
+    for (i = 0; i < n; i++) {
+        zb_u128 v = be ? zb_rd_u128be(RAW(bytes) + 16 * i) : zb_rd_u128le(RAW(bytes) + 16 * i);
+        memcpy(REAL(words) + 2 * i, &v.lo, 8);
+        memcpy(REAL(words) + 2 * i + 1, &v.hi, 8);
+        if (be) zb_wr_u128be(RAW(back) + 16 * i, v); else zb_wr_u128le(RAW(back) + 16 * i, v);
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* Every whole w-byte element of `bytes` through zb_rd_uint and zb_rd_int
+   (bit patterns in doubles), and the unsigned values written back. */
+SEXP zubin_test_rw_uint(SEXP endian, SEXP width, SEXP bytes)
+{
+    const char *names[] = {"u", "i", "back", ""};
+    int be = scalar_big(endian);
+    unsigned w = (unsigned)Rf_asInteger(width);
+    R_xlen_t i, n = w ? XLENGTH(bytes) / (R_xlen_t)w : 0;
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names)), u, s, back;
+    u = Rf_allocVector(REALSXP, n);   SET_VECTOR_ELT(out, 0, u);
+    s = Rf_allocVector(REALSXP, n);   SET_VECTOR_ELT(out, 1, s);
+    back = Rf_allocVector(RAWSXP, n * (R_xlen_t)w);   SET_VECTOR_ELT(out, 2, back);
+    if (XLENGTH(back)) memset(RAW(back), 0, (size_t)XLENGTH(back));   /* a bad width writes nothing */
+    for (i = 0; i < n; i++) {
+        const uint8_t *p = RAW(bytes) + i * (R_xlen_t)w;
+        uint64_t uv = be ? zb_rd_uintbe(p, w) : zb_rd_uintle(p, w);
+        int64_t sv = be ? zb_rd_intbe(p, w) : zb_rd_intle(p, w);
+        memcpy(REAL(u) + i, &uv, 8);
+        memcpy(REAL(s) + i, &sv, 8);
+        if (be) zb_wr_uintbe(RAW(back) + i * (R_xlen_t)w, w, uv);
+        else zb_wr_uintle(RAW(back) + i * (R_xlen_t)w, w, uv);
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* ---- column.h ------------------------------------------------------------------- */
+
+/* Bits [offset, offset + n) of `bytes` in either order, and their count;
+   then `bytes` with bit idx[k] set to val[k] (in that order) as `set`. */
+SEXP zubin_test_bitmap(SEXP bytes, SEXP offset, SEXP n, SEXP msb, SEXP idx, SEXP val)
+{
+    const char *names[] = {"bits", "count", "set", "nbytes", ""};
+    size_t off = (size_t)Rf_asReal(offset), m = (size_t)Rf_asReal(n), i;
+    int top = Rf_asLogical(msb) == TRUE;
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names)), bits, set;
+    bits = Rf_allocVector(LGLSXP, (R_xlen_t)m);
+    SET_VECTOR_ELT(out, 0, bits);
+    for (i = 0; i < m; i++) {
+        LOGICAL(bits)[i] = top ? zb_bit_get_msb(RAW(bytes), off + i) : zb_bit_get(RAW(bytes), off + i);
+    }
+    SET_VECTOR_ELT(out, 1, Rf_ScalarReal(top ? NA_REAL : (double)zb_bitmap_count(RAW(bytes), off, m)));
+    set = Rf_duplicate(bytes);
+    SET_VECTOR_ELT(out, 2, set);
+    for (i = 0; i < (size_t)XLENGTH(idx); i++) {
+        size_t k = (size_t)REAL(idx)[i];
+        if (top) zb_bit_set_msb(RAW(set), k, LOGICAL(val)[i]);
+        else zb_bit_set(RAW(set), k, LOGICAL(val)[i]);
+    }
+    SET_VECTOR_ELT(out, 3, Rf_ScalarReal((double)zb_bitmap_bytes(off + m)));
+    UNPROTECT(1);
+    return out;
+}
+
+/* zb_unpack_bits of `bytes`, and zb_pack_bits of `values` (integer) into
+   a copy of `bytes` at `offset`: its status, *bad and the bytes. */
+SEXP zubin_test_bits(SEXP bytes, SEXP offset, SEXP n, SEXP values)
+{
+    const char *names[] = {"unpacked", "status", "bad", "packed", ""};
+    size_t off = (size_t)Rf_asReal(offset), m = (size_t)Rf_asReal(n), bad = (size_t)-1;
+    zb_status st;
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names)), un, packed;
+    un = Rf_allocVector(LGLSXP, (R_xlen_t)m);
+    SET_VECTOR_ELT(out, 0, un);
+    zb_unpack_bits(RAW(bytes), off, m, LOGICAL(un));
+    packed = Rf_duplicate(bytes);
+    SET_VECTOR_ELT(out, 3, packed);
+    st = zb_pack_bits(RAW(packed), off, (size_t)XLENGTH(values), INTEGER(values), &bad);
+    SET_VECTOR_ELT(out, 1, Rf_mkString(zb_status_string(st)));
+    SET_VECTOR_ELT(out, 2, Rf_ScalarReal(bad == (size_t)-1 ? NA_REAL : (double)bad));
+    UNPROTECT(1);
+    return out;
+}
+
+/* zb_validity_apply over a copy of `values`: integer through _i32, double
+   through _f64, raw (elements of length(na) bytes) through the generic one.
+   valid may be NULL. */
+SEXP zubin_test_validity_apply(SEXP valid, SEXP offset, SEXP values, SEXP na)
+{
+    const char *names[] = {"values", "nulls", ""};
+    size_t off = (size_t)Rf_asReal(offset), nulls = 0;
+    const uint8_t *bm = Rf_isNull(valid) ? NULL : RAW(valid);
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names)), v = Rf_duplicate(values);
+    SET_VECTOR_ELT(out, 0, v);
+    switch (TYPEOF(v)) {
+    case INTSXP: nulls = zb_validity_apply_i32(bm, off, (size_t)XLENGTH(v), INTEGER(v)); break;
+    case REALSXP: nulls = zb_validity_apply_f64(bm, off, (size_t)XLENGTH(v), REAL(v)); break;
+    default: {
+        size_t w = (size_t)XLENGTH(na);
+        nulls = zb_validity_apply(bm, off, (size_t)XLENGTH(v) / w, RAW(v), w, RAW(na));
+    }
+    }
+    SET_VECTOR_ELT(out, 1, Rf_ScalarReal((double)nulls));
+    UNPROTECT(1);
+    return out;
+}
+
+/* zb_validity_from into a bitmap of every bit set (so that untouched bits
+   show), for integer, double, or raw values as in zubin_test_validity_apply. */
+SEXP zubin_test_validity_from(SEXP values, SEXP offset, SEXP na)
+{
+    const char *names[] = {"valid", "nulls", ""};
+    size_t off = (size_t)Rf_asReal(offset), nulls = 0, m;
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names)), bm;
+    m = TYPEOF(values) == RAWSXP ? (size_t)XLENGTH(values) / (size_t)XLENGTH(na)
+                                 : (size_t)XLENGTH(values);
+    bm = Rf_allocVector(RAWSXP, (R_xlen_t)zb_bitmap_bytes(off + m));
+    SET_VECTOR_ELT(out, 0, bm);
+    memset(RAW(bm), 0xFF, (size_t)XLENGTH(bm));
+    switch (TYPEOF(values)) {
+    case INTSXP: nulls = zb_validity_from_i32(INTEGER(values), m, RAW(bm), off); break;
+    case REALSXP: nulls = zb_validity_from_f64(REAL(values), m, RAW(bm), off); break;
+    default:
+        nulls = zb_validity_from(RAW(values), m, (size_t)XLENGTH(na), RAW(na), RAW(bm), off);
+    }
+    SET_VECTOR_ELT(out, 1, Rf_ScalarReal((double)nulls));
+    UNPROTECT(1);
+    return out;
+}
+
+/* zb_swap_copy into a new vector, or in place on a copy. */
+SEXP zubin_test_swap_copy(SEXP bytes, SEXP width, SEXP in_place)
+{
+    size_t w = (size_t)Rf_asInteger(width), n = w ? (size_t)XLENGTH(bytes) / w : 0;
+    SEXP out = PROTECT(Rf_allocVector(RAWSXP, XLENGTH(bytes)));
+    if (Rf_asLogical(in_place) == TRUE) {
+        if (XLENGTH(bytes)) memcpy(RAW(out), RAW(bytes), (size_t)XLENGTH(bytes));
+        zb_swap_copy(RAW(out), RAW(out), n, w);
+    } else {
+        memset(RAW(out), 0, (size_t)XLENGTH(out));
+        zb_swap_copy(RAW(out), RAW(bytes), n, w);
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* ---- zubin-r.h, foreign buffers ----------------------------------------------- */
+
+static int test_extbuf_released;
+
+static void test_extbuf_free(void *data, void *ptr, size_t len)
+{
+    (void)len;
+    test_extbuf_released += data == (void *)&test_extbuf_released;
+    free(ptr);
+}
+
+/* A handle owning a malloc block of len bytes filled with 0xAB. */
+SEXP zubin_test_extbuf_new(SEXP len)
+{
+    size_t n = (size_t)Rf_asReal(len);
+    zb_status st;
+    SEXP h = PROTECT(zb_r_extbuf_new(R_NilValue, &st));
+    void *p;
+    if (st) Rf_error("extbuf_new: %s", zb_status_string(st));
+    p = malloc(n ? n : 1);
+    if (!p) Rf_error("malloc");
+    memset(p, 0xAB, n);
+    if (zb_r_extbuf_adopt(h, p, n, test_extbuf_free, &test_extbuf_released)) {
+        free(p);
+        Rf_error("adopt");
+    }
+    UNPROTECT(1);
+    return h;
+}
+
+/* What the handle holds: its bytes (a copy), or NULL once released. */
+SEXP zubin_test_extbuf_bytes(SEXP h)
+{
+    void *p = zb_r_extbuf_ptr(h);
+    size_t n = zb_r_extbuf_len(h);
+    SEXP out;
+    if (!p) return R_NilValue;
+    out = Rf_allocVector(RAWSXP, (R_xlen_t)n);
+    if (n) memcpy(RAW(out), p, n);
+    return out;
+}
+
+SEXP zubin_test_extbuf_release(SEXP h)
+{
+    zb_r_extbuf_release(h);
+    return R_NilValue;
+}
+
+SEXP zubin_test_extbuf_released(void)
+{
+    return Rf_ScalarInteger(test_extbuf_released);
+}
+
+/* The misuses: adopting into a live handle twice, into something that is
+   not a handle, and reading a non-handle. Each status, and whether the
+   first adoption's memory survived the second attempt. */
+SEXP zubin_test_extbuf_misc(void)
+{
+    const char *names[] = {"twice", "not_handle", "ptr_of_raw", "empty_ptr", ""};
+    zb_status st;
+    int keep = 7, other = 8;
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names));
+    SEXP h = PROTECT(zb_r_extbuf_new(R_NilValue, &st));
+    SEXP raw = PROTECT(Rf_allocVector(RAWSXP, 4));
+    SET_VECTOR_ELT(out, 3, Rf_ScalarLogical(zb_r_extbuf_ptr(h) == NULL && zb_r_extbuf_len(h) == 0));
+    if (zb_r_extbuf_adopt(h, &keep, sizeof keep, NULL, NULL)) Rf_error("first adopt");
+    st = zb_r_extbuf_adopt(h, &other, sizeof other, NULL, NULL);
+    SET_VECTOR_ELT(out, 0, Rf_mkString(st == ZB_ERR_INVALID && zb_r_extbuf_ptr(h) == &keep
+                                       ? "ZB_ERR_INVALID" : "wrong"));
+    SET_VECTOR_ELT(out, 1, Rf_mkString(zb_status_string(zb_r_extbuf_adopt(raw, &other, 4, NULL, NULL))));
+    SET_VECTOR_ELT(out, 2, Rf_ScalarLogical(zb_r_extbuf_ptr(raw) == NULL));
+    zb_r_extbuf_release(h);
+    zb_r_extbuf_release(h);
+    UNPROTECT(3);
     return out;
 }
 

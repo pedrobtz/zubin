@@ -431,7 +431,7 @@ SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP strid
             SET_VECTOR_ELT(out, nv, col);
             st = zb_unpack_f64(base, nrec, rs, f, REAL(col));
             break;
-        case ZB_I64: case ZB_U64:
+        case ZB_I64: case ZB_U64: case ZB_I128: case ZB_U128:
             col = alloc_column(REALSXP, nrec, f->count);
             SET_VECTOR_ELT(out, nv, col);
             if (as64) {
@@ -452,6 +452,11 @@ SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP strid
             } else {
                 st = zb_unpack_f64x(base, nrec, rs, f, REAL(col), &bad);
             }
+            break;
+        case ZB_C64: case ZB_C128:
+            col = alloc_column(CPLXSXP, nrec, f->count);
+            SET_VECTOR_ELT(out, nv, col);
+            st = zb_unpack_cplx(base, nrec, rs, f, (double *)(void *)COMPLEX(col));
             break;
         case ZB_BYTES: {
             col = Rf_allocVector(VECSXP, (R_xlen_t)nrec);
@@ -510,6 +515,8 @@ static zb_status pack_field(uint8_t *base, size_t n, size_t stride, const zb_fie
     case REALSXP:
         if (is64) return zb_pack_i64(base, n, stride, f, (const int64_t *)(const void *)REAL(col), allow_na, bad);
         return zb_pack_f64(base, n, stride, f, REAL(col), allow_na, bad);
+    case CPLXSXP:
+        return zb_pack_cplx(base, n, stride, f, (const double *)(const void *)COMPLEX(col));
     case STRSXP: {
         const void *vmax = vmaxget();
         if (f->type != ZB_STR) return ZB_ERR_INVALID;

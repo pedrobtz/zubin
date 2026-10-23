@@ -56,6 +56,17 @@ int zb_probe_all(void)
     RW(bf16le, double, 2);    RW(bf16be, double, 2);
     RW(f32le, float, 4);      RW(f32be, float, 4);
     RW(f64le, double, 8);     RW(f64be, double, 8);
+    {
+        zb_u128 w = zb_rd_u128le(buf);
+        zb_wr_u128be(buf, zb_rd_u128be(buf));
+        zb_wr_u128le(buf, w);
+        acc += (int)(w.lo & 1) + (int)(w.hi & 1);
+        acc += (int)zb_rd_uintle(buf, 3) + (int)zb_rd_uintbe(buf, 5);
+        acc += (int)zb_rd_intle(buf, 2) + (int)zb_rd_intbe(buf, 7);
+        zb_wr_uintle(buf, 3, 1);
+        zb_wr_uintbe(buf + 4, 6, 2);
+        acc += (int)zb_f64_to_f32(1.5);
+    }
 
     /* cursor.h */
     {
@@ -160,6 +171,48 @@ int zb_probe_all(void)
             acc += (int)zb_pack_bytes(buf, 1, l.size, &fields[3], bytes);
             zb_pack_zeros(buf, 1, l.size, &fields[3]);
         }
+    }
+
+    {
+        static const char spec[] = "a:u128 b:i128.be c:c64 d:c128";
+        zb_field fields[4];
+        zb_layout l;
+        size_t pos = 0, bad = 0;
+        uint8_t rec[56], native[16];
+        double f64[2];
+        int64_t i64[1];
+        memset(rec, 0, sizeof rec);
+        memset(&l, 0, sizeof l);
+        memset(fields, 0, sizeof fields);
+        acc += ZB_U128 + ZB_I128 + ZB_C64 + ZB_C128 + (int)zb_type_align(ZB_C64);
+        if (zb_layout_parse(spec, sizeof spec - 1, 0, 0, fields, 4, &l, &pos) == ZB_OK && l.size <= sizeof rec) {
+            acc += (int)zb_unpack_i64(rec, 1, l.size, &fields[1], i64, &bad);
+            acc += (int)zb_unpack_cplx(rec, 1, l.size, &fields[2], f64);
+            acc += (int)zb_pack_cplx(rec, 1, l.size, &fields[3], f64);
+            acc += (int)zb_unpack_native(rec, 1, l.size, &fields[0], native);
+            acc += (int)zb_pack_native(rec, 1, l.size, &fields[0], native);
+        }
+    }
+
+    /* column.h */
+    {
+        uint8_t bm[4] = {0x05, 0, 0, 0};
+        int32_t i32[4] = {1, 0, 1, 1};
+        double f64[2] = {1.0, 2.0};
+        uint8_t raw[8] = {0}, na[2] = {0xFF, 0xFF};
+        size_t bad = 0;
+        zb_bit_set(bm, 9, 1);
+        zb_bit_set_msb(bm, 17, 1);
+        acc += zb_bit_get(bm, 0) + zb_bit_get_msb(bm, 17);
+        acc += (int)zb_bitmap_bytes(13) + (int)zb_bitmap_count(bm, 1, 20);
+        zb_unpack_bits(bm, 2, 4, i32);
+        acc += (int)zb_pack_bits(bm, 3, 4, i32, &bad);
+        acc += (int)zb_validity_apply(bm, 0, 4, raw, 2, na);
+        acc += (int)zb_validity_apply_i32(bm, 0, 4, i32) + (int)zb_validity_apply_f64(NULL, 0, 2, f64);
+        acc += (int)zb_validity_from(raw, 4, 2, na, bm, 0);
+        acc += (int)zb_validity_from_i32(i32, 4, bm, 4) + (int)zb_validity_from_f64(f64, 2, bm, 8);
+        zb_swap_copy(raw, raw, 2, 4);
+        acc += (int)(ZB_NA_F64_BITS & 1);
     }
 
     /* zufast/utf8.h, re-exported by the umbrella */

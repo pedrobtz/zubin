@@ -16,7 +16,8 @@
 #' Each field accepts the R types of the table in [bin_layout()]: integer,
 #' whole double and logical for the small integer types; integer and whole
 #' double for `i32` and `u32`; integer, whole double and `integer64` for
-#' `i64` and `u64`; numeric for the floating types (rounded to nearest even);
+#' `i64`, `u64`, `i128` and `u128`; numeric for the floating types (rounded
+#' to nearest even); complex, or numeric as a real part, for `c64` and `c128`;
 #' logical for `bool`; character for `s<n>` (UTF-8, at most `n` bytes); and a
 #' list of raw vectors of exactly `n` bytes for `b<n>`. Nothing is truncated,
 #' wrapped or rounded into an integer type: a value that does not fit is a
@@ -58,13 +59,14 @@ bin_pack <- function(layout, ..., na = c("error", "allow")) {
 #' encoding of its values, which every encoding of a number is, with three
 #' exceptions. A `bool` byte other than 00 or 01 reads as `TRUE` and writes
 #' back as 01. An `s<n>` reads up to its first NUL, so the bytes after it
-#' write back as NULs. And an `i64` or `u64` beyond 2^53 does not decode as
-#' a double at all: ask for `int64 = "integer64"`. A NaN keeps its payload
-#' through `f64`, but the narrower floats may not.
+#' write back as NULs. And an `i64`, `u64`, `i128` or `u128` beyond 2^53
+#' does not decode as a double at all: ask for `int64 = "integer64"` (which
+#' holds 64 bits). A NaN keeps its payload through `f64` and `c128`, but the
+#' narrower floats may not.
 #'
 #' @inheritParams bin_decode
-#' @param x A vector: numeric, logical, `integer64`, character for `s<n>`, or
-#'   a list of raw vectors for `b<n>`.
+#' @param x A vector: numeric, logical, `integer64`, complex for `c64` and
+#'   `c128`, character for `s<n>`, or a list of raw vectors for `b<n>`.
 #' @param na `"error"`, or `"allow"` to write `NA` as -2^31 into `i32`.
 #' @return A raw vector of `length(x)` times the type's width.
 #' @export
@@ -181,7 +183,7 @@ type_letters <- function(type) {
 
 # What the kernel for `type` reads: integer for the small integer types,
 # logical for bool, double (or integer64 bits) for the rest of the numbers,
-# character for s<n>, a list for b<n>.
+# complex for c64 and c128, character for s<n>, a list for b<n>.
 pack_value <- function(x, type, count, name, call) {
   base <- type_letters(type)
   wrong <- function() {
@@ -202,11 +204,18 @@ pack_value <- function(x, type, count, name, call) {
                      arg = name, call = call)
   }
   if (inherits(x, "integer64")) {
-    if (!type %in% c("i64", "u64")) wrong()
+    if (!type %in% c("i64", "u64", "i128", "u128")) wrong()
     return(x)
   }
   if (base %in% c("u", "i", "f", "bf") && !is.numeric(x) && !is.logical(x)) wrong()
   switch(base,
+    c = {
+      # a real number is a complex one with no imaginary part
+      if (is.complex(x)) x else if (is.numeric(x)) {
+        storage.mode(x) <- "complex"
+        x
+      } else wrong()
+    },
     s = if (is.character(x)) x else wrong(),
     b = if (is.list(x)) unclass(x) else wrong(),
     bool = if (is.logical(x)) x else wrong(),

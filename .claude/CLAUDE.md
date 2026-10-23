@@ -37,8 +37,10 @@ commit.
 
 Stages 0–8 are done; Stage 10 (serialisation streams, #25) and Stage 11 (#26's
 small items) go into 0.1.0 too, by the maintainer's decision of 2026-10-05; Stage 9 releases
-after them, once zufast is on CRAN. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout}.h`
-(layout.h: types, spec parser, unpack and pack kernels), plus `zubin-r.h`. Gates:
+after them, once zufast is on CRAN. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout,column}.h`
+(layout.h: types, spec parser, unpack and pack kernels; column.h: bitmaps, validity, swaps),
+plus `zubin-r.h`. Stage 12 (what zunpy, zumsgpack, zuint and zuarrow call) adds `u128`,
+`i128`, `c64`, `c128` (type values 32–35), native-order kernels and the foreign buffer. Gates:
 `abi.yaml`, `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml` (`fuzz_layout`,
 `fuzz_unpack`, `fuzz_buf`), `arch.yaml` (i386, musl, s390x). R API: `bin_info()`,
 `bin_layout()`, `bin_size()`, `bin_unpack()`, `bin_pack()`, `bin_decode()`, `bin_encode()`,
@@ -51,7 +53,8 @@ rchk and fuzz). `tools/zubintest` is the consumer fixture (`consumer.yaml`); the
 fixture, then copy the change into the README. Next: Stage 9, which waits for zufast to be on CRAN; its release commit is ready on the `stage-9-release` branch.
 
 In C, `zb_field.count` is the byte width for `b`, `s` and `x` fields; the element count of a
-column is 1 for them.
+column is 1 for them. Alignment is `zb_type_align()`, not the width: a complex type aligns as
+its part. A 128-bit value is a `zb_u128` (`lo` first), a container with no arithmetic.
 
 **zubin-r.h's serialisation streams are the one place R raises:** R's errors during
 R_Serialize/R_Unserialize (a malformed stream, a refhook) reach the caller unchanged; only
