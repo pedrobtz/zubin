@@ -159,6 +159,8 @@ test_that("builder operations survive gctorture", {
 })
 
 test_that("an allocation that fails is a memory error and changes nothing", {
+  # CI runs it; CRAN's sanitizer machines may not set ASAN_OPTIONS
+  skip_on_cran()
   skip_if(.Machine$sizeof.pointer < 8, "2^53 bytes are not addressable")
   # an allocation of 2^53 bytes is fatal under ASan rather than NULL, and
   # valgrind warns on it
