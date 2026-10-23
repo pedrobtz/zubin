@@ -10,12 +10,12 @@ Source:
 [`DESCRIPTION`](https://github.com/pedrobtz/zubin/blob/main/DESCRIPTION)
 
 Baltazar P (2026). *zubin: Read and Write Structured Binary Data*. R
-package version 0.0.0.9000, <https://pedrobtz.github.io/zubin/>.
+package version 0.1.0, <https://pedrobtz.github.io/zubin/>.
 
     @Manual{,
       title = {zubin: Read and Write Structured Binary Data},
       author = {Pedro Baltazar},
       year = {2026},
-      note = {R package version 0.0.0.9000},
+      note = {R package version 0.1.0},
       url = {https://pedrobtz.github.io/zubin/},
     }

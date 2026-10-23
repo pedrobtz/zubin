@@ -26,7 +26,7 @@ what `endian = "native"` means on this host), `compiler` (a string) and
 
 ``` r
 bin_info()$version
-#> [1] "0.0.0"
+#> [1] "0.1.0"
 bin_info()$endian
 #> [1] "little"
 ```
