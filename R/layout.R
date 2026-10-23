@@ -72,11 +72,11 @@
 #' With `align = FALSE` fields are packed at consecutive offsets. With
 #' `align = TRUE` each field starts at the next multiple of its element width
 #' (1 for `bool`, `b`, `s` and `x`; a complex type aligns as its part, `c64`
-#' to 4 and `c128` to 8; `i128` and `u128` to 16) and the record size is rounded up to the
-#' largest of them: the rule C compilers apply to a `struct` on 64-bit
-#' targets, so a struct written with `fwrite()` reads back with
-#' `align = TRUE`. (32-bit x86 aligns 8-byte members to 4 inside a struct;
-#' such a struct needs explicit `x` padding.)
+#' to 4 and `c128` to 8; `i128` and `u128` to 16) and the record size is
+#' rounded up to the largest of them: the rule C compilers apply to a
+#' `struct` on 64-bit targets, so a struct written with `fwrite()` reads back
+#' with `align = TRUE`. (32-bit x86 aligns 8-byte members to 4 inside a
+#' struct; such a struct needs explicit `x` padding.)
 #'
 #' @param spec A specification string; or a named character vector of type
 #'   tokens, whose names are the field names (`c(id = "u32", "x3")`); or a
@@ -108,7 +108,7 @@ bin_layout <- function(spec, endian = c("little", "big", "native"), align = FALS
   if (inherits(spec, "zubin_layout")) {
     return(spec)
   }
-  endian <- match.arg(endian)
+  endian <- arg_match(endian)
   if (!is.logical(align) || length(align) != 1L || is.na(align)) {
     invalid_argument("`align` must be TRUE or FALSE.", arg = "align")
   }
@@ -152,6 +152,13 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
     zb_fail(res, sprintf("Malformed layout specification at byte %s: %s", pos,
                          spec_context(text, pos)),
             position = pos, call = call)
+  }
+  # names are unique: checked here, once, rather than pairwise in C, which
+  # is quadratic in the number of fields
+  dup <- anyDuplicated(res$name, incomparables = NA)
+  if (dup) {
+    zubin_abort(sprintf("The name \"%s\" is used by more than one field.", res$name[dup]),
+                "zubin_spec_error", position = as.double(res$name_pos[dup]), call = call)
   }
   tokens <- c("u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f16", "bf16",
               "f32", "f64", "bool", "b", "s", "x", rep(NA, 15L), "u128", "i128", "c64", "c128")
@@ -260,11 +267,11 @@ format.zubin_layout <- function(x, ...) {
   f <- x$fields
   f$name[is.na(f$name)] <- ""
   f$endian[is.na(f$endian)] <- ""
-  head <- sprintf("<zubin_layout: %d bytes, %d field%s%s>", x$size, nrow(f),
-                  if (nrow(f) == 1L) "" else "s",
-                  if (x$align > 1L) sprintf(", aligned to %d", x$align) else "")
+  header <- sprintf("<zubin_layout: %d bytes, %d field%s%s>", x$size, nrow(f),
+                    if (nrow(f) == 1L) "" else "s",
+                    if (x$align > 1L) sprintf(", aligned to %d", x$align) else "")
   tab <- utils::capture.output(print(f, row.names = FALSE, right = FALSE))
-  c(head, tab)
+  c(header, tab)
 }
 
 #' @export

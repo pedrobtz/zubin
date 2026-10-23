@@ -3,7 +3,7 @@
 \name{bin_serialize}
 \alias{bin_serialize}
 \alias{bin_unserialize}
-\title{Serialize R objects into a builder, and back from bytes at an offset}
+\title{Serialise R objects into a builder, and back from bytes at an offset}
 \usage{
 bin_serialize(x, b, version = 3L, xdr = TRUE, refhook = NULL)
 
@@ -11,11 +11,11 @@ bin_unserialize(x, offset = 0, refhook = NULL)
 }
 \arguments{
 \item{x}{For \code{bin_serialize()}, any R object; for \code{bin_unserialize()}, a
-raw vector holding a serialization stream at \code{offset}.}
+raw vector holding a serialisation stream at \code{offset}.}
 
 \item{b}{A builder from \code{\link[=bin_builder]{bin_builder()}}.}
 
-\item{version}{The serialization format version, 2 or 3, as in
+\item{version}{The serialisation format version, 2 or 3, as in
 \code{\link[=serialize]{serialize()}}.}
 
 \item{xdr}{\code{TRUE} for the portable big-endian (XDR) format, \code{FALSE} for
@@ -31,25 +31,25 @@ the host's native binary format, as in \code{\link[=serialize]{serialize()}}.}
 returns the object.
 }
 \description{
-\code{bin_serialize()} appends the serialization of \code{x} to the builder \code{b},
+\code{bin_serialize()} appends the serialisation of \code{x} to the builder \code{b},
 exactly as \code{\link[=serialize]{serialize()}} would write it, without first allocating the
-whole stream as a raw vector. \code{bin_unserialize()} reads one serialized
+whole stream as a raw vector. \code{bin_unserialize()} reads one serialised
 object from the raw vector \code{x}, starting at the 0-based byte \code{offset}, so
 a stream stored inside a larger file or record is read where it lies.
 Offsets are 0-based.
 }
 \details{
-Both are R's own serialization: \code{unserialize(bin_take(b))} after
+Both are R's own serialisation: \code{unserialize(bin_take(b))} after
 \code{bin_serialize(x, b)} is identical to \code{x}, and \code{bin_unserialize()} reads
-what \code{\link[=serialize]{serialize()}} writes. Errors that R raises while serializing or
-unserializing (an object it cannot serialize, a malformed stream, an error
-in \code{refhook}) arrive as R raised them. A stream that ends before the
+what \code{\link[=serialize]{serialize()}} writes. Errors that R raises while writing or reading
+the stream (an object it cannot serialise, a malformed stream, an error in
+\code{refhook}) arrive as R raised them. A stream that ends before the
 object does is a \code{zubin_bounds_error} carrying \code{offset} and \code{length}. An
 append that would pass the builder's \code{max} is a \code{zubin_limit_error}; in
 every failure, an interrupt included, the builder is left as it was.
 
-Only unserialize data from a source you trust: a serialization stream can
-hold any R object, functions and environments included.
+Only read serialised data from a source you trust: a serialisation
+stream can hold any R object, functions and environments included.
 }
 \examples{
 b <- bin_builder()

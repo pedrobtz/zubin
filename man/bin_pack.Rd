@@ -38,10 +38,13 @@ double for \code{i32} and \code{u32}; integer, whole double and \code{integer64}
 \code{i64}, \code{u64}, \code{i128} and \code{u128}; numeric for the floating types (rounded
 to nearest even); complex, or numeric as a real part, for \code{c64} and \code{c128};
 logical for \code{bool}; character for \verb{s<n>} (UTF-8, at most \code{n} bytes); and a
-list of raw vectors of exactly \code{n} bytes for \verb{b<n>}. Nothing is truncated,
-wrapped or rounded into an integer type: a value that does not fit is a
-\code{zubin_range_error}, and an \code{NA} a \code{zubin_na_error}, each carrying \code{field}
-and the 0-based record \code{index} of the first one. \code{NA} has bytes only in
+list of raw vectors of exactly \code{n} bytes for \verb{b<n>}. A string marked
+\code{"bytes"} is written as its bytes, unchecked, so that \code{bin_unpack(x, l, encoding = "bytes")} packs back to \code{x}; any other string must be valid
+UTF-8 once translated to it, or the call is a \code{zubin_encoding_error}.
+Nothing is truncated, wrapped or rounded into an integer type: a value
+that does not fit is a \code{zubin_range_error}, and an \code{NA} a
+\code{zubin_na_error}, each carrying \code{field} and the 0-based record \code{index} of
+the first one. \code{NA} has bytes only in
 \code{i32} (with \code{na = "allow"}), \code{f64}, and the other floating types, where it
 becomes a NaN.
 }

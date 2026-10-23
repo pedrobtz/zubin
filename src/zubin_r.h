@@ -20,7 +20,7 @@ SEXP zubin_int_status(zb_status st, R_xlen_t index);
 SEXP zubin_int_failure(const char *name, R_xlen_t index, int field);
 int zubin_int_size(SEXP x, size_t *out);
 zb_status zubin_int_parse(SEXP spec, int big, int align, uint32_t max_fields,
-                          zb_layout *out, size_t *err_pos);
+                          zb_layout *out, size_t *err_pos, int check_names);
 
 /* zubin_r.c */
 SEXP zubin_info(void);
@@ -55,6 +55,8 @@ SEXP zubin_test_buf_put(SEXP type, SEXP endian, SEXP values, SEXP vectorised);
 SEXP zubin_test_buf_misc(void);
 SEXP zubin_test_put_then_error(void);
 SEXP zubin_test_put_loop(SEXP chunk, SEXP times);
+SEXP zubin_test_buf_new_fail(void);
+SEXP zubin_test_kernel_types(void);
 SEXP zubin_test_layout(SEXP spec, SEXP big, SEXP align, SEXP max_fields);
 SEXP zubin_test_struct_offsets(void);
 SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride);

@@ -19,10 +19,14 @@
 #' `i64`, `u64`, `i128` and `u128`; numeric for the floating types (rounded
 #' to nearest even); complex, or numeric as a real part, for `c64` and `c128`;
 #' logical for `bool`; character for `s<n>` (UTF-8, at most `n` bytes); and a
-#' list of raw vectors of exactly `n` bytes for `b<n>`. Nothing is truncated,
-#' wrapped or rounded into an integer type: a value that does not fit is a
-#' `zubin_range_error`, and an `NA` a `zubin_na_error`, each carrying `field`
-#' and the 0-based record `index` of the first one. `NA` has bytes only in
+#' list of raw vectors of exactly `n` bytes for `b<n>`. A string marked
+#' `"bytes"` is written as its bytes, unchecked, so that `bin_unpack(x, l,
+#' encoding = "bytes")` packs back to `x`; any other string must be valid
+#' UTF-8 once translated to it, or the call is a `zubin_encoding_error`.
+#' Nothing is truncated, wrapped or rounded into an integer type: a value
+#' that does not fit is a `zubin_range_error`, and an `NA` a
+#' `zubin_na_error`, each carrying `field` and the 0-based record `index` of
+#' the first one. `NA` has bytes only in
 #' `i32` (with `na = "allow"`), `f64`, and the other floating types, where it
 #' becomes a NaN.
 #'
@@ -43,7 +47,7 @@
 #' bin_unpack(bytes, rec)
 bin_pack <- function(layout, ..., na = c("error", "allow")) {
   layout <- bin_layout(layout)
-  na <- match.arg(na)
+  na <- arg_match(na)
   cols <- pack_inputs(list(...), layout)
   pack_columns(layout, cols, na)
 }
@@ -67,7 +71,8 @@ bin_pack <- function(layout, ..., na = c("error", "allow")) {
 #' @inheritParams bin_decode
 #' @param x A vector: numeric, logical, `integer64`, complex for `c64` and
 #'   `c128`, character for `s<n>`, or a list of raw vectors for `b<n>`.
-#' @param na `"error"`, or `"allow"` to write `NA` as -2^31 into `i32`.
+#' @param na `"error"`, or `"allow"` to write `NA` into `i32` as -2^31 (and
+#'   an `integer64` `NA` into `i64` as -2^63).
 #' @return A raw vector of `length(x)` times the type's width.
 #' @export
 #' @examples
@@ -80,10 +85,10 @@ bin_pack <- function(layout, ..., na = c("error", "allow")) {
 #' bin_encode(bin_decode(as.raw(2), "bool"), "bool")
 bin_encode <- function(x, type, endian = c("little", "big", "native"),
                        na = c("error", "allow")) {
-  endian <- match.arg(endian)
-  na <- match.arg(na)
+  endian <- arg_match(endian)
+  na <- arg_match(na)
   layout <- type_layout(type, endian)
-  pack_columns(layout, list(v = x), na, field_names = NA_character_)
+  pack_columns(layout, list(v = x), na, codec = TRUE)
 }
 
 # The columns, from named arguments or one data frame or list, matched to
@@ -141,26 +146,27 @@ array_from_columns <- function(parts) {
 }
 
 # Checks each column against its field, recycles to the longest, converts it
-# to what the kernel reads, and packs.
-pack_columns <- function(layout, cols, na, field_names = NULL, call = sys.call(-1L)) {
+# to what the kernel reads, and packs. codec is TRUE for bin_encode(), whose
+# one field has no name to report.
+pack_columns <- function(layout, cols, na, codec = FALSE, call = sys.call(-1L)) {
   f <- layout$fields
   value <- !startsWith(f$type, "x")
   types <- f$type[value]
   counts <- f$count[value]
-  names <- f$name[value]
+  field_names <- f$name[value]
   rows <- integer(length(cols))
   for (i in seq_along(cols)) {
-    cols[[i]] <- pack_value(cols[[i]], types[i], counts[i], names[i], call)
-    rows[i] <- pack_rows(cols[[i]], counts[i])
+    cols[[i]] <- pack_value(cols[[i]], types[i], counts[i], field_names[i], call)
+    rows[i] <- pack_rows(cols[[i]])
   }
   n <- if (length(rows)) max(rows) else 0
   for (i in seq_along(cols)) {
     if (rows[i] != n) {
       if (rows[i] == 0L || n %% rows[i] != 0) {
         invalid_argument(sprintf("Column `%s` has %s rows, which does not divide %s.",
-                                 names[i], rows[i], n), arg = names[i], call = call)
+                                 field_names[i], rows[i], n), arg = field_names[i], call = call)
       }
-      cols[[i]] <- recycle_rows(cols[[i]], counts[i], n)
+      cols[[i]] <- recycle_rows(cols[[i]], n)
     }
   }
   # C reads each column's type and length only, so attributes (dim, the
@@ -168,7 +174,7 @@ pack_columns <- function(layout, cols, na, field_names = NULL, call = sys.call(-
   is64 <- vapply(cols, inherits, logical(1), "integer64")
   res <- .Call(zubin_pack, layout$spec, layout$align > 1L, unname(cols), unname(is64),
                as.double(n), na == "allow")
-  if (is_status(res)) pack_fail(res, layout, field_names, call)
+  if (is_status(res)) pack_fail(res, layout, codec, call)
   res
 }
 
@@ -234,11 +240,11 @@ pack_value <- function(x, type, count, name, call) {
   )
 }
 
-pack_rows <- function(x, count) {
+pack_rows <- function(x) {
   if (is.matrix(x)) nrow(x) else length(x)
 }
 
-recycle_rows <- function(x, count, n) {
+recycle_rows <- function(x, n) {
   if (is.matrix(x)) {
     cls <- oldClass(x)
     m <- unclass(x)[rep_len(seq_len(nrow(x)), n), , drop = FALSE]
@@ -251,12 +257,11 @@ recycle_rows <- function(x, count, n) {
   v
 }
 
-pack_fail <- function(res, layout, field_names, call) {
+pack_fail <- function(res, layout, codec, call) {
   name <- as.character(res)
   index <- attr(res, "index")
   pos <- attr(res, "field")
-  field <- if (is.null(pos)) NA_character_ else layout$fields$name[pos + 1L]
-  if (!is.null(field_names) && is.na(field_names[1L])) field <- NA_character_
+  field <- if (is.null(pos) || codec) NA_character_ else layout$fields$name[pos + 1L]
   what <- if (is.na(field)) "" else sprintf(" of field `%s`", field)
   rec <- format(index, scientific = FALSE)
   switch(name,
@@ -264,6 +269,10 @@ pack_fail <- function(res, layout, field_names, call) {
                            field = field, index = index, call = call),
     ZB_ERR_NA = zb_fail(res, sprintf("Value %s%s is NA, which has no bytes in its type.", rec, what),
                         field = field, index = index, call = call),
+    ZUBIN_ERR_ENCODING = zubin_abort(
+      sprintf("The string of value %s%s is not valid UTF-8.", rec, what),
+      "zubin_encoding_error", field = field, index = index, call = call
+    ),
     ZB_ERR_MEMORY = zb_fail(res, "The result is too large for a raw vector.", call = call),
     zb_fail(res, sprintf("Value %s%s cannot be written.", rec, what),
             field = field, index = index, call = call)

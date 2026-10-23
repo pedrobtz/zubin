@@ -509,6 +509,12 @@ count, width := decimal, 1 .. 2^31-1
 sep     := whitespace | [ whitespace ] "," [ whitespace ]
 ```
 
+`zb_layout_parse()` checks names pairwise, which is quadratic in the number of fields; the
+R glue checks them once with `anyDuplicated()` and parses with the internal
+`zb_int_layout_parse(..., check_names = 0)`, so a layout of 40 000 fields parses, and is
+re-parsed on every `bin_unpack()` and `bin_pack()`, in linear time (#52). The field array
+is sized by `zb_layout_count_fields()`, one more than the runs of separators.
+
 Examples:
 
 ```
@@ -888,7 +894,10 @@ Every condition zubin raises inherits `zubin_error`; the specific classes are
 `zubin_invalid_argument`, `zubin_spec_error` (with `position`), `zubin_bounds_error`
 (`offset`, `length`), `zubin_range_error` (`field`, `index`), `zubin_na_error` (`field`,
 `index`), `zubin_encoding_error` (`field`, `index`), `zubin_limit_error` (`size`, `max`)
-and `zubin_memory_error`. C never raises below the outermost `.Call`; statuses are mapped
+and `zubin_memory_error` (an allocation zubin makes, or a size past memory; R's own
+allocation of a result fails with R's error). Choice arguments go through `arg_match()`,
+so that a bad `endian` or `as` is a `zubin_invalid_argument` too, and `bin_size()` of
+anything else through `bin_size.default()`. C never raises below the outermost `.Call`; statuses are mapped
 to classes by enumerator name in `R/conditions.R`, and the call is reduced to the function
 name so that a large raw argument is not printed with the error (zucrypt's rule).
 
@@ -996,9 +1005,12 @@ flag); the strict rule is vctrs', not base R's silent partial recycling.
 `s<n>` is a C string in a fixed field: on read, bytes up to the first NUL or the field
 width, whichever is first, validated as UTF-8 through `zuf_utf8_valid()` and marked
 `CE_UTF8` (R marks an all-ASCII string native, as it does any); invalid bytes are `zubin_encoding_error` unless `encoding = "latin1"` (marked
-`CE_LATIN1`, any bytes valid) or `encoding = "bytes"` (marked `CE_BYTES`). On write, the
-string's bytes (through `enc2utf8()`) padded with NULs to the width; longer is a range
-error; `NA_character_` is an NA error. A field that must preserve interior NULs or exact
+`CE_LATIN1`, any bytes valid) or `encoding = "bytes"` (marked `CE_BYTES`). On write, a
+string marked `CE_BYTES` is its bytes, unchecked, the inverse of `encoding = "bytes"`; any
+other is translated to UTF-8 and must then be valid UTF-8 (R does not check an unmarked
+string in a UTF-8 locale), or it is a `zubin_encoding_error` with `index` (#44, #50). The
+bytes are padded with NULs to the width; longer is a range error; `NA_character_` is an NA
+error. A field that must preserve interior NULs or exact
 bytes is `b<n>`. There is no `"z"` or `"p*"` in a layout before 0.2.0; `bin_put(b, s,
 "z")` exists because appending a NUL-terminated string is the one variable-length case a
 writer meets constantly.
@@ -1087,7 +1099,25 @@ position. It also exposes a live-buffer counter so `test-lifetime.R` can prove, 
 error and after a `setTimeLimit()` interrupt inside `bin_put()` and `bin_unpack()`, that
 the count returns to its baseline after `gc()` (zucrypt's `zuc_live.h`, zucbor's interrupt
 technique). The finalizer is broken once, locally, to show that test fail, and the PR
-records it.
+records it; the foreign-buffer test likewise (it crashes on the double release when the
+finalizer does not clear the pointer). It also calls every public kernel with every type,
+so the types each refuses are pinned for C consumers, and `zb_r_buf_new()` with a size no
+buffer may hold, so its failure path frees what it registered.
+
+Branches no test reaches from R, and why:
+
+- `zubin-r.h`'s `outchar`/`inchar` stream callbacks: R uses them only for its ascii
+  format, which zubin never asks for.
+- The argument checks at the top of the `.Call` entry points in `src/zubin_r.c` (a wrong
+  `SEXP` type, a size that is not a whole number, a column count that does not match the
+  layout, a type the kernel dispatch cannot take): R validates every argument first, so
+  they are the second check native safety depends on (§13), not a path a user reaches.
+- `buf.h`'s saturating growth past `ZB_BUF_MAX_CAP` / 1.5: a buffer of exabytes; the
+  harness drives `zb_int_grow()` to it directly.
+- `ZB_ERR_MEMORY` from `bin_unpack()` for an array field of more than 2^31 - 1 records
+  and from `bin_serialize()` when the builder cannot grow: the first needs an input of
+  more than 4 GiB, the second a real allocation failure part-way through a stream; the
+  weekly `alloc-failure.yaml` sweep covers the latter.
 
 ### 16.4 Correctness
 
@@ -1095,9 +1125,11 @@ records it.
   row, and the roxygen table, this table and the tests are the same table three times.
 - **Golden vectors.** `tests/testthat/fixtures/golden.tsv`: layout spec, hex input, and the
   expected columns, written by hand from the specifications of the formats they come from
-  (WAV, BMP, PNG IHDR, Java class header, CFB header, an ITCH message, an SBE header) and
-  from `readBin()`/`writeBin()` where base R covers the width. The same file is read on
-  every CI leg, s390x included.
+  (WAV, BMP, PNG IHDR, Java class header, CFB header, an ITCH message, an SBE header),
+  from `readBin()`/`writeBin()` where base R covers the width, and from Python's
+  `int.to_bytes()` and `struct` for `u64be` and the widths base R lacks (`i128`, `u128`,
+  `c64`, `c128`). The same file is read on every CI leg, s390x included. `bin_hexdump()`
+  is compared with xxd's own output, committed under `fixtures/xxd-*.txt`.
 - **Round trips.** `bin_unpack(bin_pack(l, df), l)` is `identical()` to `df` over generated
   layouts and frames under `withr::local_seed()`; `bin_encode(bin_decode(b, t), t)` is `b`
   for every type over random bytes; f16 and bf16 over all 65 536 patterns.

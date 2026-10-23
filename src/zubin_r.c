@@ -114,6 +114,27 @@ SEXP zubin_info(void)
     return out;
 }
 
+/* ---- strings (design 14.6) ------------------------------------------------ */
+
+/* The bytes a string is written as: a string marked "bytes" as it is,
+   unchecked, the inverse of reading with encoding = "bytes"; any other
+   translated to UTF-8, which must then be valid (*invalid set otherwise:
+   R does not check a native string in a UTF-8 locale). Release with
+   vmaxset() once the bytes are copied. */
+static const char *string_bytes(SEXP s, size_t *len, int *invalid)
+{
+    const char *c;
+    if (Rf_getCharCE(s) == CE_BYTES) {
+        *len = (size_t)LENGTH(s);
+        *invalid = 0;
+        return CHAR(s);
+    }
+    c = Rf_translateCharUTF8(s);
+    *len = strlen(c);
+    *invalid = !zuf_utf8_valid(c, *len);
+    return c;
+}
+
 /* ---- the builder (design 13.5) --------------------------------------------- */
 
 #define ZUBIN_INTERRUPT_BYTES ((size_t)64 * 1024 * 1024)
@@ -175,7 +196,8 @@ SEXP zubin_builder_put_raw(SEXP ptr, SEXP x)
 
 /* Appends strings: width < 0 is "z" (the UTF-8 bytes and a NUL), width >= 0
    is "s<width>" (NUL-padded to width; longer is ZB_ERR_RANGE). NA is
-   ZB_ERR_NA. Everything is checked before anything is written, the bytes
+   ZB_ERR_NA, and a string that is not valid UTF-8 (unless marked "bytes")
+   ZUBIN_ERR_ENCODING. Everything is checked before anything is written, the bytes
    are filled past the builder's end, and its length moves only once they
    all are: an error or an interrupt from R on the way appends nothing. */
 SEXP zubin_builder_put_str(SEXP ptr, SEXP x, SEXP width)
@@ -194,9 +216,11 @@ SEXP zubin_builder_put_str(SEXP ptr, SEXP x, SEXP width)
     for (i = 0; i < n; i++) {
         SEXP s = STRING_ELT(x, i);
         size_t len;
+        int invalid;
         if (s == NA_STRING) return zubin_int_status(ZB_ERR_NA, i);
-        len = strlen(Rf_translateCharUTF8(s));
+        string_bytes(s, &len, &invalid);
         vmaxset(vmax);
+        if (invalid) return zubin_int_failure("ZUBIN_ERR_ENCODING", i, 0);
         if (z) {
             if (zb_int_add(total, len, &total) || zb_int_add(total, 1, &total))
                 return zubin_int_status(ZB_ERR_MEMORY, -1);
@@ -208,9 +232,11 @@ SEXP zubin_builder_put_str(SEXP ptr, SEXP x, SEXP width)
     st = zb_buf_reserve(b, total);
     if (st) return zubin_int_status(st, -1);
     for (i = 0; i < n; i++) {
-        const char *c = Rf_translateCharUTF8(STRING_ELT(x, i));
-        size_t len = strlen(c), step = z ? len + 1 : w;
+        size_t len, step;
+        int invalid;
+        const char *c = string_bytes(STRING_ELT(x, i), &len, &invalid);
         uint8_t *slot = b->data + b->len + done;
+        step = z ? len + 1 : w;
         memcpy(slot, c, len);
         memset(slot + len, 0, step - len);
         done += step;
@@ -258,9 +284,11 @@ SEXP zubin_builder_take(SEXP ptr, SEXP reset)
 /* ---- layouts (design 11, 13.2) ---------------------------------------------- */
 
 /* Parses a spec held in an R string into fields R_alloc()ed here, so they
-   live until the .Call returns. max_fields 0 sizes the array from the spec. */
+   live until the .Call returns. max_fields 0 sizes the array from the spec.
+   check_names 0 skips the quadratic name check: R checks names once, with
+   anyDuplicated(), and every later parse is of a spec R already holds. */
 zb_status zubin_int_parse(SEXP spec, int big, int align, uint32_t max_fields,
-                          zb_layout *out, size_t *err_pos)
+                          zb_layout *out, size_t *err_pos, int check_names)
 {
     const char *s;
     size_t n;
@@ -273,7 +301,7 @@ zb_status zubin_int_parse(SEXP spec, int big, int align, uint32_t max_fields,
     n = strlen(s);
     if (!max_fields) max_fields = zb_layout_count_fields(s, n);
     fields = (zb_field *)R_alloc(max_fields, sizeof(zb_field));
-    return zb_layout_parse(s, n, big, align, fields, max_fields, out, err_pos);
+    return zb_int_layout_parse(s, n, big, align, fields, max_fields, out, err_pos, check_names);
 }
 
 /* The field table of a spec: type codes, element counts (1 for b, s and x,
@@ -290,7 +318,7 @@ SEXP zubin_layout_parse(SEXP spec, SEXP big, SEXP align)
     zb_status st;
     SEXP out, type, count, size, offset, bigs, name, pos;
     const char *base;
-    st = zubin_int_parse(spec, Rf_asLogical(big) == TRUE, Rf_asLogical(align) == TRUE, 0, &l, &err);
+    st = zubin_int_parse(spec, Rf_asLogical(big) == TRUE, Rf_asLogical(align) == TRUE, 0, &l, &err, 0);
     if (st) {
         SEXP pos;
         out = PROTECT(zubin_int_status(st, -1));
@@ -379,7 +407,7 @@ SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP strid
     SEXP out, names;
 
     if (TYPEOF(x) != RAWSXP) return zubin_int_status(ZB_ERR_INVALID, -1);
-    st = zubin_int_parse(spec, 0, Rf_asLogical(align) == TRUE, 0, &l, &err);
+    st = zubin_int_parse(spec, 0, Rf_asLogical(align) == TRUE, 0, &l, &err, 0);
     if (st) return zubin_int_status(st, -1);
     len = (size_t)XLENGTH(x);
     if (zubin_int_size(offset, &off)) return zubin_int_status(ZB_ERR_INVALID, -1);
@@ -501,9 +529,10 @@ SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP strid
    carries integer64 bits), character into s<n> (UTF-8, NUL-padded), and a
    list of raw vectors into b<n>. The column has n * count elements, which
    R arranged. The one pack path: bin_pack(), bin_encode() and typed
-   bin_put() all come here. */
+   bin_put() all come here. A string that is not valid UTF-8 sets *encoding
+   and returns ZB_ERR_INVALID; the caller reports ZUBIN_ERR_ENCODING. */
 static zb_status pack_field(uint8_t *base, size_t n, size_t stride, const zb_field *f,
-                            SEXP col, int is64, int allow_na, size_t *bad)
+                            SEXP col, int is64, int allow_na, size_t *bad, int *encoding)
 {
     size_t i, elems = f->type == ZB_BYTES || f->type == ZB_STR ? 1 : f->count;
     if ((size_t)XLENGTH(col) != n * elems) return ZB_ERR_INVALID;
@@ -524,10 +553,11 @@ static zb_status pack_field(uint8_t *base, size_t n, size_t stride, const zb_fie
             SEXP s = STRING_ELT(col, (R_xlen_t)i);
             const char *c;
             size_t len;
+            int invalid;
             uint8_t *p = base + i * stride + f->offset;
             if (s == NA_STRING) { *bad = i; return ZB_ERR_NA; }
-            c = Rf_translateCharUTF8(s);
-            len = strlen(c);
+            c = string_bytes(s, &len, &invalid);
+            if (invalid) { vmaxset(vmax); *bad = i; *encoding = 1; return ZB_ERR_INVALID; }
             if (len > f->size) { vmaxset(vmax); *bad = i; return ZB_ERR_RANGE; }
             memcpy(p, c, len);
             memset(p + len, 0, f->size - len);
@@ -562,7 +592,7 @@ SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_
     int na_ok = Rf_asLogical(allow_na) == TRUE;
     zb_status st;
     SEXP out;
-    st = zubin_int_parse(spec, 0, Rf_asLogical(align) == TRUE, 0, &l, &err);
+    st = zubin_int_parse(spec, 0, Rf_asLogical(align) == TRUE, 0, &l, &err, 0);
     if (st) return zubin_int_status(st, -1);
     if (TYPEOF(cols) != VECSXP || TYPEOF(is64) != LGLSXP || XLENGTH(is64) != XLENGTH(cols) ||
         zubin_int_size(n, &nrec)) return zubin_int_status(ZB_ERR_INVALID, -1);
@@ -583,6 +613,7 @@ SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_
     for (j = 0; j < l.nfields; j++) {
         const zb_field *f = &l.fields[j];
         size_t bad = 0;
+        int enc = 0;
         if (f->type == ZB_PAD) continue;
         if (c >= (uint32_t)XLENGTH(cols)) {
             UNPROTECT(1);
@@ -590,10 +621,11 @@ SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_
         }
         if (c) R_CheckUserInterrupt();
         st = pack_field(total ? RAW(out) : NULL, nrec, l.size, f, VECTOR_ELT(cols, c),
-                        LOGICAL(is64)[c] == TRUE, na_ok, &bad);
+                        LOGICAL(is64)[c] == TRUE, na_ok, &bad, &enc);
         if (st) {
             UNPROTECT(1);
-            return zubin_int_failure(zb_status_string(st), (R_xlen_t)bad, (int)j);
+            return zubin_int_failure(enc ? "ZUBIN_ERR_ENCODING" : zb_status_string(st),
+                                     (R_xlen_t)bad, (int)j);
         }
         c++;
     }
@@ -612,7 +644,7 @@ SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
     size_t err = 0, n, total, done = 0, chunk;
     zb_status st;
     if (!b) return zubin_int_status(ZB_ERR_INVALID, -1);
-    st = zubin_int_parse(spec, 0, 0, 0, &l, &err);
+    st = zubin_int_parse(spec, 0, 0, 0, &l, &err, 0);
     if (st || l.nfields != 1 || l.fields[0].type == ZB_PAD ||
         (l.fields[0].type != ZB_BYTES && l.fields[0].type != ZB_STR && l.fields[0].count != 1))
         return zubin_int_status(ZB_ERR_INVALID, -1);
@@ -624,6 +656,7 @@ SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
     if (!chunk) chunk = 1;
     while (done < n) {
         size_t m = n - done < chunk ? n - done : chunk, bad = 0;
+        int enc = 0;
         uint8_t *slot = b->data + b->len + done * l.size;
         SEXP part = col;
         if (done) R_CheckUserInterrupt();
@@ -640,11 +673,14 @@ SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
         default:
             /* strings and byte lists go through pack_field whole */
             if (done) { st = ZB_ERR_INVALID; break; }
-            st = pack_field(slot, n, l.size, &l.fields[0], part, 0, 0, &bad);
+            st = pack_field(slot, n, l.size, &l.fields[0], part, 0, 0, &bad, &enc);
             m = n;
             break;
         }
-        if (st) return zubin_int_failure(zb_status_string(st), (R_xlen_t)(done + bad), 0);
+        if (st) {
+            return zubin_int_failure(enc ? "ZUBIN_ERR_ENCODING" : zb_status_string(st),
+                                     (R_xlen_t)(done + bad), 0);
+        }
         done += m;
     }
     b->len += total;
@@ -763,8 +799,9 @@ SEXP zubin_serialize(SEXP ptr, SEXP x, SEXP version, SEXP xdr, SEXP refhook)
     return st ? zubin_int_status(st, -1) : R_NilValue;
 }
 
-/* One object from the stream that starts at `offset` in x, or ZB_ERR_EOF
-   when the stream runs out. */
+/* One object from the stream that starts at `offset` in x, wrapped in a
+   one-element list so that no object, not even a zubin_status string,
+   can pass for a failure; or ZB_ERR_EOF when the stream runs out. */
 SEXP zubin_unserialize(SEXP x, SEXP offset, SEXP refhook)
 {
     size_t off, len;
@@ -781,8 +818,12 @@ SEXP zubin_unserialize(SEXP x, SEXP offset, SEXP refhook)
         UNPROTECT(1);
         return zubin_int_status(st, -1);
     }
-    UNPROTECT(1);
-    return out;
+    {
+        SEXP box = Rf_allocVector(VECSXP, 1);
+        SET_VECTOR_ELT(box, 0, out);
+        UNPROTECT(1);
+        return box;
+    }
 }
 
 static void hash_sink(void *state, const void *p, size_t n)

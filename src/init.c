@@ -40,6 +40,8 @@ static const R_CallMethodDef call_methods[] = {
     CALLDEF(zubin_test_buf_misc, 0),
     CALLDEF(zubin_test_put_then_error, 0),
     CALLDEF(zubin_test_put_loop, 2),
+    CALLDEF(zubin_test_buf_new_fail, 0),
+    CALLDEF(zubin_test_kernel_types, 0),
     CALLDEF(zubin_test_layout, 4),
     CALLDEF(zubin_test_struct_offsets, 0),
     CALLDEF(zubin_test_unpack_kernel, 4),

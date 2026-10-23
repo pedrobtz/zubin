@@ -20,7 +20,10 @@ The first release.
   allocated (#25).
 * Nothing is silently wrong: a value that does not fit its field, an `NA` with no bytes, a
   64-bit integer that a double cannot hold exactly, and a string that is not UTF-8 are each
-  a classed error naming the field and the 0-based record (`?zubin-conditions`).
+  a classed error naming the field and the 0-based record (`?zubin-conditions`). That
+  holds on write too: a string must be valid UTF-8, unless it is marked `"bytes"`, which
+  is written as its bytes, so that what `bin_unpack(encoding = "bytes")` reads packs back
+  (#44, #50).
 
 ## C
 

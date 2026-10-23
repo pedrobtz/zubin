@@ -103,11 +103,11 @@ integer. See \link{zubin-conditions}.
 With \code{align = FALSE} fields are packed at consecutive offsets. With
 \code{align = TRUE} each field starts at the next multiple of its element width
 (1 for \code{bool}, \code{b}, \code{s} and \code{x}; a complex type aligns as its part, \code{c64}
-to 4 and \code{c128} to 8; \code{i128} and \code{u128} to 16) and the record size is rounded up to the
-largest of them: the rule C compilers apply to a \code{struct} on 64-bit
-targets, so a struct written with \code{fwrite()} reads back with
-\code{align = TRUE}. (32-bit x86 aligns 8-byte members to 4 inside a struct;
-such a struct needs explicit \code{x} padding.)
+to 4 and \code{c128} to 8; \code{i128} and \code{u128} to 16) and the record size is
+rounded up to the largest of them: the rule C compilers apply to a
+\code{struct} on 64-bit targets, so a struct written with \code{fwrite()} reads back
+with \code{align = TRUE}. (32-bit x86 aligns 8-byte members to 4 inside a
+struct; such a struct needs explicit \code{x} padding.)
 }
 
 \examples{

@@ -30,14 +30,17 @@
 #'     record of the first such value.}
 #'   \item{`zubin_na_error`}{An `NA` has no bytes in its field. Fields:
 #'     `field` and `index`.}
-#'   \item{`zubin_encoding_error`}{An `s<n>` field is not valid UTF-8 (read
-#'     it with `encoding = "latin1"` or `"bytes"`). Fields: `field` and
-#'     `index`.}
+#'   \item{`zubin_encoding_error`}{An `s<n>` field read is not valid UTF-8
+#'     (read it with `encoding = "latin1"` or `"bytes"`), or a string to be
+#'     written is not (mark it `"bytes"` to write its bytes as they are).
+#'     Fields: `field` and `index`.}
 #'   \item{`zubin_limit_error`}{An append would pass a builder's `max`, which
 #'     leaves it unchanged. Fields: `size`, what the builder would have held,
 #'     and `max`.}
-#'   \item{`zubin_memory_error`}{An allocation failed, or a size would not
-#'     fit in memory.}
+#'   \item{`zubin_memory_error`}{An allocation zubin makes itself failed (a
+#'     builder's storage), or a size would not fit in memory. A result that
+#'     R allocates, such as the columns of [bin_unpack()], fails as R's own
+#'     allocations do, with R's `cannot allocate vector` error.}
 #' }
 #'
 #' @name zubin-conditions
@@ -93,8 +96,27 @@ zb_status_class <- c(
 # Raise the condition for a status returned by a .Call entry point. `res` is
 # the classed zubin_status string; `...` carries the condition's fields.
 zb_fail <- function(res, message, ..., call = sys.call(-1L)) {
-  class <- zb_status_class[[as.character(res)]]
-  zubin_abort(message, class, ..., call = call)
+  cls <- zb_status_class[[as.character(res)]]
+  zubin_abort(message, cls, ..., call = call)
 }
 
 is_status <- function(x) inherits(x, "zubin_status")
+
+# match.arg() for a choice argument, raising `zubin_invalid_argument` so
+# that every error zubin raises inherits `zubin_error`. The choices are the
+# argument's default in the calling function; partial matching works as in
+# match.arg().
+arg_match <- function(arg, call = sys.call(-1L)) {
+  name <- as.character(substitute(arg))
+  choices <- eval(formals(sys.function(sys.parent()))[[name]], envir = parent.frame())
+  if (identical(arg, choices)) {
+    return(arg[[1L]])
+  }
+  i <- if (is.character(arg) && length(arg) == 1L && !is.na(arg)) pmatch(arg, choices) else NA
+  if (is.na(i)) {
+    invalid_argument(sprintf("`%s` must be one of %s.", name,
+                             paste0("\"", choices, "\"", collapse = ", ")),
+                     arg = name, call = call)
+  }
+  choices[[i]]
+}

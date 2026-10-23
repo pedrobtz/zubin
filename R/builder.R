@@ -44,7 +44,8 @@ bin_builder <- function(reserve = 0, max = Inf) {
   ptr <- .Call(zubin_builder_new, as.double(reserve), as.double(max))
   if (is_status(ptr)) {
     if (identical(as.character(ptr), "ZB_ERR_LIMIT")) {
-      zb_fail(ptr, "`reserve` is larger than `max`.", size = reserve, max = max)
+      zb_fail(ptr, "`reserve` is larger than `max`.", size = as.double(reserve),
+              max = as.double(max))
     }
     zb_fail(ptr, "Could not allocate the builder's storage.")
   }
@@ -62,10 +63,14 @@ bin_builder <- function(reserve = 0, max = Inf) {
 #' vectors as `"b<n>"`. A character vector is appended with `type = "z"`,
 #' each string's UTF-8 bytes followed by a NUL, or with `type = "s<n>"`, each
 #' string's UTF-8 bytes padded with NULs to exactly `n` bytes, the
-#' fixed-string field of [bin_layout()]. Nothing is appended unless every
-#' element can be: an `NA` is a `zubin_na_error`, and a value that does not
-#' fit its type is a `zubin_range_error`, each carrying the 0-based `index`
-#' of the first one.
+#' fixed-string field of [bin_layout()]. A string marked `"bytes"` (as
+#' [bin_unpack()] returns them with `encoding = "bytes"`) is appended as its
+#' bytes, unchecked; any other must be valid UTF-8 once translated to it.
+#' Nothing is appended unless every element can be: an `NA` is a
+#' `zubin_na_error`, a value that does not fit its type a
+#' `zubin_range_error`, and a string that is not valid UTF-8 a
+#' `zubin_encoding_error`, each carrying the 0-based `index` of the first
+#' one.
 #'
 #' Appending past the builder's `max` is a `zubin_limit_error` carrying
 #' `size`, the size the builder would have reached, and `max`; the builder is
@@ -91,11 +96,11 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
   # C re-checks the builder and the type
   if (is.null(type) && is.raw(x)) {
     res <- .Call(zubin_builder_put_raw, b, x)
-    if (!is.null(res)) builder_fail(res, check_builder(b), length(x), x)
+    if (is_status(res)) builder_fail(res, check_builder(b), length(x))
     return(invisible(b))
   }
   ptr <- check_builder(b)
-  endian <- match.arg(endian)
+  endian <- arg_match(endian)
   if (is.null(type)) {
     invalid_argument("`x` must be a raw vector when `type` is NULL.", arg = "x")
   } else {
@@ -117,11 +122,15 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
       res <- .Call(zubin_builder_put_str, ptr, x, width)
       # the byte count is for the message alone: worked out only on failure
       if (is_status(res)) {
-        n <- if (width < 0L) sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1) else length(x) * width
+        n <- if (width < 0L) {
+          sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1)
+        } else {
+          length(x) * width
+        }
       }
     }
   }
-  if (is_status(res)) builder_fail(res, b, n, x)
+  if (is_status(res)) builder_fail(res, b, n)
   invisible(b)
 }
 
@@ -157,7 +166,8 @@ bin_reserve <- function(b, n) {
 #' @export
 bin_reset <- function(b) {
   ptr <- check_builder(b)
-  if (is_status(.Call(zubin_builder_reset, ptr))) builder_state(b)
+  res <- .Call(zubin_builder_reset, ptr)
+  if (is_status(res)) builder_lost(res, b)
   invisible(b)
 }
 
@@ -166,7 +176,7 @@ bin_reset <- function(b) {
 bin_take <- function(b) {
   ptr <- check_builder(b)
   res <- .Call(zubin_builder_take, ptr, TRUE)
-  if (is_status(res)) builder_state(b)
+  if (is_status(res)) builder_lost(res, b)
   res
 }
 
@@ -188,6 +198,11 @@ bin_size <- function(x, ...) {
 }
 
 #' @export
+bin_size.default <- function(x, ...) {
+  invalid_argument("`x` must be a builder or a layout.", arg = "x")
+}
+
+#' @export
 bin_size.zubin_builder <- function(x, ...) {
   builder_state(x)[[1L]]
 }
@@ -197,12 +212,14 @@ bin_size.zubin_builder <- function(x, ...) {
 as.raw.zubin_builder <- function(x) {
   ptr <- check_builder(x)
   res <- .Call(zubin_builder_take, ptr, FALSE)
-  if (is_status(res)) builder_state(x)
+  if (is_status(res)) builder_lost(res, x)
   res
 }
 
 #' @export
 format.zubin_builder <- function(x, ...) {
+  # x is a builder by its class, so the one zubin_error builder_state() can
+  # raise is for a freed pointer
   s <- tryCatch(builder_state(x), zubin_error = function(e) NULL)
   if (is.null(s)) {
     return("<zubin_builder: freed>")
@@ -219,8 +236,8 @@ print.zubin_builder <- function(x, ...) {
   invisible(x)
 }
 
-# The builder's external pointer, unclassed so that .Call sees a plain
-# EXTPTRSXP; or an error for anything else.
+# The builder, which .Call takes as it is (C reads the external pointer and
+# ignores the class); or an error for anything else.
 check_builder <- function(b, call = sys.call(-1L)) {
   if (!inherits(b, "zubin_builder") || typeof(b) != "externalptr") {
     invalid_argument("`b` must be a builder from bin_builder().", arg = "b", call = call)
@@ -237,7 +254,15 @@ builder_state <- function(b, call = sys.call(-1L)) {
   s
 }
 
-builder_fail <- function(res, b, n, x = NULL, call = sys.call(-1L)) {
+# A status from a call that only fails when the builder is gone: the freed
+# builder's error, or, should C ever return anything else, that status's
+# own condition rather than nothing.
+builder_lost <- function(res, b, call = sys.call(-1L)) {
+  builder_state(b, call)
+  zb_fail(res, "The builder could not be used.", call = call)
+}
+
+builder_fail <- function(res, b, n, call = sys.call(-1L)) {
   name <- as.character(res)
   index <- attr(res, "index")
   if (is.null(index)) index <- NA_real_
@@ -252,6 +277,9 @@ builder_fail <- function(res, b, n, x = NULL, call = sys.call(-1L)) {
                         field = NA_character_, index = index, call = call),
     ZB_ERR_RANGE = zb_fail(res, sprintf("`x[%s]` does not fit the type.", index + 1),
                            field = NA_character_, index = index, call = call),
+    ZUBIN_ERR_ENCODING = zubin_abort(sprintf("`x[%s]` is not valid UTF-8.", index + 1),
+                                     "zubin_encoding_error", field = NA_character_,
+                                     index = index, call = call),
     ZB_ERR_INVALID = {
       builder_state(b, call)
       zb_fail(res, sprintf("`x[%s]` cannot be written as this type.", index + 1),
@@ -261,7 +289,7 @@ builder_fail <- function(res, b, n, x = NULL, call = sys.call(-1L)) {
   )
 }
 
-# A non-negative whole number of bytes, below 2^53.
+# A non-negative whole number of bytes, at most 2^53.
 check_size <- function(x, arg, call = sys.call(-1L)) {
   if (!is.numeric(x) || length(x) != 1L || is.na(x) || x < 0 || x != floor(x) ||
         x > 2^53) {

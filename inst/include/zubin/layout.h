@@ -135,13 +135,17 @@ ZB_INLINE int zb_int_is_name_char(char c)
 }
 
 /* An upper bound on the number of fields in spec: one more than the number
-   of separator characters. Size the field array with it. */
+   of runs of separator characters (whitespace and commas), so padding a
+   spec with spaces does not inflate it. Size the field array with it. */
 ZB_INLINE uint32_t zb_layout_count_fields(const char *spec, size_t n)
 {
     size_t i;
     uint32_t k = 1;
+    int in_sep = 0;
     for (i = 0; i < n; i++) {
-        if ((zb_int_is_space(spec[i]) || spec[i] == ',') && k < 0xFFFFFFFFu) k++;
+        int sep = zb_int_is_space(spec[i]) || spec[i] == ',';
+        if (sep && !in_sep && k < 0xFFFFFFFFu) k++;
+        in_sep = sep;
     }
     return k;
 }
@@ -204,11 +208,17 @@ ZB_INLINE int zb_int_type_of(const char *spec, size_t a, size_t b, size_t c, uin
    `fields`. On failure, *out is unchanged, the contents of `fields` are
    unspecified, and *err_pos is the 0-based byte position of the error:
    ZB_ERR_SPEC for a malformed spec, ZB_ERR_LIMIT when it has more than
-   max_fields fields (zb_layout_count_fields() never undercounts). */
-ZB_INLINE zb_status zb_layout_parse(const char *spec, size_t n,
-                                    int default_big_endian, int align,
-                                    zb_field *fields, uint32_t max_fields,
-                                    zb_layout *out, size_t *err_pos)
+   max_fields fields (zb_layout_count_fields() never undercounts).
+
+   Names are checked for uniqueness against every earlier field, which is
+   quadratic in the number of fields: a few milliseconds at a thousand
+   fields, seconds at tens of thousands. A caller that parses wide specs
+   repeatedly checks names once itself and re-parses with
+   zb_int_layout_parse(..., 0), as zubin's R glue does. */
+ZB_INLINE zb_status zb_int_layout_parse(const char *spec, size_t n,
+                                        int default_big_endian, int align,
+                                        zb_field *fields, uint32_t max_fields,
+                                        zb_layout *out, size_t *err_pos, int check_names)
 {
     size_t i = 0, comma = (size_t)-1;
     uint32_t nf = 0, maxalign = 1;
@@ -281,7 +291,7 @@ ZB_INLINE zb_status zb_layout_parse(const char *spec, size_t n,
         if (t == ZB_PAD && name) ZB_INT_SPEC_FAIL(start);
 
         /* names are unique */
-        for (k = 0; name && k < nf; k++) {
+        for (k = 0; check_names && name && k < nf; k++) {
             if (fields[k].name && fields[k].name_len == name_len &&
                 memcmp(fields[k].name, name, name_len) == 0) ZB_INT_SPEC_FAIL(start);
         }
@@ -332,6 +342,15 @@ ZB_INLINE zb_status zb_layout_parse(const char *spec, size_t n,
     out->size = (uint32_t)off;
     out->align = align ? maxalign : 1;
     return ZB_OK;
+}
+
+ZB_INLINE zb_status zb_layout_parse(const char *spec, size_t n,
+                                    int default_big_endian, int align,
+                                    zb_field *fields, uint32_t max_fields,
+                                    zb_layout *out, size_t *err_pos)
+{
+    return zb_int_layout_parse(spec, n, default_big_endian, align, fields, max_fields, out,
+                               err_pos, 1);
 }
 
 /* ---- unpack kernels (design 11.5) ---------------------------------------------- */
