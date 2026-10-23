@@ -52,10 +52,16 @@ bin_serialize <- function(x, b, version = 3L, xdr = TRUE, refhook = NULL) {
     name <- as.character(res)
     if (name == "ZB_ERR_LIMIT") {
       size <- attr(res, "size")
-      zb_fail(res, sprintf("The serialisation needs %s bytes, past the builder's max of %s.",
-                           format(size - s[[1L]], scientific = FALSE),
-                           format(s[[3L]], scientific = FALSE)),
-              size = size, max = s[[3L]])
+      zb_fail(
+        res,
+        sprintf(
+          "The serialisation needs %s bytes, past the builder's max of %s.",
+          format(size - s[[1L]], scientific = FALSE),
+          format(s[[3L]], scientific = FALSE)
+        ),
+        size = size,
+        max = s[[3L]]
+      )
     }
     if (name == "ZB_ERR_MEMORY") {
       zb_fail(res, "Could not grow the builder to hold the serialisation.")
@@ -68,17 +74,25 @@ bin_serialize <- function(x, b, version = 3L, xdr = TRUE, refhook = NULL) {
 #' @rdname bin_serialize
 #' @export
 bin_unserialize <- function(x, offset = 0, refhook = NULL) {
-  if (!is.raw(x)) invalid_argument("`x` must be a raw vector.", arg = "x")
+  if (!is.raw(x)) {
+    invalid_argument("`x` must be a raw vector.", arg = "x")
+  }
   check_size(offset, "offset")
   check_refhook(refhook)
   # the object comes back in a one-element list, so that no object can pass
   # for a status
   res <- .Call(zubin_unserialize, x, as.double(offset), refhook)
   if (is_status(res)) {
-    zubin_abort(sprintf("The serialisation stream at offset %s ends before its object does (`x` has %s bytes).",
-                        format(offset, scientific = FALSE), length(x)),
-                "zubin_bounds_error", offset = as.double(offset),
-                length = as.double(length(x)))
+    zubin_abort(
+      sprintf(
+        "The serialisation stream at offset %s ends before its object does (`x` has %s bytes).",
+        format(offset, scientific = FALSE),
+        length(x)
+      ),
+      "zubin_bounds_error",
+      offset = as.double(offset),
+      length = as.double(length(x))
+    )
   }
   res[[1L]]
 }
@@ -125,14 +139,34 @@ bin_unserialize <- function(x, offset = 0, refhook = NULL) {
 #' bin_hash_object(mtcars)
 #' bin_hash_object(mtcars, "xxh3_128")
 #' identical(bin_hash_object(1:3 + 0L), bin_hash_object(c(1L, 2L, 3L)))
-bin_hash_object <- function(x, algo = c("xxh3_64", "xxh3_128"), version = 2L, seed = 0) {
+bin_hash_object <- function(
+  x,
+  algo = c("xxh3_64", "xxh3_128"),
+  version = 2L,
+  seed = 0
+) {
   algo <- arg_match(algo)
   version <- check_version(version)
-  if (!is.numeric(seed) || length(seed) != 1L || is.na(seed) || seed < 0 || seed > 2^53 ||
-        seed != floor(seed)) {
-    invalid_argument("`seed` must be a whole number from 0 to 2^53.", arg = "seed")
+  if (
+    !is.numeric(seed) ||
+      length(seed) != 1L ||
+      is.na(seed) ||
+      seed < 0 ||
+      seed > 2^53 ||
+      seed != floor(seed)
+  ) {
+    invalid_argument(
+      "`seed` must be a whole number from 0 to 2^53.",
+      arg = "seed"
+    )
   }
-  .Call(zubin_hash_object, x, if (algo == "xxh3_64") 64L else 128L, version, as.double(seed))
+  .Call(
+    zubin_hash_object,
+    x,
+    if (algo == "xxh3_64") 64L else 128L,
+    version,
+    as.double(seed)
+  )
 }
 
 check_version <- function(version, call = sys.call(-1L)) {
@@ -144,12 +178,20 @@ check_version <- function(version, call = sys.call(-1L)) {
 
 check_flag <- function(x, arg, call = sys.call(-1L)) {
   if (!is.logical(x) || length(x) != 1L || is.na(x)) {
-    invalid_argument(sprintf("`%s` must be TRUE or FALSE.", arg), arg = arg, call = call)
+    invalid_argument(
+      sprintf("`%s` must be TRUE or FALSE.", arg),
+      arg = arg,
+      call = call
+    )
   }
 }
 
 check_refhook <- function(refhook, call = sys.call(-1L)) {
   if (!is.null(refhook) && !is.function(refhook)) {
-    invalid_argument("`refhook` must be NULL or a function.", arg = "refhook", call = call)
+    invalid_argument(
+      "`refhook` must be NULL or a function.",
+      arg = "refhook",
+      call = call
+    )
   }
 }

@@ -61,14 +61,21 @@ redact_call <- function(call) {
   }
   fn <- call[[1L]]
   named <- is.symbol(fn) ||
-    (is.call(fn) && length(fn) == 3L &&
-       (identical(fn[[1L]], as.name("::")) ||
-          identical(fn[[1L]], as.name(":::"))) &&
-       is.symbol(fn[[2L]]) && is.symbol(fn[[3L]]))
+    (is.call(fn) &&
+      length(fn) == 3L &&
+      (identical(fn[[1L]], as.name("::")) ||
+        identical(fn[[1L]], as.name(":::"))) &&
+      is.symbol(fn[[2L]]) &&
+      is.symbol(fn[[3L]]))
   if (named) as.call(list(fn)) else NULL
 }
 
-zubin_abort <- function(message, class = character(), ..., call = sys.call(-1L)) {
+zubin_abort <- function(
+  message,
+  class = character(),
+  ...,
+  call = sys.call(-1L)
+) {
   cnd <- structure(
     list(message = message, call = redact_call(call), ...),
     class = c(class, "zubin_error", "error", "condition")
@@ -85,12 +92,12 @@ invalid_argument <- function(message, ..., call = sys.call(-1L)) {
 # a class. ZB_OK is absent: success never reaches zubin_abort().
 zb_status_class <- c(
   ZB_ERR_INVALID = "zubin_invalid_argument",
-  ZB_ERR_EOF     = "zubin_bounds_error",
-  ZB_ERR_RANGE   = "zubin_range_error",
-  ZB_ERR_MEMORY  = "zubin_memory_error",
-  ZB_ERR_LIMIT   = "zubin_limit_error",
-  ZB_ERR_SPEC    = "zubin_spec_error",
-  ZB_ERR_NA      = "zubin_na_error"
+  ZB_ERR_EOF = "zubin_bounds_error",
+  ZB_ERR_RANGE = "zubin_range_error",
+  ZB_ERR_MEMORY = "zubin_memory_error",
+  ZB_ERR_LIMIT = "zubin_limit_error",
+  ZB_ERR_SPEC = "zubin_spec_error",
+  ZB_ERR_NA = "zubin_na_error"
 )
 
 # Raise the condition for a status returned by a .Call entry point. `res` is
@@ -108,15 +115,28 @@ is_status <- function(x) inherits(x, "zubin_status")
 # match.arg().
 arg_match <- function(arg, call = sys.call(-1L)) {
   name <- as.character(substitute(arg))
-  choices <- eval(formals(sys.function(sys.parent()))[[name]], envir = parent.frame())
+  choices <- eval(
+    formals(sys.function(sys.parent()))[[name]],
+    envir = parent.frame()
+  )
   if (identical(arg, choices)) {
     return(arg[[1L]])
   }
-  i <- if (is.character(arg) && length(arg) == 1L && !is.na(arg)) pmatch(arg, choices) else NA
+  i <- if (is.character(arg) && length(arg) == 1L && !is.na(arg)) {
+    pmatch(arg, choices)
+  } else {
+    NA
+  }
   if (is.na(i)) {
-    invalid_argument(sprintf("`%s` must be one of %s.", name,
-                             paste0("\"", choices, "\"", collapse = ", ")),
-                     arg = name, call = call)
+    invalid_argument(
+      sprintf(
+        "`%s` must be one of %s.",
+        name,
+        paste0("\"", choices, "\"", collapse = ", ")
+      ),
+      arg = name,
+      call = call
+    )
   }
   choices[[i]]
 }

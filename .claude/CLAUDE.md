@@ -81,6 +81,7 @@ Rscript -e 'devtools::test()'
 Rscript -e 'devtools::test(shuffle = TRUE)'
 _R_CHECK_SYSTEM_CLOCK_=0 Rscript -e 'devtools::check(cran = TRUE)'
 Rscript -e 'pkgdown::build_site()'                 # site -> docs/ (gitignored)
+air format R/                                      # format R sources (air defaults)
 ```
 
 zufast is on CRAN (`install.packages("zufast")`); test unreleased zufast changes from the

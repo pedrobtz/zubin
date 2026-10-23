@@ -56,10 +56,17 @@
 #' y <- as.raw(c(1, 0, 5, 250, 2, 0, 7, 9))
 #' bin_unpack(y, pts)
 #' bin_unpack(y, pts, as = "list")$xy
-bin_unpack <- function(x, layout, offset = 0, n = NULL, stride = NULL,
-                       as = c("data.frame", "list"),
-                       int64 = c("double", "integer64"), na = c("error", "allow"),
-                       encoding = c("UTF-8", "latin1", "bytes")) {
+bin_unpack <- function(
+  x,
+  layout,
+  offset = 0,
+  n = NULL,
+  stride = NULL,
+  as = c("data.frame", "list"),
+  int64 = c("double", "integer64"),
+  na = c("error", "allow"),
+  encoding = c("UTF-8", "latin1", "bytes")
+) {
   layout <- bin_layout(layout)
   as <- arg_match(as)
   int64 <- arg_match(int64)
@@ -96,14 +103,30 @@ bin_unpack <- function(x, layout, offset = 0, n = NULL, stride = NULL,
 #' bin_decode(x, "u16")
 #' bin_decode(x, "i16")
 #' bin_decode(x, "u16", endian = "big", offset = 2, n = 1)
-bin_decode <- function(x, type, offset = 0, n = NULL,
-                       endian = c("little", "big", "native"),
-                       int64 = c("double", "integer64"), na = c("error", "allow")) {
+bin_decode <- function(
+  x,
+  type,
+  offset = 0,
+  n = NULL,
+  endian = c("little", "big", "native"),
+  int64 = c("double", "integer64"),
+  na = c("error", "allow")
+) {
   endian <- arg_match(endian)
   int64 <- arg_match(int64)
   na <- arg_match(na)
   layout <- type_layout(type, endian)
-  cols <- unpack_columns(x, layout, offset, n, NULL, int64, na, "UTF-8", codec = TRUE)
+  cols <- unpack_columns(
+    x,
+    layout,
+    offset,
+    n,
+    NULL,
+    int64,
+    na,
+    "UTF-8",
+    codec = TRUE
+  )
   cols[[1L]]
 }
 
@@ -114,13 +137,20 @@ bin_decode <- function(x, type, offset = 0, n = NULL,
 # is the native parser's.
 type_layout <- function(type, endian, call = sys.call(-1L)) {
   if (!is_type_token(type)) {
-    invalid_argument("`type` must be one type token, such as \"u32\", \"f64.be\" or \"s16\".",
-                     arg = "type", call = call)
+    invalid_argument(
+      "`type` must be one type token, such as \"u32\", \"f64.be\" or \"s16\".",
+      arg = "type",
+      call = call
+    )
   }
   tryCatch(
     bin_layout(paste0("v:", type), endian = endian),
     zubin_spec_error = function(e) {
-      invalid_argument(sprintf("Unknown `type` \"%s\".", type), arg = "type", call = call)
+      invalid_argument(
+        sprintf("Unknown `type` \"%s\".", type),
+        arg = "type",
+        call = call
+      )
     }
   )
 }
@@ -128,32 +158,61 @@ type_layout <- function(type, endian, call = sys.call(-1L)) {
 # One string of lower-case letters, digits and dots that starts with a
 # letter other than x (padding has no value to read or write).
 is_type_token <- function(type) {
-  if (!is.character(type) || length(type) != 1L || is.na(type)) return(FALSE)
-  ch <- utf8ToInt(type)   # NA when type is not valid UTF-8
-  length(ch) > 0L && !anyNA(ch) && ch[1L] >= 97L && ch[1L] <= 122L && ch[1L] != 120L &&
+  if (!is.character(type) || length(type) != 1L || is.na(type)) {
+    return(FALSE)
+  }
+  ch <- utf8ToInt(type) # NA when type is not valid UTF-8
+  length(ch) > 0L &&
+    !anyNA(ch) &&
+    ch[1L] >= 97L &&
+    ch[1L] <= 122L &&
+    ch[1L] != 120L &&
     all((ch >= 97L & ch <= 122L) | (ch >= 48L & ch <= 57L) | ch == 46L)
 }
 
 # codec is TRUE for bin_decode(), whose one field has no name to report.
-unpack_columns <- function(x, layout, offset, n, stride, int64, na, encoding,
-                           codec = FALSE, call = sys.call(-1L)) {
+unpack_columns <- function(
+  x,
+  layout,
+  offset,
+  n,
+  stride,
+  int64,
+  na,
+  encoding,
+  codec = FALSE,
+  call = sys.call(-1L)
+) {
   if (!is.raw(x)) {
     invalid_argument("`x` must be a raw vector.", arg = "x", call = call)
   }
   check_size(offset, "offset", call = call)
-  if (!is.null(n)) check_size(n, "n", call = call)
+  if (!is.null(n)) {
+    check_size(n, "n", call = call)
+  }
   size <- bin_size(layout)
   if (!is.null(stride)) {
     check_size(stride, "stride", call = call)
     if (stride < size) {
-      invalid_argument(sprintf("`stride` must be at least the record size, %d.", size),
-                       arg = "stride", call = call)
+      invalid_argument(
+        sprintf("`stride` must be at least the record size, %d.", size),
+        arg = "stride",
+        call = call
+      )
     }
   }
-  res <- .Call(zubin_unpack, x, layout$spec, layout$align > 1L, as.double(offset),
-               if (is.null(n)) -1 else as.double(n), if (is.null(stride)) -1 else as.double(stride),
-               if (int64 == "integer64") 1L else 0L, na == "allow",
-               match(encoding, c("UTF-8", "latin1", "bytes")) - 1L)
+  res <- .Call(
+    zubin_unpack,
+    x,
+    layout$spec,
+    layout$align > 1L,
+    as.double(offset),
+    if (is.null(n)) -1 else as.double(n),
+    if (is.null(stride)) -1 else as.double(stride),
+    if (int64 == "integer64") 1L else 0L,
+    na == "allow",
+    match(encoding, c("UTF-8", "latin1", "bytes")) - 1L
+  )
   if (is_status(res)) {
     unpack_fail(res, x, layout, offset, n, stride, codec, call)
   }
@@ -173,25 +232,55 @@ unpack_fail <- function(res, x, layout, offset, n, stride, codec, call) {
   name <- as.character(res)
   index <- attr(res, "index")
   pos <- attr(res, "field")
-  field <- if (is.null(pos) || codec) NA_character_ else layout$fields$name[pos + 1L]
+  field <- if (is.null(pos) || codec) {
+    NA_character_
+  } else {
+    layout$fields$name[pos + 1L]
+  }
   what <- if (is.na(field)) "" else sprintf(" in field `%s`", field)
-  switch(name,
+  switch(
+    name,
     ZB_ERR_EOF = {
       size <- bin_size(layout)
       stride <- if (is.null(stride)) size else stride
-      need <- if (is.null(n) || n == 0) offset else offset + (n - 1) * stride + size
-      zubin_abort(sprintf("Reading to byte %s needs more than the %s bytes of `x`.",
-                          format(need, scientific = FALSE), format(length(x), scientific = FALSE)),
-                  "zubin_bounds_error", offset = as.double(offset),
-                  length = as.double(length(x)),
-                  call = call)
+      need <- if (is.null(n) || n == 0) {
+        offset
+      } else {
+        offset + (n - 1) * stride + size
+      }
+      zubin_abort(
+        sprintf(
+          "Reading to byte %s needs more than the %s bytes of `x`.",
+          format(need, scientific = FALSE),
+          format(length(x), scientific = FALSE)
+        ),
+        "zubin_bounds_error",
+        offset = as.double(offset),
+        length = as.double(length(x)),
+        call = call
+      )
     },
-    ZB_ERR_RANGE = zb_fail(res, sprintf("The value of record %s%s has no exact R value.",
-                                        format(index, scientific = FALSE), what),
-                           field = field, index = index, call = call),
+    ZB_ERR_RANGE = zb_fail(
+      res,
+      sprintf(
+        "The value of record %s%s has no exact R value.",
+        format(index, scientific = FALSE),
+        what
+      ),
+      field = field,
+      index = index,
+      call = call
+    ),
     ZUBIN_ERR_ENCODING = zubin_abort(
-      sprintf("The string of record %s%s is not valid UTF-8.", format(index, scientific = FALSE), what),
-      "zubin_encoding_error", field = field, index = index, call = call
+      sprintf(
+        "The string of record %s%s is not valid UTF-8.",
+        format(index, scientific = FALSE),
+        what
+      ),
+      "zubin_encoding_error",
+      field = field,
+      index = index,
+      call = call
     ),
     ZB_ERR_MEMORY = zb_fail(res, "The result is too large for R.", call = call),
     zb_fail(res, "Invalid arguments to the unpack kernel.", call = call)
@@ -213,12 +302,16 @@ columns_to_frame <- function(cols) {
       n_rows <- nrow(m)
       for (j in seq_len(ncol(m))) {
         v <- m[, j]
-        if (!is.null(cls)) class(v) <- cls
+        if (!is.null(cls)) {
+          class(v) <- cls
+        }
         out[[length(out) + 1L]] <- v
       }
       nms <- c(nms, paste0(nm, ".", seq_len(ncol(m))))
     } else {
-      if (is.list(col)) col <- I(col)
+      if (is.list(col)) {
+        col <- I(col)
+      }
       n_rows <- length(col)
       out[[length(out) + 1L]] <- col
       nms <- c(nms, nm)
