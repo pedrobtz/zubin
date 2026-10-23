@@ -50,9 +50,10 @@ bin_decode(
 
 - int64:
 
-  How `i64` and `u64` fields are returned: `"double"`, exact or an
-  error; or `"integer64"`, a double vector carrying the 64-bit pattern
-  with class `integer64`, as the bit64 package defines it.
+  How `i64`, `u64`, `i128` and `u128` fields are returned: `"double"`,
+  exact or an error; or `"integer64"`, a double vector carrying the
+  64-bit pattern with class `integer64`, as the bit64 package defines
+  it.
 
 - na:
 

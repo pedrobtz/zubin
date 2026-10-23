@@ -66,8 +66,8 @@ integer that does not fit.</p>
 
 
 <dl><dt id="arg-x">x<a class="anchor" aria-label="anchor" href="#arg-x"></a></dt>
-<dd><p>A vector: numeric, logical, <code>integer64</code>, character for <code>s&lt;n&gt;</code>, or
-a list of raw vectors for <code>b&lt;n&gt;</code>.</p></dd>
+<dd><p>A vector: numeric, logical, <code>integer64</code>, complex for <code>c64</code> and
+<code>c128</code>, character for <code>s&lt;n&gt;</code>, or a list of raw vectors for <code>b&lt;n&gt;</code>.</p></dd>
 
 
 <dt id="arg-type">type<a class="anchor" aria-label="anchor" href="#arg-type"></a></dt>
@@ -93,9 +93,10 @@ a list of raw vectors for <code>b&lt;n&gt;</code>.</p></dd>
 encoding of its values, which every encoding of a number is, with three
 exceptions. A <code>bool</code> byte other than 00 or 01 reads as <code>TRUE</code> and writes
 back as 01. An <code>s&lt;n&gt;</code> reads up to its first NUL, so the bytes after it
-write back as NULs. And an <code>i64</code> or <code>u64</code> beyond 2^53 does not decode as
-a double at all: ask for <code>int64 = "integer64"</code>. A NaN keeps its payload
-through <code>f64</code>, but the narrower floats may not.</p>
+write back as NULs. And an <code>i64</code>, <code>u64</code>, <code>i128</code> or <code>u128</code> beyond 2^53
+does not decode as a double at all: ask for <code>int64 = "integer64"</code> (which
+holds 64 bits). A NaN keeps its payload through <code>f64</code> and <code>c128</code>, but the
+narrower floats may not.</p>
     </div>
 
     <div class="section level2">

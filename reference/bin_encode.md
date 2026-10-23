@@ -20,8 +20,8 @@ bin_encode(
 
 - x:
 
-  A vector: numeric, logical, `integer64`, character for `s<n>`, or a
-  list of raw vectors for `b<n>`.
+  A vector: numeric, logical, `integer64`, complex for `c64` and `c128`,
+  character for `s<n>`, or a list of raw vectors for `b<n>`.
 
 - type:
 
@@ -48,9 +48,10 @@ A raw vector of `length(x)` times the type's width.
 encoding of its values, which every encoding of a number is, with three
 exceptions. A `bool` byte other than 00 or 01 reads as `TRUE` and writes
 back as 01. An `s<n>` reads up to its first NUL, so the bytes after it
-write back as NULs. And an `i64` or `u64` beyond 2^53 does not decode as
-a double at all: ask for `int64 = "integer64"`. A NaN keeps its payload
-through `f64`, but the narrower floats may not.
+write back as NULs. And an `i64`, `u64`, `i128` or `u128` beyond 2^53
+does not decode as a double at all: ask for `int64 = "integer64"` (which
+holds 64 bits). A NaN keeps its payload through `f64` and `c128`, but
+the narrower floats may not.
 
 ## Examples
 

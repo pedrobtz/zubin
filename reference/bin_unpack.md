@@ -59,9 +59,10 @@ bin_unpack(
 
 - int64:
 
-  How `i64` and `u64` fields are returned: `"double"`, exact or an
-  error; or `"integer64"`, a double vector carrying the 64-bit pattern
-  with class `integer64`, as the bit64 package defines it.
+  How `i64`, `u64`, `i128` and `u128` fields are returned: `"double"`,
+  exact or an error; or `"integer64"`, a double vector carrying the
+  64-bit pattern with class `integer64`, as the bit64 package defines
+  it.
 
 - na:
 
@@ -84,11 +85,12 @@ million records cost one loop per field. Nothing is rounded or wrapped:
 a value that has no exact R representation is a `zubin_range_error`
 carrying `field` and the 0-based record `index` of the first one, namely
 an `i32` of -2^31 (R's `NA_integer_`; allowed with `na = "allow"`), an
-`i64` or `u64` above 2^53 in magnitude when `int64 = "double"`, and a
-`u64` of 2^63 or more, or an `i64` of -2^63 (bit64's `NA`), when
-`int64 = "integer64"`. An `s<n>` field holds the bytes up to its first
-NUL; with `encoding = "UTF-8"` they must be valid UTF-8, or the call is
-a `zubin_encoding_error` carrying `field` and `index`.
+`i64`, `u64`, `i128` or `u128` above 2^53 in magnitude when
+`int64 = "double"`, and, when `int64 = "integer64"`, a value outside
+int64 or an `i64` of -2^63 (bit64's `NA`). `c64` and `c128` fields read
+as complex vectors. An `s<n>` field holds the bytes up to its first NUL;
+with `encoding = "UTF-8"` they must be valid UTF-8, or the call is a
+`zubin_encoding_error` carrying `field` and `index`.
 
 A single header is `bin_unpack(x, hdr, n = 1)`: a one-row result.
 

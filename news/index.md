@@ -10,9 +10,9 @@ becomes `# zubin 0.1.0` when it is submitted).
 - Seventeen functions, prefixed `bin_`:
   [`bin_layout()`](https://pedrobtz.github.io/zubin/reference/bin_layout.md)
   describes a fixed-size binary record in a one-line specification
-  (integers of 8 to 64 bits, `f16`, `bf16`, `f32`, `f64`, `bool`, fixed
-  bytes and strings, padding, arrays, either byte order, C struct
-  alignment);
+  (integers of 8 to 128 bits, `f16`, `bf16`, `f32`, `f64`, complex `c64`
+  and `c128`, `bool`, fixed bytes and strings, padding, arrays, either
+  byte order, C struct alignment);
   [`bin_unpack()`](https://pedrobtz.github.io/zubin/reference/bin_unpack.md)
   and
   [`bin_pack()`](https://pedrobtz.github.io/zubin/reference/bin_pack.md)
@@ -59,8 +59,14 @@ becomes `# zubin 0.1.0` when it is submitted).
   checked size arithmetic `zb_size_add()` and `zb_size_mul()`),
   `zubin/layout.h` (the specification parser and the field-major unpack
   and pack kernels), and `zubin-r.h` (a buffer owned by an R external
-  pointer). Every header but `zubin-r.h` may be used from any thread, as
-  long as no two threads share a buffer or cursor
+  pointer, and foreign memory handed to R with the function that
+  releases it). `zubin/column.h` holds what columnar formats need:
+  bitmaps, bit-packed booleans, validity bitmaps to and from R’s missing
+  values, and byte swapping; the layout kernels also read and write
+  values in their own width and the host’s order, and `rw.h` adds
+  128-bit integers and reads at a width chosen at run time. Every header
+  but `zubin-r.h` may be used from any thread, as long as no two threads
+  share a buffer or cursor
   ([\#26](https://github.com/pedrobtz/zubin/issues/26)). Source
   compatibility within major version 1; see the `c-api` article on the
   package website and “Using zubin from C” in the README.
@@ -75,5 +81,5 @@ becomes `# zubin 0.1.0` when it is submitted).
 
 Variable-length fields, a cursor-style reader from R, byte search and
 splitting, zero-copy views, memory-mapped files, connections, bitfields
-and the nanoarrow bridge are planned, each with the condition that
-admits it, in `.agents/next.md` in the source repository.
+and zuint’s integers as an `int64` mode are planned, each with the
+condition that admits it, in `.agents/next.md` in the source repository.

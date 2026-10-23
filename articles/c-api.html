@@ -127,7 +127,8 @@ appended field has a defined value. <code>ZUBIN_VERSION_NUMBER</code> is
 <td><code>&lt;zubin/rw.h&gt;</code></td>
 <td>
 <code>zb_rd_&lt;type&gt;&lt;order&gt;()</code> and
-<code>zb_wr_...()</code> for every type at any alignment</td>
+<code>zb_wr_...()</code> for every type at any alignment,
+<code>zb_u128</code>, and reads at a width chosen at run time</td>
 </tr>
 <tr class="even">
 <td><code>&lt;zubin/cursor.h&gt;</code></td>
@@ -142,12 +143,18 @@ growth</td>
 </tr>
 <tr class="even">
 <td><code>&lt;zubin/layout.h&gt;</code></td>
-<td>record layouts, the spec parser, and the unpack and pack
-kernels</td>
+<td>record layouts, the spec parser, and the unpack and pack kernels,
+native-order ones included</td>
 </tr>
 <tr class="odd">
+<td><code>&lt;zubin/column.h&gt;</code></td>
+<td>bitmaps, bit-packed booleans, validity bitmaps to and from R’s
+missing values, byte swapping</td>
+</tr>
+<tr class="even">
 <td><code>&lt;zubin-r.h&gt;</code></td>
-<td>a <code>zb_buf</code> owned by an R external pointer; the only
+<td>a <code>zb_buf</code> owned by an R external pointer, foreign memory
+with its release function, and R’s serialization over both; the only
 header that includes R’s</td>
 </tr>
 </tbody>

@@ -52,7 +52,8 @@ One string of fields separated by whitespace or a comma:
     endian  := "<" | ">" | "="          little, big, host; default `endian`
     field   := [ name ":" ] type [ "[" count "]" ] [ "." order ]
              | "x" width                padding: never read, written as zeros
-    type    := u8 i8 u16 i16 u32 i32 u64 i64 f16 bf16 f32 f64 bool
+    type    := u8 i8 u16 i16 u32 i32 u64 i64 u128 i128
+             | f16 bf16 f32 f64 c64 c128 bool
              | "b" width                fixed bytes
              | "s" width                fixed string
     order   := "le" | "be"              multi-byte numeric types only
@@ -87,8 +88,10 @@ write):
 | `i32` | 4 | integer; -2^31 is an error unless `na = "allow"` | integer, whole double; `NA` only with `na = "allow"` |
 | `u32` | 4 | double | integer, whole double |
 | `i64 u64` | 8 | double, an error above 2^53 in magnitude; or `integer64` (`int64 = "integer64"`), an error for `u64` from 2^63 | integer, whole double, `integer64` |
+| `i128 u128` | 16 | as `i64`: double, an error above 2^53 in magnitude; or `integer64`, an error outside its range | integer, whole double (any whole value in range is exact), `integer64` |
 | `f16 bf16` | 2 | double | numeric, rounded to nearest even |
 | `f32 f64` | 4, 8 | double | numeric; `NA` survives `f64` and is a NaN in the others |
+| `c64 c128` | 8, 16 | complex: two `f32` or two `f64`, real part first | complex, or numeric as a real part; `c64` rounds each part as `f32` |
 | `bool` | 1 | logical; any non-zero byte is `TRUE` | logical, not `NA` |
 | `b<n>` | n | a list of raw vectors | a list of raw vectors of exactly n bytes |
 | `s<n>` | n | character: the bytes before the first NUL, as UTF-8 | character of at most n UTF-8 bytes, NUL-padded |
@@ -104,11 +107,12 @@ an integer. See
 
 With `align = FALSE` fields are packed at consecutive offsets. With
 `align = TRUE` each field starts at the next multiple of its element
-width (1 for `bool`, `b`, `s` and `x`) and the record size is rounded up
-to the largest of them: the rule C compilers apply to a `struct` on
-64-bit targets, so a struct written with `fwrite()` reads back with
-`align = TRUE`. (32-bit x86 aligns 8-byte members to 4 inside a struct;
-such a struct needs explicit `x` padding.)
+width (1 for `bool`, `b`, `s` and `x`; a complex type aligns as its
+part, `c64` to 4 and `c128` to 8; `i128` and `u128` to 16) and the
+record size is rounded up to the largest of them: the rule C compilers
+apply to a `struct` on 64-bit targets, so a struct written with
+`fwrite()` reads back with `align = TRUE`. (32-bit x86 aligns 8-byte
+members to 4 inside a struct; such a struct needs explicit `x` padding.)
 
 ## Examples
 

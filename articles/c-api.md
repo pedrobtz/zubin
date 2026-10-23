@@ -47,11 +47,12 @@ field has a defined value. `ZUBIN_VERSION_NUMBER` is
 |----|----|
 | `<zubin.h>` | everything below except `zubin-r.h` |
 | `<zubin/status.h>` | `zb_status` and `zb_status_string()` |
-| `<zubin/rw.h>` | `zb_rd_<type><order>()` and `zb_wr_...()` for every type at any alignment |
+| `<zubin/rw.h>` | `zb_rd_<type><order>()` and `zb_wr_...()` for every type at any alignment, `zb_u128`, and reads at a width chosen at run time |
 | `<zubin/cursor.h>` | `zb_cur`: checked sequential reads |
 | `<zubin/buf.h>` | `zb_buf`: a buffer with ownership, a hard cap and checked growth |
-| `<zubin/layout.h>` | record layouts, the spec parser, and the unpack and pack kernels |
-| `<zubin-r.h>` | a `zb_buf` owned by an R external pointer; the only header that includes R’s |
+| `<zubin/layout.h>` | record layouts, the spec parser, and the unpack and pack kernels, native-order ones included |
+| `<zubin/column.h>` | bitmaps, bit-packed booleans, validity bitmaps to and from R’s missing values, byte swapping |
+| `<zubin-r.h>` | a `zb_buf` owned by an R external pointer, foreign memory with its release function, and R’s serialization over both; the only header that includes R’s |
 
 Every function that can fail returns a `zb_status`, which is `ZB_OK` (0)
 on success; results come back through out-parameters. **On failure the
