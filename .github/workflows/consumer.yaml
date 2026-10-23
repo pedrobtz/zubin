@@ -41,8 +41,6 @@ jobs:
         with:
           use-public-rspm: true
 
-      # zufast comes from the Remotes field of zubin's DESCRIPTION until it is
-      # on CRAN (Stage 9).
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           dependencies: '"hard"'

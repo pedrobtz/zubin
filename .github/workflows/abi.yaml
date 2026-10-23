@@ -5,8 +5,8 @@
 # scripts run their canaries first.
 #
 # zubin's headers include zufast's, so the gate needs zufast's include
-# directory: a checkout of pedrobtz/zufast for the header gate (no R there),
-# and the installed package for the symbol audit.
+# directory: a checkout of pedrobtz/zufast at the tag of the version on CRAN
+# for the header gate (no R there), and the CRAN package for the symbol audit.
 on:
   push:
     branches: [main, master]
@@ -36,6 +36,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: pedrobtz/zufast
+          ref: 0.1.0
           path: .zufast
       # R's headers, for the zubin-r.h probe
       - uses: r-lib/actions/setup-r@v2
@@ -65,6 +66,5 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           dependencies: '"hard"'
-          extra-packages: github::pedrobtz/zufast
       - name: Design 16.1 compiled-code audit
         run: tools/run-symbol-audit

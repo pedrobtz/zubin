@@ -1,7 +1,6 @@
-# zubin 0.0.0.9000
+# zubin 0.1.0
 
-The development version of the first release, 0.1.0 (this heading becomes `# zubin 0.1.0`
-when it is submitted).
+The first release.
 
 ## R
 

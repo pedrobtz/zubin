@@ -35,22 +35,23 @@ commit.
 
 ## Current state
 
-Stages 0–8 are done; Stage 10 (serialisation streams, #25) and Stage 11 (#26's
-small items) go into 0.1.0 too, by the maintainer's decision of 2026-10-05; Stage 9 releases
-after them, once zufast is on CRAN. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout,column}.h`
+Stages 0–8 and 10–12 are done (Stage 10: serialisation streams, #25; Stage 11: #26's small
+items; Stage 12: what zunpy, zumsgpack, zuint and zuarrow call, #38), and the pre-release
+review (#31) is addressed; Stage 9 is the release itself, 0.1.0, ready to submit now that
+zufast 0.1.0 is on CRAN. Headers: `zubin.h` and `zubin/{version,status,rw,buf,cursor,layout,column}.h`
 (layout.h: types, spec parser, unpack and pack kernels; column.h: bitmaps, validity, swaps),
-plus `zubin-r.h`. Stage 12 (what zunpy, zumsgpack, zuint and zuarrow call) adds `u128`,
-`i128`, `c64`, `c128` (type values 32–35), native-order kernels and the foreign buffer. Gates:
+plus `zubin-r.h`. Stage 12 added `u128`, `i128`, `c64`, `c128` (type values 32–35),
+native-order kernels and the foreign buffer. Gates:
 `abi.yaml`, `native-checks.yaml` (rchk through r-actions with `github-packages`), `hardening.yaml` (`fuzz_layout`,
 `fuzz_unpack`, `fuzz_buf`), `arch.yaml` (i386, musl, s390x). R API: `bin_info()`,
 `bin_layout()`, `bin_size()`, `bin_unpack()`, `bin_pack()`, `bin_decode()`, `bin_encode()`,
 the builder (`bin_builder()`, `bin_put()` raw/typed/`"z"`/`"s<n>"`, `bin_reserve()`,
-`bin_reset()`, `bin_take()`, `as.raw()`), and `bin_hexdump()`/`bin_diff()`. `zufast` comes from
-`Remotes: pedrobtz/zufast@main` until Stage 9; workflows that cannot resolve `Remotes`
-(rchk, fuzzing, arch) fetch zufast themselves (r-actions' `github-packages` input for
-rchk and fuzz). `tools/zubintest` is the consumer fixture (`consumer.yaml`); the README's
+`bin_reset()`, `bin_take()`, `as.raw()`), `bin_hexdump()`/`bin_diff()`, and the
+serialisation streams. zufast comes from CRAN; the workflows without R (the header gate,
+the fuzzers) check out its `0.1.0` tag, never its `main`. `tools/zubintest` is the consumer fixture (`consumer.yaml`); the README's
 "Using zubin from C" quotes it, and `tools/check-recipe` keeps the two identical: edit the
-fixture, then copy the change into the README. Next: Stage 9, which waits for zufast to be on CRAN; its release commit is ready on the `stage-9-release` branch.
+fixture, then copy the change into the README. Next: submit 0.1.0 (the maintainer's step),
+then Stage 9's post-acceptance steps; #32 and `.agents/next.md` hold what follows.
 
 In C, `zb_field.count` is the byte width for `b`, `s` and `x` fields; the element count of a
 column is 1 for them. Alignment is `zb_type_align()`, not the width: a complex type aligns as
@@ -82,8 +83,8 @@ _R_CHECK_SYSTEM_CLOCK_=0 Rscript -e 'devtools::check(cran = TRUE)'
 Rscript -e 'pkgdown::build_site()'                 # site -> docs/ (gitignored)
 ```
 
-zufast is not on CRAN: install it from the sibling checkout (`R CMD INSTALL ../zufast`) or
-with `pak::pak("pedrobtz/zufast")`. roxygen2 must be 8.1.0 or newer
+zufast is on CRAN (`install.packages("zufast")`); test unreleased zufast changes from the
+sibling checkout (`R CMD INSTALL ../zufast`). roxygen2 must be 8.1.0 or newer
 (`Config/roxygen2/version`); an older one rewrites `man/`. Never hand-edit `NAMESPACE` or
 `man/`.
 
@@ -148,8 +149,8 @@ Allocation and errors:
 ## CI
 
 Every r-actions workflow except `R-CMD-check.yaml` is pinned by commit to a release, the tag
-in a trailing comment. r-actions' `github-packages` input (rchk, fuzz) fetches zufast until
-it is on CRAN. Benchmarks: `tools/run-benchmarks` locally, `benchmarks.yaml` on Linux;
+in a trailing comment; Dependabot bumps them. The fuzzers fetch zufast's headers through
+r-actions' `github-packages` input at its CRAN tag. Benchmarks: `tools/run-benchmarks` locally, `benchmarks.yaml` on Linux;
 results in `.agents/benchmarks.md`.
 
 Reusable workflows from `pedrobtz/r-actions`; `coverage.yaml` is pinned by commit with the

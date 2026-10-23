@@ -6,7 +6,9 @@
 # * https://r-pkgs.org/testing-design.html#sec-tests-files-overview
 # * https://testthat.r-lib.org/articles/special-files.html
 
-library(testthat)
-library(zubin)
-
-test_check("zubin")
+# testthat is in Suggests: CRAN's noSuggests check runs without it
+if (requireNamespace("testthat", quietly = TRUE)) {
+  library(testthat)
+  library(zubin)
+  test_check("zubin")
+}
