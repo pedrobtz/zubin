@@ -22,7 +22,7 @@ Nothing here is promised. The rules:
 
 | Release | Contents | Trigger | Needs |
 |---|---|---|---|
-| **0.2.0** | variable-length fields; the cursor-style reader from R; the Python `struct` translator | a format with length-prefixed or NUL-terminated fields that someone is reading in R (ISO 8583, SBE var data, copybook `OCCURS DEPENDING ON`); or rdz's C rewrite | 0.1.0 |
+| **0.2.0** | variable-length fields; the cursor-style reader from R; tagged-message dispatch; the Python `struct` translator | a format with length-prefixed or NUL-terminated fields that someone is reading in R (ISO 8583, SBE var data, copybook `OCCURS DEPENDING ON`); or rdz's C rewrite | 0.1.0 |
 | **0.3.0** | zero-copy views, typed reinterpretation views, byte search and splitting over them, zero-copy `bin_take()` | a reader that holds a file larger than it wants to copy (zucsv; rdz's selective reads) | 0.1.0 |
 | **0.4.0** | memory-mapped files; custom connections over views and builders | the same reader, past memory; connection-only consumers (`read.csv`, `readRDS`) over a view | 0.3.0 |
 | **when asked** | bitfields; `blob` and `float` outputs; `int64 = "zuint"`; the POD-in-`RAWSXP` helper; explicit offsets and unions in the grammar | one named consumer each | varies |
@@ -51,6 +51,24 @@ bin_tell(cur); bin_seek(cur, pos); bin_skip(cur, n)
 The cursor is an external pointer over a borrowed raw vector (kept alive as an attribute,
 zuxml's node-handle trick), and every read is bounds-checked with a `zubin_bounds_error`
 carrying the position. It is `zb_cur` from R, nothing more.
+
+Also here, on the same record-major walk: **tagged-message dispatch**, a set of layouts
+keyed by a tag read in C in one pass instead of one `bin_unpack()` per message from R.
+
+```r
+bin_unpack_tagged(feed, list(A = add, E = exec, D = del),
+                  tag = "type:s1", frame = ">u16")   # frame: an optional length prefix
+#> list(A = <data.frame>, E = <data.frame>, D = <data.frame>)
+```
+
+Each tag's records go to that layout's columns, grown as the walk finds them; an unknown tag
+is a `zubin_spec_error` carrying the offset, or skipped by its frame length with
+`unknown = "skip"`. Measured on Linux x86_64, R 4.6.1, a 10-field ITCH add-order layout:
+`bin_unpack(x, l, n = 1)` costs 35 µs a call (443 µs with the spec as a string, which builds
+the layout each time), and a bulk read 0.37 µs a record, so a per-message loop from R is
+about 100 times slower than the data needs. The recipes article's ITCH example shows the
+gather workaround; this replaces it. Consumers: ITCH and SBE (the row below), TLV containers,
+and the protobuf decoder's dispatch on field tags.
 
 Also here, because it is thirty lines and Python users ask for it first:
 `bin_layout_struct("<IHd")`, a translator from `struct` format strings to a `zubin_layout`.
@@ -135,6 +153,7 @@ it if a parallel user asks.
 | `blob` and `float` outputs | `b<n>` columns as `blob`; `f32` as the `float` package's `float32` (bit-identical storage) | a user of either package asks | `Suggests` only |
 | `int64 = "zuint"` | `bin_unpack()` and `bin_decode()` returning zuint's `uint64`, `int128` and `uint128` (and `int64`), exact over the whole range, built from the native kernels and handed to `zuint::zu_from_storage()`; packing them back. Replaces the `bigint`-for-`u64` idea: the family has one exact wide-integer class, zuint's | zuint on CRAN (a CRAN package cannot suggest one that is not) | 0.1.0's Stage 12 kernels; `Suggests: zuint` |
 | POD in a `RAWSXP` | `zb_pod_alloc()`, `zb_pod_ptr()`, `zb_pod_check()`: plain-old-data state in a raw vector instead of an external pointer; copy-on-modify and serialisation for free; alignment and pointer caveats stated | a family package wants finaliser-free state | `zubin-r.h` |
+| C from a layout | `bin_layout_c(l, name)`: a header with a `typedef struct` and `static inline` read and write functions over `zb_rd_*`/`zb_wr_*` at the layout's offsets, so a format designed in R ships in a package's C without a hand-written reader; the generated code carries the canonical `spec` in a comment, and a test in the consumer re-parses it. It is `protoc`'s code generation, for fixed layouts; zubin's own R path stays interpreted, since a parsed layout costs microseconds against a read's milliseconds | a C consumer asks for it | 0.1.0 layouts and `rw.h` |
 | `bin_write()` in place | write one field into a copy of a raw vector at an offset | a patching use case | 0.1.0 |
 | canonical object hash | a serialisation owned and versioned by zubin for a stated subset of objects (atomic vectors, lists, attributes), so that `bin_hash_object()`'s digest can be a durable content address across R versions; 0.1.0 hashes R's own serialisation body and promises no more (design §13.9, #31) | a user keys persistent storage by the digest | 0.1.0 |
 | varints, zigzag, CRC32 | **zufast's**, on its §25 list; zubin's cursor and builder wrap them (`zb_cur_varint_u64()`, `zb_put_varint_u64()`) | a protobuf-shaped or Parquet-footer reader; rdz | zufast |
