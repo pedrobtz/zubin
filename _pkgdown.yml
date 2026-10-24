@@ -44,5 +44,6 @@ articles:
     contents:
       - zubin
       - articles/c-api
+      - articles/files
       - articles/recipes
       - articles/sexp-header

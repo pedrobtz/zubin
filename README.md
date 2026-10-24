@@ -180,6 +180,10 @@ as in every format specification.
 - [Recipes](https://pedrobtz.github.io/zubin/articles/recipes.html): one
   block of bytes, many readings, from a Nasdaq ITCH feed to a UUID, a
   Windows timestamp and an RGB565 pixel.
+- [Reading the files you already
+  have](https://pedrobtz.github.io/zubin/articles/files.html): SQLite,
+  shapefiles, sf’s WKB, PLINK genotypes, EDF recordings, `.2bit`
+  genomes, SPSS, `.rds` and Parquet, a few lines each.
 - [The C API](https://pedrobtz.github.io/zubin/articles/c-api.html), for
   package authors: the `LinkingTo` recipe, the cursor, the record
   kernels, and buffers owned by R.

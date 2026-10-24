@@ -1,0 +1,166 @@
+---
+title: "Reading the files you already have"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+Many files that R users have on disk are binary formats with a published layout, and the
+packages that read them do it with a `readBin()` call per field. Each example below assumes
+you have such a file and reads something useful out of it in a few lines: a header, an index,
+or every record at once. The chunks are not run when this page is built, since they need your
+files; every one was checked against a file of its format.
+
+A header is one record: read it with `n = 1`, or `bin_unpack()` reads the layout as many
+times as the bytes allow.
+
+```{r}
+library(zubin)
+bits <- function(v, from, width) (v %/% 2^from) %% 2^width
+```
+
+`bits()` takes `width` bits from bit `from` of a whole number, for the formats that pack
+fields narrower than a byte.
+
+## An SQLite database
+
+The first 100 bytes of every SQLite file are a big-endian header: the page size, the page
+count, the text encoding and the version of SQLite that last wrote it, read without opening
+the database.
+
+```{r}
+x <- readBin("data.sqlite", "raw", 100)
+h <- bin_unpack(x, ">magic:s16 page_size:u16 write:u8 read:u8 x4 changes:u32 pages:u32 x8
+                   schema:u32 format:u32 x8 encoding:u32 user_version:u32 x4 app_id:u32
+                   x20 valid_for:u32 sqlite:u32")
+h$size <- h$pages * ifelse(h$page_size == 1, 65536, h$page_size)
+h$encoding <- c("UTF-8", "UTF-16le", "UTF-16be")[h$encoding]
+h$sqlite <- sprintf("%d.%d.%d", h$sqlite %/% 1e6, h$sqlite %/% 1e3 %% 1e3, h$sqlite %% 1e3)
+h[c("magic", "page_size", "pages", "size", "encoding", "sqlite")]
+```
+
+## An ESRI shapefile of points
+
+A `.shp` header mixes byte orders in one record: the file code and length are big-endian, the
+version, shape type and bounding box little-endian. A file of points has records of one size,
+28 bytes, so every point is one call after the header.
+
+```{r}
+x <- readBin("stations.shp", "raw", file.size("stations.shp"))
+h <- bin_unpack(x, ">code:i32 x20 words:i32 version:i32.le type:i32.le
+                   xmin:f64.le ymin:f64.le xmax:f64.le ymax:f64.le x32", n = 1)
+stopifnot(h$code == 9994, h$type == 1)          # 1: Point
+pts <- bin_unpack(x, ">id:i32 words:i32 type:i32.le x:f64.le y:f64.le", offset = 100)
+head(pts[c("id", "x", "y")])
+```
+
+## Geometries from sf, as well-known binary
+
+`sf::st_as_binary()` gives each geometry as WKB: a byte for the byte order, a `u32`
+geometry type, then the coordinates. For points, each one is 21 bytes, and the whole column
+reads in one call:
+
+```{r}
+wkb <- sf::st_as_binary(sf::st_geometry(stations))
+x <- do.call(c, unclass(wkb))
+p <- bin_unpack(x, "<order:u8 type:u32 x:f64 y:f64")
+stopifnot(all(p$order == 1), all(p$type == 1))  # little-endian points
+head(p[c("x", "y")])
+```
+
+## PLINK genotypes
+
+A PLINK `.bed` file is a 3-byte magic number and then, for each variant, the genotypes of
+all samples at 2 bits each, four to a byte, low bits first. `00` is two copies of the first
+allele, `01` missing, `10` one copy, `11` none. The sample and variant counts are the line
+counts of the `.fam` and `.bim` files beside it.
+
+```{r}
+n <- length(readLines("study.fam"))
+x <- readBin("study.bed", "raw", file.size("study.bed"))
+stopifnot(identical(x[1:3], as.raw(c(0x6c, 0x1b, 0x01))))  # variant-major
+b <- bin_decode(x, "u8", offset = 3)
+codes <- outer(c(0, 2, 4, 6), b, function(at, v) bits(v, at, 2))
+g <- matrix(c(2, NA, 1, 0)[codes + 1], nrow = 4 * ceiling(n / 4))[seq_len(n), ]
+dim(g)                                          # samples by variants
+```
+
+## An EEG or sleep recording (EDF)
+
+An EDF header is ASCII in fixed-width fields: 256 bytes for the recording, then each field
+of the signal table for every signal in turn. Reading a field for all signals is one call with
+`n`, and the samples are little-endian `i16`.
+
+```{r}
+x <- readBin("sleep.edf", "raw", file.size("sleep.edf"))
+h <- bin_unpack(x, "version:s8 patient:s80 recording:s80 date:s8 time:s8 bytes:s8 x44
+                   records:s8 duration:s8 signals:s4", n = 1)
+ns <- as.integer(h$signals)
+label <- trimws(bin_unpack(x, "label:s16", offset = 256, n = ns)$label)
+spr <- as.integer(bin_unpack(x, "n:s8", offset = 256 + 216 * ns, n = ns)$n)
+first <- bin_decode(x, "i16", offset = as.integer(h$bytes), n = spr[1])  # signal 1, record 1
+```
+
+## A genome in UCSC `.2bit`
+
+A `.2bit` file holds a 16-byte header, an index of sequence names and offsets, and the
+sequences at 2 bits per base. The index alone gives every sequence's name and length:
+
+```{r}
+x <- readBin("genome.2bit", "raw", 1e6)  # enough for the index; see below
+h <- bin_unpack(x, "<sig:u32 version:u32 count:u32 x4", n = 1)
+stopifnot(h$sig == 0x1A412743)
+at <- 16; seqs <- NULL
+for (i in seq_len(h$count)) {
+  len <- bin_decode(x, "u8", offset = at, n = 1)
+  e <- bin_unpack(x, sprintf("name:s%d offset:u32", len), offset = at + 1, n = 1)
+  seqs <- rbind(seqs, e); at <- at + 1 + len + 4
+}
+```
+
+Each sequence's length is the `u32` at its offset, most of them far into the file: `seek()` a
+connection to each one rather than reading the whole genome.
+
+## An SPSS data file
+
+A `.sav` file opens with a 176-byte header in the byte order of the machine that wrote it.
+The format stores the number 100 as a double, the *bias*, and readers decode the header both
+ways and keep the one in which the bias is 100:
+
+```{r}
+x <- readBin("survey.sav", "raw", 176)
+spec <- "magic:s4 product:s60 layout:i32 case_size:i32 compressed:i32 weight:i32 cases:i32
+         bias:f64 date:s9 time:s8 label:s64 x3"
+h <- bin_unpack(x, paste("<", spec))
+if (h$bias != 100) h <- bin_unpack(x, paste(">", spec))
+h[c("product", "cases", "date", "time", "label")]
+```
+
+## R's own files
+
+An `.rds` file is gzip-compressed by default; `gzfile()` reads through that, and the header
+says which version of R wrote the file and which one it needs:
+
+```{r}
+con <- gzfile("model.rds", "rb"); x <- readBin(con, "raw", 64); close(con)
+h <- bin_unpack(x, ">magic:s2 format:i32 writer:u32 reader:u32 enc_len:i32", n = 1)
+ver <- function(v) sprintf("%d.%d.%d", v %/% 65536, v %/% 256 %% 256, v %% 256)
+c(written_by = ver(h$writer), readable_from = ver(h$reader),
+  encoding = rawToChar(x[19 + seq_len(h$enc_len) - 1]))
+```
+
+## A Parquet file's footer
+
+A Parquet file ends with the length of its metadata, a little-endian `u32`, and the magic
+`PAR1`. The metadata itself is Thrift-encoded, which zubin does not decode, but its size and
+position are where every Parquet reader starts:
+
+```{r}
+size <- file.size("sales.parquet")
+con <- file("sales.parquet", "rb"); invisible(seek(con, size - 8))
+x <- readBin(con, "raw", 8); close(con)
+f <- bin_unpack(x, "<length:u32 magic:s4")
+stopifnot(f$magic == "PAR1")
+c(metadata_bytes = f$length, metadata_at = size - 8 - f$length)
+```
