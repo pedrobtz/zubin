@@ -298,3 +298,9 @@ test_that("a typed bin_put() failing past its first chunk reports the right inde
   expect_identical(e$index, 2^26)
   expect_identical(as.raw(b), bytes("aa"))
 })
+
+test_that("fields named like bin_pack()'s arguments are given as a list", {
+  l <- "<layout:u8 na:u8"
+  expect_bytes(bin_pack(l, list(layout = 2, na = 3)), "02 03")
+  expect_bytes(bin_pack(l, data.frame(layout = 2, na = 3)), "02 03")
+})

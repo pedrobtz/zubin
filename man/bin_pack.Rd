@@ -30,7 +30,10 @@ names. A data frame from \code{\link[=bin_unpack]{bin_unpack()}} works as it is:
 be given as a matrix with one row per record, or as the columns \code{name.1},
 ..., \code{name.k}, and a single record's array as a vector of length \code{k}.
 Columns are recycled to the longest; a length that does not divide it is a
-\code{zubin_invalid_argument} error, never a warning.
+\code{zubin_invalid_argument} error, never a warning. A field named \code{layout} or
+\code{na} cannot be given by name in \code{...}, where R matches it to
+\code{bin_pack()}'s own argument: give the columns as a data frame or list
+instead, \code{bin_pack(hdr, list(layout = 2, size = 8))}.
 
 Each field accepts the R types of the table in \code{\link[=bin_layout]{bin_layout()}}: integer,
 whole double and logical for the small integer types; integer and whole

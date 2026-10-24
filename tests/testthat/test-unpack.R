@@ -236,3 +236,9 @@ test_that("a layout of padding alone reads no columns and writes no bytes", {
   expect_identical(bin_unpack(raw(8), "x4", as = "list"), structure(list(), names = character()))
   expect_identical(bin_pack("x4"), raw(0))
 })
+
+test_that("a header read from a longer buffer is one row only with n = 1", {
+  x <- bytes("01 00 02 00 ff ff")
+  expect_identical(nrow(bin_unpack(x, "<a:u8 b:u8")), 3L)
+  expect_identical(bin_unpack(x, "<a:u8 b:u8", n = 1), data.frame(a = 1L, b = 0L))
+})

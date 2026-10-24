@@ -69,7 +69,10 @@ fields read as complex vectors. An \verb{s<n>} field holds the bytes up to its
 first NUL; with \code{encoding = "UTF-8"} they must be valid UTF-8, or the call
 is a \code{zubin_encoding_error} carrying \code{field} and \code{index}.
 
-A single header is \code{bin_unpack(x, hdr, n = 1)}: a one-row result. A
+A single header is \code{bin_unpack(x, hdr, n = 1)}: a one-row result. Give
+\code{n = 1} whenever \code{x} holds more than the header, as a whole file does:
+with \code{n = NULL} the layout is read again at every multiple of its size,
+and the rows after the first are the bytes that follow the header. A
 layout of padding alone has no columns, and so returns a data frame of no
 columns and no rows.
 }
