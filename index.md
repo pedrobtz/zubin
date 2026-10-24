@@ -127,21 +127,51 @@ identical(bin_unpack(bytes, rec), trades)
 #> [1] TRUE
 ```
 
-**Write a file format.** A builder collects a header and the records
-after it, and
-[`bin_hexdump()`](https://pedrobtz.github.io/zubin/reference/bin_hexdump.md)
-shows the bytes with their 0-based offsets:
+**Mixed byte orders: a shapefile.** The `.shp` part of a shapefile mixes
+byte orders inside one record: its file code and length are big-endian,
+everything after them little-endian. A `.be` suffix overrides the
+layout’s order for one field, so each record is still a single layout.
+Here the `quakes` data become a point shapefile, written with a builder,
+as the ESRI specification lays it out:
 
 ``` r
 
-hdr <- bin_layout(">magic:u32 version:u16 count:u32")
+shp_header <- bin_layout("<code:i32.be x20 words:i32.be version:i32 type:i32
+                          xmin:f64 ymin:f64 xmax:f64 ymax:f64 x32")
+point <- bin_layout("<id:i32.be words:i32.be type:i32 x:f64 y:f64")
+
+n <- nrow(quakes)
 b <- bin_builder()
-bin_put(b, bin_pack(hdr, magic = 0x5A55424E, version = 1, count = 2))
-bin_put(b, bin_pack(rec, head(trades, 2)))
-bin_hexdump(bin_take(b))
-#> 00000000: 5a55 424e 0001 0000 0002 0100 0000 a470  ZUBN...........p
-#> 00000010: 3d0a d7d3 5740 df01 0000 0200 0000 5c8f  =...W@........\.
-#> 00000020: c2f5 285c 5840 1500 0000                 ..(\X@....
+bin_put(b, bin_pack(shp_header, code = 9994, words = (100 + 28 * n) / 2,
+                    version = 1000, type = 1,
+                    xmin = min(quakes$long), ymin = min(quakes$lat),
+                    xmax = max(quakes$long), ymax = max(quakes$lat)))
+bin_put(b, bin_pack(point, id = seq_len(n), words = 10, type = 1,
+                    x = quakes$long, y = quakes$lat))
+shp <- bin_take(b)
+bin_hexdump(shp, n = 48)
+#> 00000000: 0000 270a 0000 0000 0000 0000 0000 0000  ..'.............
+#> 00000010: 0000 0000 0000 0000 0000 36e2 e803 0000  ..........6.....
+#> 00000020: 0100 0000 3d0a d7a3 70b5 6440 ec51 b81e  ....=...p.d@.Q..
+```
+
+The file code 9994 opens the file big-endian (`0000 270a`), and the
+version 1000 at offset 28 is little-endian (`e803 0000`). Reading it
+back is one call for the header and one for every point after it:
+
+``` r
+
+bin_unpack(shp, shp_header, n = 1)
+#>   code words version type   xmin   ymin   xmax   ymax
+#> 1 9994 14050    1000    1 165.67 -38.59 188.13 -10.72
+pts <- bin_unpack(shp, point, offset = 100)
+head(pts, 3)
+#>   id words type      x      y
+#> 1  1    10    1 181.62 -20.42
+#> 2  2    10    1 181.03 -20.62
+#> 3  3    10    1 184.10 -26.00
+identical(pts$x, quakes$long)
+#> [1] TRUE
 ```
 
 Every function is prefixed `bin_`, and offsets are 0-based everywhere,
