@@ -1,0 +1,200 @@
+---
+title: "Recipes: one block of bytes, many readings"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+`bin_unpack()` and `bin_decode()` never consume their input: the same bytes can be read at
+the same offset as many ways as you like, which is what a C `union` does. Each recipe here is
+a few lines over bytes written out in full, so that it runs as it stands.
+
+```{r setup}
+library(zubin)
+bits <- function(v, from, width) (v %/% 2^from) %% 2^width
+```
+
+`bits()` takes `width` bits starting at bit `from` of a whole number, for fields narrower
+than a byte; zubin's fields are whole bytes.
+
+## A market data feed: Nasdaq TotalView-ITCH
+
+ITCH 5.0, Nasdaq's order-book feed, is a stream of messages of different sizes. Each message
+opens with a one-letter type that decides the layout of the rest, and in the files Nasdaq
+publishes each one is framed by its length as a big-endian `u16`. A few of the message
+types, as the specification lays them out:
+
+```{r itch-layouts}
+common <- ">type:s1 locate:u16 tracking:u16 ts_hi:u16 ts_lo:u32"
+itch <- list(
+  A = bin_layout(paste(common, "ref:u64 side:s1 shares:u32 stock:s8 price:u32")),
+  E = bin_layout(paste(common, "ref:u64 shares:u32 match:u64")),
+  D = bin_layout(paste(common, "ref:u64"))
+)
+vapply(itch, bin_size, numeric(1))
+```
+
+`A` adds an order, `E` executes part of one and `D` deletes it. The timestamp is a 6-byte
+count of nanoseconds since midnight, a width no machine type has, so it is two fields that
+add up: `ts_hi * 2^32 + ts_lo`. Prices are fixed-point with four decimals.
+
+A file of five messages, framed as Nasdaq frames them:
+
+```{r itch-feed}
+frame <- function(type, ...) {
+  body <- bin_pack(itch[[type]], type = type, locate = 1, tracking = 0, ...)
+  c(bin_encode(length(body), "u16", endian = "big"), body)
+}
+t0 <- 9.5 * 3600 * 1e9 # 09:30, in nanoseconds
+ts <- function(s) list(ts_hi = (t0 + s * 1e9) %/% 2^32, ts_lo = (t0 + s * 1e9) %% 2^32)
+feed <- c(
+  do.call(frame, c("A", ts(0), ref = 1, side = "B", shares = 100, stock = "ZUBN    ", price = 123400)),
+  do.call(frame, c("A", ts(1), ref = 2, side = "S", shares = 50, stock = "ZUBN    ", price = 123500)),
+  do.call(frame, c("E", ts(2), ref = 1, shares = 40, match = 1)),
+  do.call(frame, c("D", ts(3), ref = 1)),
+  do.call(frame, c("E", ts(4), ref = 2, shares = 50, match = 2))
+)
+length(feed)
+```
+
+Reading it takes two passes. The first walks the frames, which only needs each length, and
+records where each message starts and its type:
+
+```{r itch-walk}
+starts <- numeric(0)
+at <- 0
+while (at < length(feed)) {
+  len <- bin_decode(feed, "u16", offset = at, n = 1, endian = "big")
+  starts <- c(starts, at + 2)
+  at <- at + 2 + len
+}
+types <- vapply(starts, function(s) rawToChar(feed[s + 1]), "")
+types
+```
+
+The second reads all the messages of one type in one call. They are scattered through the
+file, so they are gathered first into a run of records of their own:
+
+```{r itch-read}
+gather <- function(x, starts, size) x[as.vector(outer(seq_len(size), starts, "+"))]
+
+read_type <- function(type) {
+  l <- itch[[type]]
+  m <- bin_unpack(gather(feed, starts[types == type], bin_size(l)), l)
+  m$time <- format(.POSIXct((m$ts_hi * 2^32 + m$ts_lo) / 1e9, tz = "UTC"), "%H:%M:%OS3")
+  m[setdiff(names(m), c("locate", "tracking", "ts_hi", "ts_lo"))]
+}
+
+adds <- read_type("A")
+adds$stock <- trimws(adds$stock)
+adds$price <- adds$price / 1e4
+adds
+read_type("E")
+```
+
+For a day's file of a few hundred million messages the walk in R is the slow part; the reads
+are one call per message type whatever the count.
+
+## One identifier, three views: a UUID
+
+A UUID is 16 bytes, read as a `u128`, as the five groups of its text form, or by the bits
+that say which kind of UUID it is:
+
+```{r uuid}
+id <- as.raw(c(0x55, 0x0e, 0x84, 0x00, 0xe2, 0x9b, 0x41, 0xd4,
+               0xa7, 0x16, 0x44, 0x66, 0x55, 0x44, 0x00, 0x00))
+
+g <- bin_unpack(id, ">a:b4 b:b2 c:b2 d:b2 e:b6", as = "list")
+paste(vapply(g, function(f) paste(f[[1]], collapse = ""), ""), collapse = "-")
+
+v <- bin_unpack(id, ">x6 version:u8 x1 variant:u8 x7")
+c(version = bits(v$version, 4, 4), variant = bits(v$variant, 6, 2))
+```
+
+Version 4 is a random UUID, and variant `2` (`10` in binary) is the RFC 9562 layout.
+
+## One address, two views: IPv6
+
+The 16 bytes of `2001:db8::1` are eight 16-bit groups, or a 32-bit prefix (`2001:db8::/32`,
+the range set aside for documentation) followed by the rest:
+
+```{r ipv6}
+ip <- as.raw(c(0x20, 0x01, 0x0d, 0xb8, rep(0, 10), 0x00, 0x01))
+groups <- unlist(bin_unpack(ip, ">g:u16[8]"))
+sprintf("%x", groups)
+bin_unpack(ip, ">prefix:u32 host:b12")$prefix == 0x20010db8
+```
+
+## A Windows timestamp: one `u64`, or two `u32`
+
+A `FILETIME` counts 100-nanosecond intervals since 1601-01-01 in a `u64`, and the Windows
+headers declare it as two `u32`, low word first. Today's count is past 2^53, so read as a
+double it would be rounded, and zubin refuses rather than round:
+
+```{r filetime, error = TRUE}
+ft <- as.raw(c(0x00, 0xe0, 0xfb, 0x31, 0xaf, 0x63, 0xdd, 0x01))
+bin_decode(ft, "u64")
+```
+
+As an `integer64` it is exact, and whole seconds come out by integer division. bit64's
+methods need its namespace loaded; attaching it is not necessary:
+
+```{r filetime-64}
+invisible(requireNamespace("bit64", quietly = TRUE))
+ticks <- bin_decode(ft, "u64", int64 = "integer64")
+ticks
+.POSIXct(as.numeric(ticks %/% 10000000L) - 11644473600, tz = "UTC")
+```
+
+The two words are each exact as doubles. Their sum is not, past 2^53, but it is within 16
+ticks, 1.6 microseconds, which is far below a second:
+
+```{r filetime-words}
+w <- bin_unpack(ft, "<low:u32 high:u32")
+w
+.POSIXct((w$high * 2^32 + w$low) / 1e7 - 11644473600, tz = "UTC")
+```
+
+## A pixel: one `u16`, three channels
+
+RGB565, the pixel format of many small displays, packs red, green and blue into 5, 6 and 5
+bits of a little-endian `u16`. Read as integers, the channels come out with `bits()`:
+
+```{r rgb565}
+px <- bin_decode(as.raw(c(0x00, 0xf8, 0xe0, 0x07, 0x1f, 0x00, 0xff, 0xff)), "u16")
+data.frame(word = sprintf("%04x", px),
+           red = bits(px, 11, 5), green = bits(px, 5, 6), blue = bits(px, 0, 5))
+```
+
+## R's missing values under another type
+
+R's `NA` for doubles is a NaN whose low word holds 1954; its `NA` for integers is the smallest
+32-bit integer, which as an unsigned integer is 2^31:
+
+```{r na}
+bin_unpack(bin_encode(NA_real_, "f64"), "<low:u32 high:u32")
+bin_decode(bin_encode(NA_integer_, "i32", na = "allow"), "u32") == 2^31
+```
+
+`NaN` differs from `NA` only in that low word, which is how `is.na()` and `is.nan()` tell
+them apart:
+
+```{r nan}
+bin_unpack(bin_encode(c(NA, NaN), "f64"), "<low:u32 high:u32")
+```
+
+## The same bytes, either byte order
+
+A format whose byte order you are not sure of can be read both ways, and the plausible
+reading kept. A TIFF file opens with `II` (little-endian) or `MM` (big-endian) and then 42 in
+that order:
+
+```{r tiff}
+tiff <- as.raw(c(0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08))
+order <- if (rawToChar(tiff[1:2]) == "II") "<" else ">"
+bin_unpack(tiff, paste0(order, "order:s2 magic:u16 first_ifd:u32"))
+bin_unpack(tiff, "<order:s2 magic:u16 first_ifd:u32")
+```
+
+The first reading is the right one; read little-endian, the same magic number is 10752.

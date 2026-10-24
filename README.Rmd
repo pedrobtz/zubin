@@ -108,6 +108,17 @@ format(parts, scientific = FALSE)
 (2^52 + parts$fraction[2]) / 2^56 == 0.1
 ```
 
+The same bytes read as two types give Quake III's fast inverse square root: a
+float's bits read as an integer, halved, subtracted from a magic number and read
+back as a float, then one step of Newton's method:
+
+```{r}
+x <- c(0.25, 2, 10)
+i <- bin_decode(bin_encode(x, "f32"), "u32")
+y <- bin_decode(bin_encode(0x5f3759df - i %/% 2, "u32"), "f32")
+rbind(fast = y * (1.5 - 0.5 * x * y^2), exact = 1 / sqrt(x))
+```
+
 **A million records in one call.** Packing a data frame and unpacking it again is
 one call each way, and the round trip is exact:
 
@@ -140,6 +151,9 @@ format specification.
 * [Structured binary data with zubin](https://pedrobtz.github.io/zubin/articles/zubin.html),
   the getting-started guide: layouts, a WAV file written and read back, C structs,
   arrays, 64-bit integers and errors.
+* [Recipes](https://pedrobtz.github.io/zubin/articles/recipes.html): one block of
+  bytes, many readings, from a Nasdaq ITCH feed to a UUID, a Windows timestamp and an
+  RGB565 pixel.
 * [The C API](https://pedrobtz.github.io/zubin/articles/c-api.html), for package
   authors: the `LinkingTo` recipe, the cursor, the record kernels, and buffers owned
   by R.
