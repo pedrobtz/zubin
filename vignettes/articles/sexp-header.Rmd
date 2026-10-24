@@ -14,7 +14,8 @@ offset.
 
 This is a way to look, not a way to program. The structure is private to R (it is in R's
 `Defn.h`, not in its API), it changes between R versions, and nothing here belongs in a
-package. To inspect an object in earnest use `.Internal(inspect(x))` or `lobstr::sxp()`.
+package. To inspect an object in earnest use `lobstr::sxp()`, or `.Internal(inspect(x))` at
+the console; the last section says how each reads the header.
 The page assumes a 64-bit build of R 4.x, where the header is 48 bytes.
 
 ## Getting the bytes
@@ -158,3 +159,25 @@ The same fields, as R prints them; the `ATTRIB` address is the one `attrib()` re
 ```{r inspect}
 .Internal(inspect(z))
 ```
+
+## How the real tools read the header
+
+`peek()` is one of three ways to see these fields, and the only one that can break without
+warning.
+
+- **`.Internal(inspect(x))` is part of R.** It is compiled from R's own sources against the
+  private `Defn.h`, in the same build as the structure it prints, so it can read every bit
+  and never falls out of step with the layout. Its output format is not promised, and
+  `.Internal()` is for R's own code: use it at the console, never in a package.
+- **`lobstr::sxp()` reads nothing directly.** It asks R through the API: `TYPEOF()`,
+  `ALTREP()`, `Rf_isObject()`, `XLENGTH()`, `ANY_ATTRIB()` and `R_mapAttrib()`, and for the
+  reference count `NO_REFERENCES()` and `MAYBE_SHARED()`. The address it prints is the
+  pointer's value, never dereferenced. It shows less as a result: references as 0, 1 or 2+,
+  and no `gp` bits, collector state or `truelength`. Where R 4.5 replaced an accessor,
+  lobstr follows behind `#if R_VERSION` guards.
+- **`peek()` and a layout** copy the memory and decode it against a description of a
+  private structure. That is how it shows the exact reference count and the collector's
+  size class, which the API does not expose; it is also why a change to the structure in a
+  later R makes it print wrong numbers rather than fail.
+
+Code that runs anywhere but your own console belongs with the second.
