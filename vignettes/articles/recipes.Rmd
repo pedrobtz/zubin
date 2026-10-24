@@ -198,3 +198,25 @@ bin_unpack(tiff, "<order:s2 magic:u16 first_ifd:u32")
 ```
 
 The first reading is the right one; read little-endian, the same magic number is 10752.
+
+## In other languages
+
+The same problems motivate binary-data libraries elsewhere, and their examples are worth
+reading next to these:
+
+| Library | Language | Its leading example | Here |
+|---|---|---|---|
+| [`struct`](https://docs.python.org/3/library/struct.html) | Python | format strings over bytes | the layout string |
+| [construct](https://github.com/construct/construct) | Python | a BMP-like header: magic, width, height, pixels | the README's PNG header |
+| [`encoding/binary`](https://pkg.go.dev/encoding/binary) | Go | a `float64`, a small struct, varints | `bin_decode()`, `bin_unpack()` |
+| [binary-parser](https://github.com/keichi/binary-parser) | JavaScript | an IPv4 header; TLV records through `choice` | the ITCH feed |
+| [restructure](https://github.com/foliojs/restructure) | JavaScript | records with pointers, versions and bitfields | the ITCH feed, RGB565 |
+| [deku](https://github.com/sharksforarms/deku) | Rust | an RGB565 pixel | RGB565 |
+| [binrw](https://github.com/jam1garner/binrw) | Rust | a record with a magic number, a count and a counted array | the ITCH frames |
+| [nom](https://github.com/rust-bakery/nom) | Rust | parser combinators, from a hex colour to FLV, pcap and TLS | — |
+| [Kaitai Struct](https://kaitai.io/) | many | declarative specifications of hundreds of real formats | — |
+
+Most of them go further than zubin in one direction: following offsets stored in the data,
+counts and choices inside one declaration, or varints. zubin keeps a layout to one fixed-size
+record and leaves the walk between records to R, as the ITCH recipe does, so that each read
+is one call over every record.
