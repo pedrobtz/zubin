@@ -1,0 +1,124 @@
+---
+title: "Inside a floating-point number"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+A double is 64 bits in three fields: a sign bit, an 11-bit exponent and a 52-bit fraction
+(IEEE 754 binary64). zubin has no type for a field narrower than a byte, but it can encode a
+double to its bytes and read those bytes back as integers, which is all the decomposition
+needs. Every step is exact; nothing goes through a decimal string.
+
+```{r setup}
+library(zubin)
+```
+
+## Three fields
+
+`bin_encode()` writes the doubles big-endian, so the sign and exponent are in the first word.
+A layout reads each double back as two `u32`, because one `u64` can pass 2^53, beyond what a
+double holds exactly; 20 bits of the fraction are in the high word and 32 in the low.
+
+```{r fields}
+x <- c(1, 0.1, -2.5, 2^-1074, .Machine$double.xmax, -0, Inf, NaN)
+label <- c("1", "0.1", "-2.5", "2^-1074", "double.xmax", "-0", "Inf", "NaN")
+words <- bin_unpack(bin_encode(x, "f64", endian = "big"), ">hi:u32 lo:u32")
+
+bits <- function(v, from, width) (v %/% 2^from) %% 2^width
+
+parts <- data.frame(
+  x = label,
+  sign = bits(words$hi, 31, 1),
+  exponent = bits(words$hi, 20, 11),
+  fraction = bits(words$hi, 0, 20) * 2^32 + words$lo
+)
+format(parts, scientific = FALSE)
+```
+
+The exponent is stored with a bias of 1023, so `1` stores 1023 and a fraction of zero: 1.0
+times 2^0. An exponent of 0 marks zero and the subnormals, like 2^-1074, the smallest double;
+2047 marks `Inf` (fraction zero) and `NaN` (any other fraction). `-0` differs from `0` only in
+its sign bit.
+
+## Two numbers
+
+Each finite double is an integer times a power of two, exactly. For a normal number the
+significand is the fraction with its implicit leading 1 restored, `fraction + 2^52`, and the
+exponent is the stored one less 1023 and less the 52 bits of fraction; a subnormal has no
+implicit 1 and the fixed exponent -1074. Halving away the trailing zero bits gives the
+smallest such pair:
+
+```{r pair}
+as_pair <- function(p) {
+  m <- ifelse(p$exponent == 0, p$fraction, p$fraction + 2^52)
+  e <- ifelse(p$exponent == 0, -1074, p$exponent - 1075)
+  while (any(even <- m != 0 & m %% 2 == 0)) {
+    m[even] <- m[even] / 2
+    e[even] <- e[even] + 1
+  }
+  data.frame(significand = (-1)^p$sign * m, exponent = e)
+}
+
+finite <- parts[is.finite(x), ]
+pair <- as_pair(finite)
+cbind(x = finite$x, format(pair, scientific = FALSE))
+```
+
+So `0.1` is `3602879701896397 / 2^55`, a little more than a tenth, which no double can hold.
+The pair reconstructs every value bit for bit; `num.eq = FALSE` makes `identical()` compare
+bits, so that `-0` must come back as `-0` and not as `0`:
+
+```{r exact}
+identical(pair$significand * 2^pair$exponent, x[is.finite(x)], num.eq = FALSE)
+```
+
+## And back
+
+`bin_pack()` writes the words, and `bin_decode()` reads them as a double. Adding one to the
+low word of `1` gives the next double after it, `1 + 2^-52`:
+
+```{r next}
+one <- words[1, ]
+after <- bin_decode(bin_pack(">hi:u32 lo:u32", hi = one$hi, lo = one$lo + 1), "f64",
+                    endian = "big")
+after - 1 == 2^-52
+```
+
+An exponent of all ones with a fraction that is not zero is a NaN, and the fraction is
+carried along as its payload. zubin's codecs keep it through a round trip:
+
+```{r nan}
+nan <- bin_decode(bin_pack(">hi:u32 lo:u32", hi = 0x7FF80000, lo = 42), "f64",
+                  endian = "big")
+is.nan(nan)
+bin_unpack(bin_encode(nan, "f64", endian = "big"), ">hi:u32 lo:u32")
+```
+
+R's `NA` for doubles is such a NaN, with payload 1954. Arithmetic does not promise to keep a
+payload, which is why `?NA` leaves open whether a computation on `NA` and `NaN` gives one or
+the other.
+
+## Narrower floats
+
+`f32`, `f16` and `bf16` fit in one unsigned integer of their width, so a single read gives all
+the bits. The fields are the same three, narrower:
+
+```{r narrow}
+formats <- data.frame(type = c("f32", "f16", "bf16"), word = c("u32", "u16", "u16"),
+                      exponent = c(8, 5, 8), fraction = c(23, 10, 7))
+
+decompose <- function(value, f) {
+  u <- bin_decode(bin_encode(value, f$type), f$word)
+  data.frame(type = f$type, sign = bits(u, f$exponent + f$fraction, 1),
+             exponent = bits(u, f$fraction, f$exponent), fraction = bits(u, 0, f$fraction),
+             stored = sprintf("%.17g", bin_decode(bin_encode(value, f$type), f$type)))
+}
+
+do.call(rbind, lapply(split(formats, seq_len(nrow(formats))), decompose, value = 0.1))
+```
+
+`stored` is the double each format rounds `0.1` to. `bf16` keeps `f32`'s 8-bit exponent and
+so its range, with a fraction of only 7 bits; `f16` has more fraction bits and a 5-bit
+exponent, so its largest finite value is 65504.

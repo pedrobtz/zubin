@@ -44,4 +44,5 @@ articles:
     contents:
       - zubin
       - articles/c-api
+      - articles/floats
       - articles/sexp-header
