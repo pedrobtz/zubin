@@ -1,0 +1,160 @@
+---
+title: "Reading R's own object header"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+Every R object lives in memory behind a fixed-size C header, the `SEXPREC`: a word of
+bitfields, three pointers and, for a vector, its length. A fixed-size record is exactly what
+`bin_layout()` describes, so the header makes a small worked example of a layout over bytes
+that zubin did not write: native byte order, a bitfield word, pointers, and a body at a known
+offset.
+
+This is a way to look, not a way to program. The structure is private to R (it is in R's
+`Defn.h`, not in its API), it changes between R versions, and nothing here belongs in a
+package. To inspect an object in earnest use `.Internal(inspect(x))` or `lobstr::sxp()`.
+The page assumes a 64-bit build of R 4.x, where the header is 48 bytes.
+
+## Getting the bytes
+
+zubin reads raw vectors, and no R function hands over an object's own memory, so the page
+compiles a three-line C function that copies the first `n` bytes of the header into one:
+
+```{r peek}
+stopifnot(.Machine$sizeof.pointer == 8)
+library(zubin)
+
+src <- tempfile(fileext = ".c")
+writeLines(c(
+  "#include <string.h>",
+  "#include <Rinternals.h>",
+  "SEXP peek(SEXP x, SEXP n) {",
+  "  SEXP out = PROTECT(Rf_allocVector(RAWSXP, Rf_asInteger(n)));",
+  "  memcpy(RAW(out), (const void *) x, (size_t) XLENGTH(out));",
+  "  UNPROTECT(1);",
+  "  return out;",
+  "}"
+), src)
+system2(file.path(R.home("bin"), "R"), c("CMD", "SHLIB", shQuote(src)), stdout = FALSE)
+dll <- dyn.load(sub("\\.c$", .Platform$dynlib.ext, src))
+peek <- function(x, n = 48L) .Call(dll$peek, x, n)
+```
+
+`peek()` copies as many bytes as it is asked for, and nothing checks them against the object:
+the caller asks for no more than the object holds. An integer vector of three elements holds
+48 bytes of header and 12 of data.
+
+```{r dump}
+x <- c(10L, 20L, 30L)
+b <- peek(x, 60L)
+bin_hexdump(b)
+```
+
+## The layout
+
+On a 64-bit build the header is:
+
+| Offset | Field | C type |
+|---|---|---|
+| 0 | `sxpinfo` | 64 bits of bitfields |
+| 8 | `attrib` | `SEXP`, the attribute pairlist |
+| 16 | `gengc_next_node` | `SEXP`, the garbage collector's list |
+| 24 | `gengc_prev_node` | `SEXP` |
+| 32 | `length` | `R_xlen_t`, vectors only |
+| 40 | `truelength` | `R_xlen_t`, vectors only |
+| 48 | the data | what `INTEGER(x)`, `REAL(x)` and the rest point to |
+
+This is memory of the running process, so the byte order is the host's: `=`, never a guess
+at little-endian. `sxpinfo` is two `u32` because a `u64` that holds bitfields can pass 2^53,
+past what a double holds exactly; the pointers are user-space addresses, far below 2^53, and
+read as `b8` to be printed in hexadecimal. `next` is a reserved word in R, so the pointer
+fields take other names.
+
+```{r layout}
+header <- bin_layout(
+  "= info:u32[2] attrib:b8 gc_next:b8 gc_prev:b8 length:i64 truelength:i64"
+)
+header
+```
+
+```{r unpack}
+h <- bin_unpack(b, header)
+h[c("length", "truelength")]
+bin_decode(b, "i32", offset = 48, n = h$length, endian = "native")
+```
+
+## The bitfields
+
+zubin has no bitfield type: a field is whole bytes. The bits come out with arithmetic on the
+two words. GCC and Clang allocate bitfields from the least significant bit on the targets R
+runs on, which gives, in R 4.x:
+
+| Word | Bits | Field |
+|---|---|---|
+| 1 | 0--4 | `type`, the `SEXPTYPE` (13 is `INTSXP`) |
+| 1 | 5, 6, 7 | `scalar`, `obj` (has a class), `alt` (ALTREP) |
+| 1 | 8--23 | `gp`, general-purpose bits |
+| 1 | 24--27 | `mark`, `debug`, `trace`, `spare` |
+| 1 | 28, 29--31 | `gcgen`, `gccls` (the collector's generation and size class) |
+| 2 | 0--15 | `named`, the reference count |
+| 2 | 16--31 | `extra` |
+
+```{r sxpinfo}
+bits <- function(v, from, width) (v %/% 2^from) %% 2^width
+
+sxpinfo <- function(h) {
+  w1 <- h$info.1
+  w2 <- h$info.2
+  data.frame(
+    type = bits(w1, 0, 5), scalar = bits(w1, 5, 1), obj = bits(w1, 6, 1),
+    alt = bits(w1, 7, 1), gp = bits(w1, 8, 16), gcgen = bits(w1, 28, 1),
+    gccls = bits(w1, 29, 3), named = bits(w2, 0, 16)
+  )
+}
+
+address <- function(p) paste0("0x", sub("^0+", "", paste(rev(as.character(p)), collapse = "")))
+
+sxpinfo(h)
+```
+
+## What the header shows
+
+A second binding to the same vector raises its reference count, and copies nothing:
+
+```{r refcount}
+refs <- function(x) sxpinfo(bin_unpack(peek(x), header))$named
+before <- refs(x)
+y <- x
+c(before = before, after = refs(x))
+```
+
+Without attributes, `attrib` points to `NULL`, which is one object of its own, so every bare
+object points to the same address. An attribute makes it a pairlist of its own:
+
+```{r attrib}
+attrib <- function(x) address(bin_unpack(peek(x), header)$attrib[[1]])
+z <- structure(c(1, 2), units = "cm")
+c(double = attrib(c(1, 2)), string = attrib("a"), with_attr = attrib(z))
+```
+
+`1:3` is an ALTREP object, a compact sequence that stores its start and end, not its
+elements: `alt` is set, and the 16 bytes at offset 32 hold ALTREP's own pointers, not a
+length.
+
+```{r altrep}
+sxpinfo(bin_unpack(peek(1:3), header))[c("type", "alt")]
+```
+
+A class sets `obj`:
+
+```{r obj}
+sxpinfo(bin_unpack(peek(factor("a")), header))[c("type", "obj")]
+```
+
+The same fields, as R prints them; the `ATTRIB` address is the one `attrib()` read above:
+
+```{r inspect}
+.Internal(inspect(z))
+```
