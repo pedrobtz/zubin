@@ -92,7 +92,9 @@ signed 64-bit range or an `i64` of -2^63 (bit64's `NA`). `c64` and
 up to its first NUL; with `encoding = "UTF-8"` they must be valid UTF-8,
 or the call is a `zubin_encoding_error` carrying `field` and `index`.
 
-A single header is `bin_unpack(x, hdr, n = 1)`: a one-row result.
+A single header is `bin_unpack(x, hdr, n = 1)`: a one-row result. A
+layout of padding alone has no columns, and so returns a data frame of
+no columns and no rows.
 
 ## See also
 

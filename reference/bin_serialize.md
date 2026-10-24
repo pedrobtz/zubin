@@ -1,9 +1,9 @@
-# Serialize R objects into a builder, and back from bytes at an offset
+# Serialise R objects into a builder, and back from bytes at an offset
 
-`bin_serialize()` appends the serialization of `x` to the builder `b`,
+`bin_serialize()` appends the serialisation of `x` to the builder `b`,
 exactly as [`serialize()`](https://rdrr.io/r/base/serialize.html) would
 write it, without first allocating the whole stream as a raw vector.
-`bin_unserialize()` reads one serialized object from the raw vector `x`,
+`bin_unserialize()` reads one serialised object from the raw vector `x`,
 starting at the 0-based byte `offset`, so a stream stored inside a
 larger file or record is read where it lies. Offsets are 0-based.
 
@@ -20,7 +20,7 @@ bin_unserialize(x, offset = 0, refhook = NULL)
 - x:
 
   For `bin_serialize()`, any R object; for `bin_unserialize()`, a raw
-  vector holding a serialization stream at `offset`.
+  vector holding a serialisation stream at `offset`.
 
 - b:
 
@@ -29,7 +29,7 @@ bin_unserialize(x, offset = 0, refhook = NULL)
 
 - version:
 
-  The serialization format version, 2 or 3, as in
+  The serialisation format version, 2 or 3, as in
   [`serialize()`](https://rdrr.io/r/base/serialize.html).
 
 - xdr:
@@ -55,18 +55,18 @@ the object.
 
 ## Details
 
-Both are R's own serialization: `unserialize(bin_take(b))` after
+Both are R's own serialisation: `unserialize(bin_take(b))` after
 `bin_serialize(x, b)` is identical to `x`, and `bin_unserialize()` reads
 what [`serialize()`](https://rdrr.io/r/base/serialize.html) writes.
-Errors that R raises while serializing or unserializing (an object it
-cannot serialize, a malformed stream, an error in `refhook`) arrive as R
+Errors that R raises while writing or reading the stream (an object it
+cannot serialise, a malformed stream, an error in `refhook`) arrive as R
 raised them. A stream that ends before the object does is a
 `zubin_bounds_error` carrying `offset` and `length`. An append that
 would pass the builder's `max` is a `zubin_limit_error`; in every
 failure, an interrupt included, the builder is left as it was.
 
-Only unserialize data from a source you trust: a serialization stream
-can hold any R object, functions and environments included.
+Only read serialised data from a source you trust: a serialisation
+stream can hold any R object, functions and environments included.
 
 ## See also
 

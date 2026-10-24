@@ -72,8 +72,9 @@ integer that does not fit.</p>
 
 
 <dt id="arg-type">type<a class="anchor" aria-label="anchor" href="#arg-type"></a></dt>
-<dd><p>One type token of <code><a href="bin_layout.html">bin_layout()</a></code>: <code>"u8"</code> to <code>"f64"</code>, <code>"bool"</code>,
-<code>"b&lt;n&gt;"</code> or <code>"s&lt;n&gt;"</code>, optionally with a <code>.le</code> or <code>.be</code> suffix.</p></dd>
+<dd><p>Any type token of <code><a href="bin_layout.html">bin_layout()</a></code> except padding (<code>"u8"</code>,
+<code>"i128"</code>, <code>"f16"</code>, <code>"c64"</code>, <code>"bool"</code>, <code>"b16"</code>, <code>"s8"</code>, ...), optionally
+with a <code>.le</code> or <code>.be</code> suffix.</p></dd>
 
 
 <dt id="arg-endian">endian<a class="anchor" aria-label="anchor" href="#arg-endian"></a></dt>
@@ -81,7 +82,8 @@ integer that does not fit.</p>
 
 
 <dt id="arg-na">na<a class="anchor" aria-label="anchor" href="#arg-na"></a></dt>
-<dd><p><code>"error"</code>, or <code>"allow"</code> to write <code>NA</code> as -2^31 into <code>i32</code>.</p></dd>
+<dd><p><code>"error"</code>, or <code>"allow"</code> to write <code>NA</code> into <code>i32</code> as -2^31 (and
+an <code>integer64</code> <code>NA</code> into <code>i64</code> as -2^63).</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -7,10 +7,14 @@ in endian order, written straight into the builder; a list of raw
 vectors as &quot;b&amp;lt;n&amp;gt;&quot;. A character vector is appended with type = &quot;z&quot;,
 each string's UTF-8 bytes followed by a NUL, or with type = &quot;s&amp;lt;n&amp;gt;&quot;, each
 string's UTF-8 bytes padded with NULs to exactly n bytes, the
-fixed-string field of bin_layout(). Nothing is appended unless every
-element can be: an NA is a zubin_na_error, and a value that does not
-fit its type is a zubin_range_error, each carrying the 0-based index
-of the first one."><meta property="og:description" content="Appends x to the end of the builder b. A raw vector is appended as it
+fixed-string field of bin_layout(). A string marked &quot;bytes&quot; (as
+bin_unpack() returns them with encoding = &quot;bytes&quot;) is appended as its
+bytes, unchecked; any other must be valid UTF-8 once translated to it.
+Nothing is appended unless every element can be: an NA is a
+zubin_na_error, a value that does not fit its type a
+zubin_range_error, and a string that is not valid UTF-8 a
+zubin_encoding_error, each carrying the 0-based index of the first
+one."><meta property="og:description" content="Appends x to the end of the builder b. A raw vector is appended as it
 is (type = NULL). Any other vector needs a type, so that a double is
 never silently eight bytes: a numeric, logical or integer64 vector is
 encoded as bin_encode() would encode it (&quot;u32&quot;, &quot;f64&quot;, &quot;bool&quot;, ...),
@@ -18,10 +22,14 @@ in endian order, written straight into the builder; a list of raw
 vectors as &quot;b&amp;lt;n&amp;gt;&quot;. A character vector is appended with type = &quot;z&quot;,
 each string's UTF-8 bytes followed by a NUL, or with type = &quot;s&amp;lt;n&amp;gt;&quot;, each
 string's UTF-8 bytes padded with NULs to exactly n bytes, the
-fixed-string field of bin_layout(). Nothing is appended unless every
-element can be: an NA is a zubin_na_error, and a value that does not
-fit its type is a zubin_range_error, each carrying the 0-based index
-of the first one."></head><body>
+fixed-string field of bin_layout(). A string marked &quot;bytes&quot; (as
+bin_unpack() returns them with encoding = &quot;bytes&quot;) is appended as its
+bytes, unchecked; any other must be valid UTF-8 once translated to it.
+Nothing is appended unless every element can be: an NA is a
+zubin_na_error, a value that does not fit its type a
+zubin_range_error, and a string that is not valid UTF-8 a
+zubin_encoding_error, each carrying the 0-based index of the first
+one."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -70,10 +78,14 @@ in <code>endian</code> order, written straight into the builder; a list of raw
 vectors as <code>"b&lt;n&gt;"</code>. A character vector is appended with <code>type = "z"</code>,
 each string's UTF-8 bytes followed by a NUL, or with <code>type = "s&lt;n&gt;"</code>, each
 string's UTF-8 bytes padded with NULs to exactly <code>n</code> bytes, the
-fixed-string field of <code><a href="bin_layout.html">bin_layout()</a></code>. Nothing is appended unless every
-element can be: an <code>NA</code> is a <code>zubin_na_error</code>, and a value that does not
-fit its type is a <code>zubin_range_error</code>, each carrying the 0-based <code>index</code>
-of the first one.</p>
+fixed-string field of <code><a href="bin_layout.html">bin_layout()</a></code>. A string marked <code>"bytes"</code> (as
+<code><a href="bin_unpack.html">bin_unpack()</a></code> returns them with <code>encoding = "bytes"</code>) is appended as its
+bytes, unchecked; any other must be valid UTF-8 once translated to it.
+Nothing is appended unless every element can be: an <code>NA</code> is a
+<code>zubin_na_error</code>, a value that does not fit its type a
+<code>zubin_range_error</code>, and a string that is not valid UTF-8 a
+<code>zubin_encoding_error</code>, each carrying the 0-based <code>index</code> of the first
+one.</p>
     </div>
 
     <div class="section level2">

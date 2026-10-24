@@ -38,8 +38,10 @@ never printed with an error.
 
 - `zubin_encoding_error`:
 
-  An `s<n>` field is not valid UTF-8 (read it with `encoding = "latin1"`
-  or `"bytes"`). Fields: `field` and `index`.
+  An `s<n>` field read is not valid UTF-8 (read it with
+  `encoding = "latin1"` or `"bytes"`), or a string to be written is not
+  (mark it `"bytes"` to write its bytes as they are). Fields: `field`
+  and `index`.
 
 - `zubin_limit_error`:
 
@@ -48,7 +50,12 @@ never printed with an error.
 
 - `zubin_memory_error`:
 
-  An allocation failed, or a size would not fit in memory.
+  An allocation zubin makes itself failed (a builder's storage), or a
+  size would not fit in memory. A result that R allocates, such as the
+  columns of
+  [`bin_unpack()`](https://pedrobtz.github.io/zubin/reference/bin_unpack.md),
+  fails as R's own allocations do, with R's `cannot allocate vector`
+  error.
 
 ## Examples
 

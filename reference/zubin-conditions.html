@@ -84,9 +84,10 @@ record of the first such value.</p></dd>
 <code>field</code> and <code>index</code>.</p></dd>
 
 <dt><code>zubin_encoding_error</code></dt>
-<dd><p>An <code>s&lt;n&gt;</code> field is not valid UTF-8 (read
-it with <code>encoding = "latin1"</code> or <code>"bytes"</code>). Fields: <code>field</code> and
-<code>index</code>.</p></dd>
+<dd><p>An <code>s&lt;n&gt;</code> field read is not valid UTF-8
+(read it with <code>encoding = "latin1"</code> or <code>"bytes"</code>), or a string to be
+written is not (mark it <code>"bytes"</code> to write its bytes as they are).
+Fields: <code>field</code> and <code>index</code>.</p></dd>
 
 <dt><code>zubin_limit_error</code></dt>
 <dd><p>An append would pass a builder's <code>max</code>, which
@@ -94,8 +95,10 @@ leaves it unchanged. Fields: <code>size</code>, what the builder would have held
 and <code>max</code>.</p></dd>
 
 <dt><code>zubin_memory_error</code></dt>
-<dd><p>An allocation failed, or a size would not
-fit in memory.</p></dd>
+<dd><p>An allocation zubin makes itself failed (a
+builder's storage), or a size would not fit in memory. A result that
+R allocates, such as the columns of <code><a href="bin_unpack.html">bin_unpack()</a></code>, fails as R's own
+allocations do, with R's <code>cannot allocate vector</code> error.</p></dd>
 
 
 </dl></div>

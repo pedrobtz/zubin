@@ -11,9 +11,14 @@ character vector is appended with `type = "z"`, each string's UTF-8
 bytes followed by a NUL, or with `type = "s<n>"`, each string's UTF-8
 bytes padded with NULs to exactly `n` bytes, the fixed-string field of
 [`bin_layout()`](https://pedrobtz.github.io/zubin/reference/bin_layout.md).
-Nothing is appended unless every element can be: an `NA` is a
-`zubin_na_error`, and a value that does not fit its type is a
-`zubin_range_error`, each carrying the 0-based `index` of the first one.
+A string marked `"bytes"` (as
+[`bin_unpack()`](https://pedrobtz.github.io/zubin/reference/bin_unpack.md)
+returns them with `encoding = "bytes"`) is appended as its bytes,
+unchecked; any other must be valid UTF-8 once translated to it. Nothing
+is appended unless every element can be: an `NA` is a `zubin_na_error`,
+a value that does not fit its type a `zubin_range_error`, and a string
+that is not valid UTF-8 a `zubin_encoding_error`, each carrying the
+0-based `index` of the first one.
 
 ## Usage
 

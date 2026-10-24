@@ -262,7 +262,7 @@ other languages.
 
 - [`bin_serialize()`](https://pedrobtz.github.io/zubin/reference/bin_serialize.md)
   [`bin_unserialize()`](https://pedrobtz.github.io/zubin/reference/bin_serialize.md)
-  : Serialize R objects into a builder, and back from bytes at an offset
+  : Serialise R objects into a builder, and back from bytes at an offset
 - [`bin_hash_object()`](https://pedrobtz.github.io/zubin/reference/bin_hash_object.md)
   : A content fingerprint of an R object
 

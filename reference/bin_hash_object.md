@@ -1,16 +1,16 @@
 # A content fingerprint of an R object
 
-`bin_hash_object()` is XXH3 of the body of R's XDR serialization of `x`,
+`bin_hash_object()` is XXH3 of the body of R's XDR serialisation of `x`,
 format version 2 or 3: everything
 [`serialize()`](https://rdrr.io/r/base/serialize.html) writes after its
-header. It is streamed through the hasher, so the serialized bytes are
+header. It is streamed through the hasher, so the serialised bytes are
 never allocated. Skipping the header, which records the R version that
 wrote it (and, for `version = 3`, the native encoding), keeps the digest
 from changing with those; it stays the same for as long as R writes the
 same body for `x`, which R does not promise across its versions (see
 [`serialize()`](https://rdrr.io/r/base/serialize.html)), least of all
 for closures, environments and ALTREP objects. Objects with the same
-serialization have the same digest; the converse holds only up to the
+serialisation have the same digest; the converse holds only up to the
 chance of a collision.
 
 ## Usage
@@ -31,7 +31,7 @@ bin_hash_object(x, algo = c("xxh3_64", "xxh3_128"), version = 2L, seed = 0)
 
 - version:
 
-  The serialization format version, 2 or 3.
+  The serialisation format version, 2 or 3.
 
 - seed:
 
@@ -46,11 +46,23 @@ A string of 16 or 32 lower-case hexadecimal digits.
 It is a fingerprint, not a cryptographic digest and not a durable
 content address: fast, and well distributed, but not a defence against
 someone choosing inputs to collide. The digest is the same on every
-platform R runs on, with one exception: on 32-bit x86 a double `NA` is
-stored with different bits, so an object holding one hashes differently
-there. `version = 2`, the default, writes compact sequences such as
-`1:10` as the vectors they are; `version = 3` writes their compact form,
-so the same values may then hash differently.
+platform R runs on, with two exceptions:
+
+- On 32-bit x86 a double `NA` is stored with different bits, so an
+  object holding one hashes differently there.
+
+- R serialises a string as its bytes and its encoding mark, so the same
+  non-ASCII text hashes differently when it is marked UTF-8, latin1 or
+  not at all; and unmarked text is in the session's native encoding,
+  which depends on the locale.
+  [`identical()`](https://rdrr.io/r/base/identical.html) compares the
+  text, not the mark, so `identical(x, y)` does not imply equal digests.
+  Apply [`enc2utf8()`](https://rdrr.io/r/base/Encoding.html) to the
+  strings first for a digest that does not depend on either.
+
+`version = 2`, the default, writes compact sequences such as `1:10` as
+the vectors they are; `version = 3` writes their compact form, so the
+same values may then hash differently.
 
 ## Examples
 

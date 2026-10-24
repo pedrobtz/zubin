@@ -25,10 +25,10 @@ bin_encode(
 
 - type:
 
-  One type token of
-  [`bin_layout()`](https://pedrobtz.github.io/zubin/reference/bin_layout.md):
-  `"u8"` to `"f64"`, `"bool"`, `"b<n>"` or `"s<n>"`, optionally with a
-  `.le` or `.be` suffix.
+  Any type token of
+  [`bin_layout()`](https://pedrobtz.github.io/zubin/reference/bin_layout.md)
+  except padding (`"u8"`, `"i128"`, `"f16"`, `"c64"`, `"bool"`, `"b16"`,
+  `"s8"`, ...), optionally with a `.le` or `.be` suffix.
 
 - endian:
 
@@ -36,7 +36,8 @@ bin_encode(
 
 - na:
 
-  `"error"`, or `"allow"` to write `NA` as -2^31 into `i32`.
+  `"error"`, or `"allow"` to write `NA` into `i32` as -2^31 (and an
+  `integer64` `NA` into `i64` as -2^63).
 
 ## Value
 
