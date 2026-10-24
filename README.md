@@ -105,6 +105,25 @@ bin_decode(counts, "u64")
 #> ! The value of record 1 has no exact R value.
 ```
 
+**Take a number apart.** A double is a sign bit, an 11-bit exponent and
+a 52-bit fraction. Encoded and read back as two unsigned words, its
+fields come out exactly, and `0.1` turns out to be
+`7205759403792794 / 2^56`, a little more than a tenth:
+
+``` r
+w <- bin_unpack(bin_encode(c(1, 0.1, -2.5), "f64", endian = "big"), ">hi:u32 lo:u32")
+bits <- function(v, from, width) (v %/% 2^from) %% 2^width
+parts <- data.frame(sign = bits(w$hi, 31, 1), exponent = bits(w$hi, 20, 11) - 1023,
+                    fraction = bits(w$hi, 0, 20) * 2^32 + w$lo)
+format(parts, scientific = FALSE)
+#>   sign exponent         fraction
+#> 1    0        0                0
+#> 2    0       -4 2702159776422298
+#> 3    1        1 1125899906842624
+(2^52 + parts$fraction[2]) / 2^56 == 0.1
+#> [1] TRUE
+```
+
 **A million records in one call.** Packing a data frame and unpacking it
 again is one call each way, and the round trip is exact:
 
