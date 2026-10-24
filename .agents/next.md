@@ -170,7 +170,7 @@ what decides the order of the ladder above.
 | Mappable object format | ideas §1.1 | views, mmap, the serialisation policy | 0.4.0 | this *is* rdz's selective-read direction; one package, not two |
 | Content-defined chunking and store | ideas §1.2 | cursor and builder; zufast hashing | 0.1.0 | `dastash`'s storage backend; nothing zubin must add |
 | Bit-packed ALTREP integers; Gorilla/Chimp doubles | ideas §1.6, domains §2.2 | the ALTREP infrastructure and `zb_buf` | 0.3.0 | kernels from `simdcomp`; separate package |
-| Protobuf wire decoder | ideas §1.5 | cursor; varints from zufast | 0.1.0 plus varints | the varint consumer zufast waits for |
+| Protobuf wire decoder | ideas §1.5 | cursor; varints from zufast | 0.1.0 plus varints | the varint consumer zufast waits for. First target: GTFS-realtime (`gtfs-realtime.proto`), the feeds transit agencies publish every few seconds; its `FeedMessage` is tags and varints throughout, with `VehiclePosition` coordinates as `float` (`bin_decode()` once located). R reads it today through RProtoBuf and the system protobuf library |
 | CAN/DBC | domains §5.1 | bitfields | bitfields item | |
 | Shared-object inspector (ELF/Mach-O/PE imports) | ideas §1.7 | fixed layouts and `s<n>`, then `z` | 0.1.0, better at 0.2.0 | also a good vignette-sized demonstration of layouts |
 | Kaitai-style declarative formats | ideas §1.4 | layouts, cursor, views; `zuyaml` for the spec | 0.2.0 | a subset of Kaitai's expression language, said so |
