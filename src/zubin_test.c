@@ -434,7 +434,8 @@ SEXP zubin_test_buf_misc(void)
     const char *names[] = {"add_overflow", "mul_overflow", "mul_zero", "alloc_over_max",
                            "reserve_overflow", "grow_rule", "put_raw_empty", "detach",
                            "detach_borrowed", "release_twice", "n_overflow", "fill_to_max", "max_cap",
-                           "size_public", "adopt_detach", "adopt_invalid", "adopt_grow", ""};
+                           "size_public", "adopt_detach", "adopt_invalid", "adopt_grow",
+                           "put_raw", ""};
     SEXP out = PROTECT(Rf_mkNamed(LGLSXP, names));
     int *ok = LOGICAL(out);
     size_t r = 0;
@@ -542,6 +543,14 @@ SEXP zubin_test_buf_misc(void)
         ok[16] = ok[16] && b.data == NULL;
     }
 
+    /* zb_put_raw hands back the slot past the old end and advances len */
+    zb_buf_alloc(&b, 0, 0);
+    zb_put_u8(&b, 9);
+    slot = zb_put_raw(&b, 3);
+    if (slot) memcpy(slot, "xyz", 3);
+    ok[17] = slot == b.data + 1 && b.len == 4 && memcmp(b.data, "\x09xyz", 4) == 0;
+    zb_buf_release(&b);
+
     UNPROTECT(1);
     return out;
 }
@@ -557,6 +566,21 @@ SEXP zubin_test_put_then_error(void)
     Rf_error("zubin_test_put_then_error: the planned error");
     UNPROTECT(1);
     return R_NilValue;
+}
+
+/* zb_r_buf_new() asked for more than any buffer may hold: the buffer
+   struct exists and its finalizer is registered when zb_buf_alloc() fails,
+   so the failure path frees it eagerly. The status, and that the result is
+   R_NilValue; live_buffers() tells whether the struct was freed. */
+SEXP zubin_test_buf_new_fail(void)
+{
+    zb_status st = ZB_OK;
+    SEXP ptr = zb_r_buf_new((size_t)-1, 0, &st);
+    SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
+    SET_VECTOR_ELT(out, 0, Rf_mkString(zb_status_string(st)));
+    SET_VECTOR_ELT(out, 1, Rf_ScalarLogical(ptr == R_NilValue));
+    UNPROTECT(1);
+    return out;
 }
 
 /* `times` appends of `chunk` bytes into a buffer owned by R, with an
@@ -599,7 +623,7 @@ SEXP zubin_test_layout(SEXP spec, SEXP big, SEXP align, SEXP max_fields)
     const char *s = CHAR(STRING_ELT(spec, 0));
     SEXP out = PROTECT(Rf_mkNamed(VECSXP, names));
     l.nfields = 0;
-    st = zubin_int_parse(spec, Rf_asLogical(big) == TRUE, Rf_asLogical(align) == TRUE, mf, &l, &err);
+    st = zubin_int_parse(spec, Rf_asLogical(big) == TRUE, Rf_asLogical(align) == TRUE, mf, &l, &err, 1);
     SET_VECTOR_ELT(out, 0, Rf_mkString(zb_status_string(st)));
     SET_VECTOR_ELT(out, 1, Rf_ScalarReal(st ? (double)err : NA_REAL));
     SET_VECTOR_ELT(out, 13, Rf_ScalarReal((double)zb_layout_count_fields(s, strlen(s))));
@@ -702,7 +726,7 @@ SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
     zb_layout l;
     size_t err = 0, rs, nrec, len = (size_t)XLENGTH(bytes);
     uint32_t j;
-    zb_status st = zubin_int_parse(spec, 0, 0, 0, &l, &err);
+    zb_status st = zubin_int_parse(spec, 0, 0, 0, &l, &err, 1);
     const uint8_t *base = len ? RAW(bytes) : NULL;
     SEXP out;
     if (st) Rf_error("bad spec");
@@ -772,6 +796,82 @@ SEXP zubin_test_unpack_kernel(SEXP bytes, SEXP spec, SEXP n, SEXP stride)
         SET_VECTOR_ELT(one, 5, Rf_mkString(zb_status_string(s2)));
         SET_VECTOR_ELT(one, 6, Rf_ScalarReal(bad2 == (size_t)-1 ? NA_REAL : (double)bad2));
     }
+    UNPROTECT(1);
+    return out;
+}
+
+/* Every public kernel against every type, one zeroed record each: the
+   status, as a kernel x type matrix of names, and whether every kernel that
+   refused a type left its destination untouched. The accepted set is each
+   kernel's contract with C consumers, which the R glue never strays from. */
+SEXP zubin_test_kernel_types(void)
+{
+    static const zb_type types[] = {ZB_U8, ZB_I8, ZB_U16, ZB_I16, ZB_U32, ZB_I32, ZB_U64,
+                                    ZB_I64, ZB_F16, ZB_BF16, ZB_F32, ZB_F64, ZB_BOOL,
+                                    ZB_BYTES, ZB_STR, ZB_PAD, ZB_U128, ZB_I128, ZB_C64, ZB_C128};
+    static const char *const kernels[] = {"unpack_i32", "unpack_f64", "unpack_i64",
+                                          "unpack_f64x", "unpack_bytes", "unpack_cplx",
+                                          "unpack_native", "pack_i32", "pack_f64", "pack_i64",
+                                          "pack_bytes", "pack_cplx", "pack_native"};
+    const int nt = (int)(sizeof types / sizeof types[0]), nk = 13;
+    const char *names[] = {"status", "untouched", ""};
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names));
+    SEXP st = Rf_allocMatrix(STRSXP, nk, nt);
+    SEXP dn, rn, cn;
+    int i, k, untouched = 1;
+    SET_VECTOR_ELT(out, 0, st);
+    dn = Rf_allocVector(VECSXP, 2);
+    Rf_setAttrib(st, R_DimNamesSymbol, dn);
+    rn = Rf_allocVector(STRSXP, nk);
+    SET_VECTOR_ELT(dn, 0, rn);
+    cn = Rf_allocVector(STRSXP, nt);
+    SET_VECTOR_ELT(dn, 1, cn);
+    for (k = 0; k < nk; k++) SET_STRING_ELT(rn, k, Rf_mkChar(kernels[k]));
+    for (i = 0; i < nt; i++) {
+        zb_field f;
+        uint32_t w = zb_type_width(types[i]);
+        SET_STRING_ELT(cn, i, Rf_mkChar(zb_type_name(types[i])));
+        memset(&f, 0, sizeof f);
+        f.type = types[i];
+        f.count = w ? 1 : 4;
+        f.size = w ? w : 4;
+        for (k = 0; k < nk; k++) {
+            /* a union, so the typed destinations are aligned */
+            union { uint8_t b[64]; double d[8]; int64_t i[8]; int32_t w[16]; } dest;
+            uint8_t src[64], *dst = dest.b;
+            int32_t i32[8];
+            double f64[8];
+            int64_t i64[8];
+            size_t bad = 0;
+            zb_status r;
+            memset(src, 0, sizeof src);
+            memset(dst, 0xCD, sizeof dest);
+            memset(i32, 0, sizeof i32);
+            memset(f64, 0, sizeof f64);
+            memset(i64, 0, sizeof i64);
+            switch (k) {
+            case 0: r = zb_unpack_i32(src, 1, 16, &f, dest.w, 0, &bad); break;
+            case 1: r = zb_unpack_f64(src, 1, 16, &f, dest.d); break;
+            case 2: r = zb_unpack_i64(src, 1, 16, &f, dest.i, &bad); break;
+            case 3: r = zb_unpack_f64x(src, 1, 16, &f, dest.d, &bad); break;
+            case 4: r = zb_unpack_bytes(src, 1, 16, &f, dst); break;
+            case 5: r = zb_unpack_cplx(src, 1, 16, &f, dest.d); break;
+            case 6: r = zb_unpack_native(src, 1, 16, &f, dst); break;
+            case 7: r = zb_pack_i32(dst, 1, 16, &f, i32, 0, &bad); break;
+            case 8: r = zb_pack_f64(dst, 1, 16, &f, f64, 0, &bad); break;
+            case 9: r = zb_pack_i64(dst, 1, 16, &f, i64, 0, &bad); break;
+            case 10: r = zb_pack_bytes(dst, 1, 16, &f, src); break;
+            case 11: r = zb_pack_cplx(dst, 1, 16, &f, f64); break;
+            default: r = zb_pack_native(dst, 1, 16, &f, src); break;
+            }
+            SET_STRING_ELT(st, k + (R_xlen_t)nk * i, Rf_mkChar(zb_status_string(r)));
+            if (r == ZB_ERR_INVALID) {
+                int j;
+                for (j = 0; j < 64; j++) untouched = untouched && dst[j] == 0xCD;
+            }
+        }
+    }
+    SET_VECTOR_ELT(out, 1, Rf_ScalarLogical(untouched));
     UNPROTECT(1);
     return out;
 }

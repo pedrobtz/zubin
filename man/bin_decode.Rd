@@ -17,8 +17,9 @@ bin_decode(
 \arguments{
 \item{x}{A raw vector.}
 
-\item{type}{One type token of \code{\link[=bin_layout]{bin_layout()}}: \code{"u8"} to \code{"f64"}, \code{"bool"},
-\code{"b<n>"} or \code{"s<n>"}, optionally with a \code{.le} or \code{.be} suffix.}
+\item{type}{Any type token of \code{\link[=bin_layout]{bin_layout()}} except padding (\code{"u8"},
+\code{"i128"}, \code{"f16"}, \code{"c64"}, \code{"bool"}, \code{"b16"}, \code{"s8"}, ...), optionally
+with a \code{.le} or \code{.be} suffix.}
 
 \item{offset}{The 0-based byte position of the first record.}
 
@@ -26,16 +27,18 @@ bin_decode(
 
 \item{endian}{The byte order: \code{"little"}, \code{"big"}, or \code{"native"}.}
 
-\item{int64}{How \code{i64}, \code{u64}, \code{i128} and \code{u128} fields are returned: \code{"double"}, exact or
-an error; or \code{"integer64"}, a double vector carrying the 64-bit pattern
-with class \code{integer64}, as the bit64 package defines it.}
+\item{int64}{How \code{i64}, \code{u64}, \code{i128} and \code{u128} fields are returned:
+\code{"double"}, exact or an error; or \code{"integer64"}, a double vector
+carrying the 64-bit pattern with class \code{integer64}, as the bit64 package
+defines it.}
 
 \item{na}{\code{"error"}, or \code{"allow"} to read -2^31 in an \code{i32} field as
 \code{NA_integer_} (and -2^63 in \code{integer64} mode as \code{NA}).}
 }
 \value{
 A vector of the type's R type (see \code{\link[=bin_layout]{bin_layout()}}): integer,
-double, logical, character, or a list of raw vectors for \verb{b<n>}.
+double, \code{integer64}, complex, logical, character, or a list of raw
+vectors for \verb{b<n>}.
 }
 \description{
 \code{bin_decode()} reads \code{n} consecutive values of one type from the raw

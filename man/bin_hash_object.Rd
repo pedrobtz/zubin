@@ -11,7 +11,7 @@ bin_hash_object(x, algo = c("xxh3_64", "xxh3_128"), version = 2L, seed = 0)
 
 \item{algo}{\code{"xxh3_64"} for a 64-bit digest, \code{"xxh3_128"} for 128 bits.}
 
-\item{version}{The serialization format version, 2 or 3.}
+\item{version}{The serialisation format version, 2 or 3.}
 
 \item{seed}{A whole number from 0 to 2^53, the XXH3 seed.}
 }
@@ -19,26 +19,37 @@ bin_hash_object(x, algo = c("xxh3_64", "xxh3_128"), version = 2L, seed = 0)
 A string of 16 or 32 lower-case hexadecimal digits.
 }
 \description{
-\code{bin_hash_object()} is XXH3 of the body of R's XDR serialization of \code{x},
+\code{bin_hash_object()} is XXH3 of the body of R's XDR serialisation of \code{x},
 format version 2 or 3: everything \code{\link[=serialize]{serialize()}} writes after its header.
-It is streamed through the hasher, so the serialized bytes are never
+It is streamed through the hasher, so the serialised bytes are never
 allocated. Skipping the header, which records the R version that wrote it
 (and, for \code{version = 3}, the native encoding), keeps the digest from
 changing with those; it stays the same for as long as R writes the same
 body for \code{x}, which R does not promise across its versions (see
 \code{\link[=serialize]{serialize()}}), least of all for closures, environments and ALTREP
-objects. Objects with the same serialization have the same digest; the
+objects. Objects with the same serialisation have the same digest; the
 converse holds only up to the chance of a collision.
 }
 \details{
 It is a fingerprint, not a cryptographic digest and not a durable content
 address: fast, and well distributed, but not a defence against someone
-choosing inputs to collide. The digest is the same on every platform R runs on, with one
-exception: on 32-bit x86 a double \code{NA} is stored with different bits, so an
-object holding one hashes differently there. \code{version = 2}, the default,
-writes compact sequences such as
-\code{1:10} as the vectors they are; \code{version = 3} writes their compact form,
-so the same values may then hash differently.
+choosing inputs to collide. The digest is the same on every platform R
+runs on, with two exceptions:
+\itemize{
+\item On 32-bit x86 a double \code{NA} is stored with different bits, so an object
+holding one hashes differently there.
+\item R serialises a string as its bytes and its encoding mark, so the same
+non-ASCII text hashes differently when it is marked UTF-8, latin1 or
+not at all; and unmarked text is in the session's native encoding,
+which depends on the locale. \code{identical()} compares the text, not the
+mark, so \code{identical(x, y)} does not imply equal digests. Apply
+\code{\link[=enc2utf8]{enc2utf8()}} to the strings first for a digest that does not depend on
+either.
+}
+
+\code{version = 2}, the default, writes compact sequences such as \code{1:10} as the
+vectors they are; \code{version = 3} writes their compact form, so the same
+values may then hash differently.
 }
 \examples{
 bin_hash_object(mtcars)

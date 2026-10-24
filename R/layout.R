@@ -72,11 +72,11 @@
 #' With `align = FALSE` fields are packed at consecutive offsets. With
 #' `align = TRUE` each field starts at the next multiple of its element width
 #' (1 for `bool`, `b`, `s` and `x`; a complex type aligns as its part, `c64`
-#' to 4 and `c128` to 8; `i128` and `u128` to 16) and the record size is rounded up to the
-#' largest of them: the rule C compilers apply to a `struct` on 64-bit
-#' targets, so a struct written with `fwrite()` reads back with
-#' `align = TRUE`. (32-bit x86 aligns 8-byte members to 4 inside a struct;
-#' such a struct needs explicit `x` padding.)
+#' to 4 and `c128` to 8; `i128` and `u128` to 16) and the record size is
+#' rounded up to the largest of them: the rule C compilers apply to a
+#' `struct` on 64-bit targets, so a struct written with `fwrite()` reads back
+#' with `align = TRUE`. (32-bit x86 aligns 8-byte members to 4 inside a
+#' struct; such a struct needs explicit `x` padding.)
 #'
 #' @param spec A specification string; or a named character vector of type
 #'   tokens, whose names are the field names (`c(id = "u32", "x3")`); or a
@@ -104,11 +104,15 @@
 #'
 #' # A C struct { uint8_t a; uint32_t b; uint16_t c; }
 #' bin_layout("a:u8 b:u32 c:u16", endian = "native", align = TRUE)$fields
-bin_layout <- function(spec, endian = c("little", "big", "native"), align = FALSE) {
+bin_layout <- function(
+  spec,
+  endian = c("little", "big", "native"),
+  align = FALSE
+) {
   if (inherits(spec, "zubin_layout")) {
     return(spec)
   }
-  endian <- match.arg(endian)
+  endian <- arg_match(endian)
   if (!is.logical(align) || length(align) != 1L || is.na(align)) {
     invalid_argument("`align` must be TRUE or FALSE.", arg = "align")
   }
@@ -121,14 +125,19 @@ bin_layout <- function(spec, endian = c("little", "big", "native"), align = FALS
 # single spaces, each value prefixed by its name.
 spec_text <- function(spec, call = sys.call(-1L)) {
   if (!is.character(spec) || length(spec) < 1L || anyNA(spec)) {
-    invalid_argument("`spec` must be a string, a named character vector, or a layout.",
-                     arg = "spec", call = call)
+    invalid_argument(
+      "`spec` must be a string, a named character vector, or a layout.",
+      arg = "spec",
+      call = call
+    )
   }
   nms <- names(spec)
   if (length(spec) == 1L && is.null(nms)) {
     return(spec)
   }
-  if (is.null(nms)) nms <- rep("", length(spec))
+  if (is.null(nms)) {
+    nms <- rep("", length(spec))
+  }
   nms[is.na(nms)] <- ""
   parts <- ifelse(nzchar(nms), paste0(nms, ":", spec), spec)
   starts <- cumsum(c(0L, nchar(parts, type = "bytes") + 1L))
@@ -137,10 +146,18 @@ spec_text <- function(spec, call = sys.call(-1L)) {
   if (any(bad)) {
     i <- which(bad)[1L]
     at <- regexpr("[:,[:space:]]", spec[i])
-    zubin_abort(sprintf("The value of field %d, \"%s\", must be a type token alone.", i, spec[i]),
-                "zubin_spec_error",
-                position = as.double(starts[i] + nchar(parts[i]) - nchar(spec[i]) + at - 1L),
-                call = call)
+    zubin_abort(
+      sprintf(
+        "The value of field %d, \"%s\", must be a type token alone.",
+        i,
+        spec[i]
+      ),
+      "zubin_spec_error",
+      position = as.double(
+        starts[i] + nchar(parts[i]) - nchar(spec[i]) + at - 1L
+      ),
+      call = call
+    )
   }
   paste(parts, collapse = " ")
 }
@@ -149,12 +166,51 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
   res <- .Call(zubin_layout_parse, text, big, align)
   if (is_status(res)) {
     pos <- attr(res, "position")
-    zb_fail(res, sprintf("Malformed layout specification at byte %s: %s", pos,
-                         spec_context(text, pos)),
-            position = pos, call = call)
+    zb_fail(
+      res,
+      sprintf(
+        "Malformed layout specification at byte %s: %s",
+        pos,
+        spec_context(text, pos)
+      ),
+      position = pos,
+      call = call
+    )
   }
-  tokens <- c("u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f16", "bf16",
-              "f32", "f64", "bool", "b", "s", "x", rep(NA, 15L), "u128", "i128", "c64", "c128")
+  # names are unique: checked here, once, rather than pairwise in C, which
+  # is quadratic in the number of fields
+  dup <- anyDuplicated(res$name, incomparables = NA)
+  if (dup) {
+    zubin_abort(
+      sprintf("The name \"%s\" is used by more than one field.", res$name[dup]),
+      "zubin_spec_error",
+      position = as.double(res$name_pos[dup]),
+      call = call
+    )
+  }
+  tokens <- c(
+    "u8",
+    "i8",
+    "u16",
+    "i16",
+    "u32",
+    "i32",
+    "u64",
+    "i64",
+    "f16",
+    "bf16",
+    "f32",
+    "f64",
+    "bool",
+    "b",
+    "s",
+    "x",
+    rep(NA, 15L),
+    "u128",
+    "i128",
+    "c64",
+    "c128"
+  )
   types <- tokens[res$type]
   # b, s and x carry their width in the token
   wide <- res$type %in% 14:16
@@ -169,19 +225,41 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
   if (any(clash)) {
     taken <- name[clash][1L]
     pos <- as.double(res$name_pos[match(taken, res$name)])
-    zubin_abort(sprintf("The name \"%s\" is taken by an unnamed field's default name.", taken),
-                "zubin_spec_error", position = pos, call = call)
+    zubin_abort(
+      sprintf(
+        "The name \"%s\" is taken by an unnamed field's default name.",
+        taken
+      ),
+      "zubin_spec_error",
+      position = pos,
+      call = call
+    )
   }
-  endian <- ifelse(is.na(res$big), NA_character_, ifelse(res$big, "big", "little"))
+  endian <- ifelse(
+    is.na(res$big),
+    NA_character_,
+    ifelse(res$big, "big", "little")
+  )
   fields <- data.frame(
-    name = name, type = token, count = res$count, size = res$size,
-    offset = res$offset, endian = endian, stringsAsFactors = FALSE
+    name = name,
+    type = token,
+    count = res$count,
+    size = res$size,
+    offset = res$offset,
+    endian = endian,
+    stringsAsFactors = FALSE
   )
   # the order the spec itself declares, when it declares one
   prefix <- spec_prefix(text)
-  if (prefix == "<") big <- FALSE
-  if (prefix == ">") big <- TRUE
-  if (prefix == "=") big <- bin_info()$endian == "big"
+  if (prefix == "<") {
+    big <- FALSE
+  }
+  if (prefix == ">") {
+    big <- TRUE
+  }
+  if (prefix == "=") {
+    big <- bin_info()$endian == "big"
+  }
   structure(
     list(
       spec = normalise_spec(fields, pad, big),
@@ -212,7 +290,10 @@ normalise_spec <- function(fields, pad, big) {
   arr <- !pad & fields$count > 1L
   tok[arr] <- paste0(tok[arr], "[", fields$count[arr], "]")
   differs <- !is.na(fields$endian) & fields$endian != default
-  tok[differs] <- paste0(tok[differs], ifelse(fields$endian[differs] == "big", ".be", ".le"))
+  tok[differs] <- paste0(
+    tok[differs],
+    ifelse(fields$endian[differs] == "big", ".be", ".le")
+  )
   tok[!pad] <- paste0(fields$name[!pad], ":", tok[!pad])
   paste0(prefix, paste(tok, collapse = " "))
 }
@@ -260,11 +341,15 @@ format.zubin_layout <- function(x, ...) {
   f <- x$fields
   f$name[is.na(f$name)] <- ""
   f$endian[is.na(f$endian)] <- ""
-  head <- sprintf("<zubin_layout: %d bytes, %d field%s%s>", x$size, nrow(f),
-                  if (nrow(f) == 1L) "" else "s",
-                  if (x$align > 1L) sprintf(", aligned to %d", x$align) else "")
+  header <- sprintf(
+    "<zubin_layout: %d bytes, %d field%s%s>",
+    x$size,
+    nrow(f),
+    if (nrow(f) == 1L) "" else "s",
+    if (x$align > 1L) sprintf(", aligned to %d", x$align) else ""
+  )
   tab <- utils::capture.output(print(f, row.names = FALSE, right = FALSE))
-  c(head, tab)
+  c(header, tab)
 }
 
 #' @export

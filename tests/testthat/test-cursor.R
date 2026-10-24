@@ -29,6 +29,7 @@ test_that("every truncation point fails at the right field and leaves the cursor
 })
 
 test_that("every type at every position reads or refuses without moving", {
+  skip_if_no_slow_tests()   # 9 s: CI runs it, CRAN's budget is better spent elsewhere
   skip_heavy()
   for (len in 0:9) {
     x <- as.raw(seq_len(len))

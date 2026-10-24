@@ -177,7 +177,7 @@ test_that("unpack and decode validate their arguments", {
   expect_error(bin_unpack(x, "u8", offset = -1), class = "zubin_invalid_argument")
   expect_error(bin_unpack(x, "u8", n = 1.5), class = "zubin_invalid_argument")
   expect_error(bin_unpack(x, "u16", stride = 1), class = "zubin_invalid_argument")
-  expect_error(bin_unpack(x, "u8", as = "matrix"))
+  expect_error(bin_unpack(x, "u8", as = "matrix"), class = "zubin_invalid_argument")
   expect_error(bin_unpack(x, "u8 u7"), class = "zubin_spec_error")
   expect_error(bin_decode(x, "x2"), class = "zubin_invalid_argument")
   expect_error(bin_decode(x, "u8[2]"), class = "zubin_invalid_argument")
@@ -228,4 +228,11 @@ test_that("an interrupted unpack leaves nothing behind, and the input reads in f
   r <- bin_unpack(x, spec, as = "list")
   expect_length(r, 64L)
   expect_identical(r$f64[2e5], "ABCD")
+})
+
+test_that("a layout of padding alone reads no columns and writes no bytes", {
+  df <- bin_unpack(raw(8), "x4")
+  expect_identical(dim(df), c(0L, 0L))
+  expect_identical(bin_unpack(raw(8), "x4", as = "list"), structure(list(), names = character()))
+  expect_identical(bin_pack("x4"), raw(0))
 })

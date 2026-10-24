@@ -2,6 +2,7 @@
 
 S3method(as.data.frame,zubin_layout)
 S3method(as.raw,zubin_builder)
+S3method(bin_size,default)
 S3method(bin_size,zubin_builder)
 S3method(bin_size,zubin_layout)
 S3method(format,zubin_builder)

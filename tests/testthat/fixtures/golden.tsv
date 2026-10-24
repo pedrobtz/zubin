@@ -33,3 +33,8 @@ s4	<v:s4	61 62 00 00 61 62 63 64 61 00 62 63	list(v = c("ab", "abcd", "a"))	C st
 b3	<v:b3	01 02 03 00 00 00	list(v = list(as.raw(1:3), raw(3)))	fixed bytes
 mixed_order	<a:u16 b:u16.be c:u32.be d:u32	01 02 01 02 01 02 03 04 01 02 03 04	list(a = 513L, b = 258L, c = 16909060, d = 67305985)	per-field byte order overrides the prefix
 array	<id:u8 xyz:f32[3]	07 00 00 80 3f 00 00 00 40 00 00 40 40 08 00 00 80 bf 00 00 00 3f 00 00 00 00	list(id = c(7L, 8L), xyz = matrix(c(1, -1, 2, 0.5, 3, 0), 2L))	array fields are column-major: a matrix with one row per record
+u64be	>v:u64	00 00 00 00 00 00 00 00 00 20 00 00 00 00 00 00 00 00 00 01 00 00 00 01	list(v = c(0, 9007199254740992, 4294967297))	Python int.to_bytes, big-endian
+i128le	<v:i128	ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 00 00 00 20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 e0 ff ff ff ff ff ff ff ff ff	list(v = c(-1, 9007199254740992, -9007199254740992))	Python int.to_bytes, little-endian two's complement
+u128be	>v:u128	00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 1f ff ff ff ff ff ff	list(v = c(1, 9007199254740991))	Python int.to_bytes, big-endian
+c64le	<v:c64	00 00 c0 3f 00 00 00 c0 00 00 80 3e 00 00 00 00	list(v = c(complex(real = 1.5, imaginary = -2), complex(real = 0.25, imaginary = 0)))	Python struct '<ff' per value, real part first (C99 float complex)
+c128be	>v:c128	00 00 00 00 00 00 00 01 bf e0 00 00 00 00 00 00	list(v = complex(real = 2^-1074, imaginary = -0.5))	Python struct '>dd', real part first (C99 double complex)

@@ -29,10 +29,14 @@ in \code{endian} order, written straight into the builder; a list of raw
 vectors as \code{"b<n>"}. A character vector is appended with \code{type = "z"},
 each string's UTF-8 bytes followed by a NUL, or with \code{type = "s<n>"}, each
 string's UTF-8 bytes padded with NULs to exactly \code{n} bytes, the
-fixed-string field of \code{\link[=bin_layout]{bin_layout()}}. Nothing is appended unless every
-element can be: an \code{NA} is a \code{zubin_na_error}, and a value that does not
-fit its type is a \code{zubin_range_error}, each carrying the 0-based \code{index}
-of the first one.
+fixed-string field of \code{\link[=bin_layout]{bin_layout()}}. A string marked \code{"bytes"} (as
+\code{\link[=bin_unpack]{bin_unpack()}} returns them with \code{encoding = "bytes"}) is appended as its
+bytes, unchecked; any other must be valid UTF-8 once translated to it.
+Nothing is appended unless every element can be: an \code{NA} is a
+\code{zubin_na_error}, a value that does not fit its type a
+\code{zubin_range_error}, and a string that is not valid UTF-8 a
+\code{zubin_encoding_error}, each carrying the 0-based \code{index} of the first
+one.
 }
 \details{
 Appending past the builder's \code{max} is a \code{zubin_limit_error} carrying

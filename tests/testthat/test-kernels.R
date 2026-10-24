@@ -97,3 +97,26 @@ test_that("native unpack keeps each value's width in host order, and packs back"
   expect_identical(k[[1]]$native, host_order(bytes("01 00 03 00 02 00 04 00"), 2L))
   expect_true(k[[1]]$roundtrip)
 })
+
+test_that("each public kernel accepts its types and refuses the rest untouched", {
+  r <- .Call(zubin_test_kernel_types)
+  expect_true(r$untouched)
+  st <- r$status
+  expect_true(all(st %in% c("ZB_OK", "ZB_ERR_INVALID")))
+  small <- c("u8", "i8", "u16", "i16", "i32", "bool")
+  floats <- c("u32", "f16", "bf16", "f32", "f64")
+  wide <- c("u64", "i64", "u128", "i128")
+  every <- setdiff(colnames(st), "x")
+  accepts <- list(
+    unpack_i32 = small, unpack_f64 = floats, unpack_i64 = wide, unpack_f64x = wide,
+    unpack_bytes = c("b", "s"), unpack_cplx = c("c64", "c128"), unpack_native = every,
+    pack_i32 = small,
+    pack_f64 = c("u8", "i8", "u16", "i16", "i32", floats, wide),
+    pack_i64 = wide, pack_bytes = c("b", "s"), pack_cplx = c("c64", "c128"),
+    pack_native = every
+  )
+  expect_setequal(rownames(st), names(accepts))
+  for (k in names(accepts)) {
+    expect_setequal(colnames(st)[st[k, ] == "ZB_OK"], accepts[[k]])
+  }
+})

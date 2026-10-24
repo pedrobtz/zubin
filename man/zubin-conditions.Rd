@@ -26,14 +26,17 @@ than its field. Fields: \code{field} (\code{NA} for a codec) and \code{index}, t
 record of the first such value.}
 \item{\code{zubin_na_error}}{An \code{NA} has no bytes in its field. Fields:
 \code{field} and \code{index}.}
-\item{\code{zubin_encoding_error}}{An \verb{s<n>} field is not valid UTF-8 (read
-it with \code{encoding = "latin1"} or \code{"bytes"}). Fields: \code{field} and
-\code{index}.}
+\item{\code{zubin_encoding_error}}{An \verb{s<n>} field read is not valid UTF-8
+(read it with \code{encoding = "latin1"} or \code{"bytes"}), or a string to be
+written is not (mark it \code{"bytes"} to write its bytes as they are).
+Fields: \code{field} and \code{index}.}
 \item{\code{zubin_limit_error}}{An append would pass a builder's \code{max}, which
 leaves it unchanged. Fields: \code{size}, what the builder would have held,
 and \code{max}.}
-\item{\code{zubin_memory_error}}{An allocation failed, or a size would not
-fit in memory.}
+\item{\code{zubin_memory_error}}{An allocation zubin makes itself failed (a
+builder's storage), or a size would not fit in memory. A result that
+R allocates, such as the columns of \code{\link[=bin_unpack]{bin_unpack()}}, fails as R's own
+allocations do, with R's \verb{cannot allocate vector} error.}
 }
 }
 \examples{

@@ -15,12 +15,14 @@ bin_encode(
 \item{x}{A vector: numeric, logical, \code{integer64}, complex for \code{c64} and
 \code{c128}, character for \verb{s<n>}, or a list of raw vectors for \verb{b<n>}.}
 
-\item{type}{One type token of \code{\link[=bin_layout]{bin_layout()}}: \code{"u8"} to \code{"f64"}, \code{"bool"},
-\code{"b<n>"} or \code{"s<n>"}, optionally with a \code{.le} or \code{.be} suffix.}
+\item{type}{Any type token of \code{\link[=bin_layout]{bin_layout()}} except padding (\code{"u8"},
+\code{"i128"}, \code{"f16"}, \code{"c64"}, \code{"bool"}, \code{"b16"}, \code{"s8"}, ...), optionally
+with a \code{.le} or \code{.be} suffix.}
 
 \item{endian}{The byte order: \code{"little"}, \code{"big"}, or \code{"native"}.}
 
-\item{na}{\code{"error"}, or \code{"allow"} to write \code{NA} as -2^31 into \code{i32}.}
+\item{na}{\code{"error"}, or \code{"allow"} to write \code{NA} into \code{i32} as -2^31 (and
+an \code{integer64} \code{NA} into \code{i64} as -2^63).}
 }
 \value{
 A raw vector of \code{length(x)} times the type's width.

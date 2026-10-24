@@ -58,8 +58,23 @@ test_that("typed appends equal the writers of rw.h, one at a time or vectorised"
   }
 })
 
+# Corners no R-level call reaches, each a named TRUE from the harness
+# (zubin_test_buf_misc in src/zubin_test.c), so a failure names itself:
+#   add_overflow, mul_overflow, mul_zero  the checked size arithmetic
+#   alloc_over_max      zb_buf_alloc() with reserve past max takes nothing
+#   reserve_overflow    a reserve past SIZE_MAX fails and keeps the bytes
+#   grow_rule           doubling, then +50% past 64 MiB, clamped to max
+#   put_raw_empty       zb_put_raw(0) on an empty buffer is non-NULL, writes nothing
+#   detach, detach_borrowed  detach hands over owned memory, refuses borrowed
+#   release_twice       a second release is harmless
+#   n_overflow          a vectorised put whose byte count overflows fails whole
+#   fill_to_max         the last growth is clamped, so a buffer fills to max
+#   max_cap             nothing above PTRDIFF_MAX is asked of the allocator
+#   size_public         zb_size_add() and zb_size_mul(), the public names
+#   adopt_detach, adopt_invalid, adopt_grow  adopting a malloc block
+#   put_raw             zb_put_raw(n) returns the slot past the end, len + n
 test_that("the corners of buf.h hold", {
   checks <- .Call(zubin_test_buf_misc)
   expect_true(all(checks), label = paste(names(checks)[!checks], collapse = ", "))
-  expect_length(checks, 17L)
+  expect_length(checks, 18L)
 })
