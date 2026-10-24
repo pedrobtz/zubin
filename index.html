@@ -37,6 +37,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="articles/c-api.html">The C API</a></li>
+    <li><a class="dropdown-item" href="articles/sexp-header.html">Reading R's own object header</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
@@ -121,8 +122,21 @@
 <span><span class="fu"><a href="reference/bin_decode.html">bin_decode</a></span><span class="op">(</span><span class="va">counts</span>, <span class="st">"u64"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Error in `bin_decode()`:</span></span>
 <span><span class="co">#&gt; ! The value of record 1 has no exact R value.</span></span></code></pre></div>
-<p><strong>A million records in one call.</strong> Packing a data frame and unpacking it again is one call each way, and the round trip is exact:</p>
+<p><strong>Take a number apart.</strong> A double is a sign bit, an 11-bit exponent and a 52-bit fraction. Encoded and read back as two unsigned words, its fields come out exactly, and <code>0.1</code> turns out to be <code>7205759403792794 / 2^56</code>, a little more than a tenth:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">w</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="fu"><a href="reference/bin_encode.html">bin_encode</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0.1</span>, <span class="op">-</span><span class="fl">2.5</span><span class="op">)</span>, <span class="st">"f64"</span>, endian <span class="op">=</span> <span class="st">"big"</span><span class="op">)</span>, <span class="st">"&gt;hi:u32 lo:u32"</span><span class="op">)</span></span>
+<span><span class="va">bits</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">v</span>, <span class="va">from</span>, <span class="va">width</span><span class="op">)</span> <span class="op">(</span><span class="va">v</span> <span class="op"><a href="https://rdrr.io/r/base/Arithmetic.html" class="external-link">%/%</a></span> <span class="fl">2</span><span class="op">^</span><span class="va">from</span><span class="op">)</span> <span class="op"><a href="https://rdrr.io/r/base/Arithmetic.html" class="external-link">%%</a></span> <span class="fl">2</span><span class="op">^</span><span class="va">width</span></span>
+<span><span class="va">parts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>sign <span class="op">=</span> <span class="fu">bits</span><span class="op">(</span><span class="va">w</span><span class="op">$</span><span class="va">hi</span>, <span class="fl">31</span>, <span class="fl">1</span><span class="op">)</span>, exponent <span class="op">=</span> <span class="fu">bits</span><span class="op">(</span><span class="va">w</span><span class="op">$</span><span class="va">hi</span>, <span class="fl">20</span>, <span class="fl">11</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1023</span>,</span>
+<span>                    fraction <span class="op">=</span> <span class="fu">bits</span><span class="op">(</span><span class="va">w</span><span class="op">$</span><span class="va">hi</span>, <span class="fl">0</span>, <span class="fl">20</span><span class="op">)</span> <span class="op">*</span> <span class="fl">2</span><span class="op">^</span><span class="fl">32</span> <span class="op">+</span> <span class="va">w</span><span class="op">$</span><span class="va">lo</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="va">parts</span>, scientific <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   sign exponent         fraction</span></span>
+<span><span class="co">#&gt; 1    0        0                0</span></span>
+<span><span class="co">#&gt; 2    0       -4 2702159776422298</span></span>
+<span><span class="co">#&gt; 3    1        1 1125899906842624</span></span>
+<span><span class="op">(</span><span class="fl">2</span><span class="op">^</span><span class="fl">52</span> <span class="op">+</span> <span class="va">parts</span><span class="op">$</span><span class="va">fraction</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span> <span class="op">/</span> <span class="fl">2</span><span class="op">^</span><span class="fl">56</span> <span class="op">==</span> <span class="fl">0.1</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+<p><strong>A million records in one call.</strong> Packing a data frame and unpacking it again is one call each way, and the round trip is exact:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">rec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&lt;id:i32 price:f64 qty:i16 x2"</span><span class="op">)</span></span>
 <span><span class="va">trades</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">1e6</span>, price <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">1e6</span>, <span class="fl">90</span>, <span class="fl">110</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span>,</span>
@@ -133,7 +147,7 @@
 <span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="va">bytes</span>, <span class="va">rec</span><span class="op">)</span>, <span class="va">trades</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
 <p><strong>Mixed byte orders: a shapefile.</strong> The <code>.shp</code> part of a shapefile mixes byte orders inside one record: its file code and length are big-endian, everything after them little-endian. A <code>.be</code> suffix overrides the layout’s order for one field, so each record is still a single layout. Here the <code>quakes</code> data become a point shapefile, written with a builder, as the ESRI specification lays it out:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">shp_header</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&lt;code:i32.be x20 words:i32.be version:i32 type:i32</span></span>
 <span><span class="st">                          xmin:f64 ymin:f64 xmax:f64 ymax:f64 x32"</span><span class="op">)</span></span>
 <span><span class="va">point</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bin_layout.html">bin_layout</a></span><span class="op">(</span><span class="st">"&lt;id:i32.be words:i32.be type:i32 x:f64 y:f64"</span><span class="op">)</span></span>
@@ -152,7 +166,7 @@
 <span><span class="co">#&gt; 00000010: 0000 0000 0000 0000 0000 36e2 e803 0000  ..........6.....</span></span>
 <span><span class="co">#&gt; 00000020: 0100 0000 3d0a d7a3 70b5 6440 ec51 b81e  ....=...p.d@.Q..</span></span></code></pre></div>
 <p>The file code 9994 opens the file big-endian (<code>0000 270a</code>), and the version 1000 at offset 28 is little-endian (<code>e803 0000</code>). Reading it back is one call for the header and one for every point after it:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="va">shp</span>, <span class="va">shp_header</span>, n <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   code words version type   xmin   ymin   xmax   ymax</span></span>
 <span><span class="co">#&gt; 1 9994 14050    1000    1 165.67 -38.59 188.13 -10.72</span></span>
