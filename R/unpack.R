@@ -16,7 +16,10 @@
 #' first NUL; with `encoding = "UTF-8"` they must be valid UTF-8, or the call
 #' is a `zubin_encoding_error` carrying `field` and `index`.
 #'
-#' A single header is `bin_unpack(x, hdr, n = 1)`: a one-row result. A
+#' A single header is `bin_unpack(x, hdr, n = 1)`: a one-row result. Give
+#' `n = 1` whenever `x` holds more than the header, as a whole file does:
+#' with `n = NULL` the layout is read again at every multiple of its size,
+#' and the rows after the first are the bytes that follow the header. A
 #' layout of padding alone has no columns, and so returns a data frame of no
 #' columns and no rows.
 #'

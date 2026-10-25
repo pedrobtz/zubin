@@ -11,7 +11,10 @@
 #' be given as a matrix with one row per record, or as the columns `name.1`,
 #' ..., `name.k`, and a single record's array as a vector of length `k`.
 #' Columns are recycled to the longest; a length that does not divide it is a
-#' `zubin_invalid_argument` error, never a warning.
+#' `zubin_invalid_argument` error, never a warning. A field named `layout` or
+#' `na` cannot be given by name in `...`, where R matches it to
+#' `bin_pack()`'s own argument: give the columns as a data frame or list
+#' instead, `bin_pack(hdr, list(layout = 2, size = 8))`.
 #'
 #' Each field accepts the R types of the table in [bin_layout()]: integer,
 #' whole double and logical for the small integer types; integer and whole
