@@ -134,7 +134,10 @@ signed 64-bit range or an <code>i64</code> of -2^63 (bit64's <code>NA</code>). <
 fields read as complex vectors. An <code>s&lt;n&gt;</code> field holds the bytes up to its
 first NUL; with <code>encoding = "UTF-8"</code> they must be valid UTF-8, or the call
 is a <code>zubin_encoding_error</code> carrying <code>field</code> and <code>index</code>.</p>
-<p>A single header is <code>bin_unpack(x, hdr, n = 1)</code>: a one-row result. A
+<p>A single header is <code>bin_unpack(x, hdr, n = 1)</code>: a one-row result. Give
+<code>n = 1</code> whenever <code>x</code> holds more than the header, as a whole file does:
+with <code>n = NULL</code> the layout is read again at every multiple of its size,
+and the rows after the first are the bytes that follow the header. A
 layout of padding alone has no columns, and so returns a data frame of no
 columns and no rows.</p>
     </div>

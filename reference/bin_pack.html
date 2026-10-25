@@ -86,7 +86,10 @@ names. A data frame from <code><a href="bin_unpack.html">bin_unpack()</a></code>
 be given as a matrix with one row per record, or as the columns <code>name.1</code>,
 ..., <code>name.k</code>, and a single record's array as a vector of length <code>k</code>.
 Columns are recycled to the longest; a length that does not divide it is a
-<code>zubin_invalid_argument</code> error, never a warning.</p>
+<code>zubin_invalid_argument</code> error, never a warning. A field named <code>layout</code> or
+<code>na</code> cannot be given by name in <code>...</code>, where R matches it to
+<code>bin_pack()</code>'s own argument: give the columns as a data frame or list
+instead, <code>bin_pack(hdr, list(layout = 2, size = 8))</code>.</p>
 <p>Each field accepts the R types of the table in <code><a href="bin_layout.html">bin_layout()</a></code>: integer,
 whole double and logical for the small integer types; integer and whole
 double for <code>i32</code> and <code>u32</code>; integer, whole double and <code>integer64</code> for
