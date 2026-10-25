@@ -575,10 +575,11 @@ SEXP zubin_test_put_then_error(void)
 SEXP zubin_test_buf_new_fail(void)
 {
     zb_status st = ZB_OK;
-    SEXP ptr = zb_r_buf_new((size_t)-1, 0, &st);
+    /* only whether it is R_NilValue is kept, before anything allocates */
+    int nil = zb_r_buf_new((size_t)-1, 0, &st) == R_NilValue;
     SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
     SET_VECTOR_ELT(out, 0, Rf_mkString(zb_status_string(st)));
-    SET_VECTOR_ELT(out, 1, Rf_ScalarLogical(ptr == R_NilValue));
+    SET_VECTOR_ELT(out, 1, Rf_ScalarLogical(nil));
     UNPROTECT(1);
     return out;
 }
