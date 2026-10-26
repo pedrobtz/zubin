@@ -29,18 +29,24 @@ or write any number of records in one call.
   [`bin_encode()`](https://pedrobtz.github.io/zubin/reference/bin_encode.md)
   are the inverses, and a byte builder appends without quadratic
   copying, up to a hard cap.
+  [`bin_serialize()`](https://pedrobtz.github.io/zubin/reference/bin_serialize.md)
+  writes an R object into one without first making a raw vector, and
+  [`bin_hash_object()`](https://pedrobtz.github.io/zubin/reference/bin_hash_object.md)
+  fingerprints an object without making its serialisation at all.
 - **A C library underneath.** The same buffers, cursors and kernels are
   a header-only C99 library that other packages use through `LinkingTo`
   alone.
 
 ## Installation
 
+zubin is not on CRAN yet. Once it is, install it with:
+
 ``` r
 
 install.packages("zubin")
 ```
 
-or the development version from GitHub:
+Until then, and for the development version, install it from GitHub:
 
 ``` r
 
@@ -74,8 +80,8 @@ bin_unpack(readBin(png_file, "raw", 64), ihdr, n = 1)
 
 **The types base R lacks.**
 [`readBin()`](https://rdrr.io/r/base/readBin.html) has no unsigned
-32-bit integers and no half floats; zubin decodes both, in either byte
-order:
+32-bit integers, so it warns and reads four `ff` bytes as -1, and it has
+no half floats. zubin decodes both, in either byte order:
 
 ``` r
 
@@ -206,9 +212,15 @@ as in every format specification.
 - [The C API](https://pedrobtz.github.io/zubin/articles/c-api.html), for
   package authors: the `LinkingTo` recipe, the cursor, the record
   kernels, and buffers owned by R.
+- [Reading R’s own object
+  header](https://pedrobtz.github.io/zubin/articles/sexp-header.html), a
+  layout over bytes zubin did not write: the fixed-size C header behind
+  every R object, in native order, with a bitfield word, pointers and a
+  body at a known offset.
 - The [reference index](https://pedrobtz.github.io/zubin/reference/),
   with the full type table under
-  [`?bin_layout`](https://pedrobtz.github.io/zubin/reference/bin_layout.md).
+  [`?bin_layout`](https://pedrobtz.github.io/zubin/reference/bin_layout.md)
+  and the error classes under `?zubin-conditions`.
 
 ## Related work
 

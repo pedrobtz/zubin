@@ -69,16 +69,17 @@
 <li>
 <strong>Exact, or an error.</strong> Nothing is silently rounded, wrapped or truncated. A 64-bit integer that a double cannot hold, or a value too large for its field, is an error that names the field and the record.</li>
 <li>
-<strong>Writing too.</strong> <code><a href="reference/bin_pack.html">bin_pack()</a></code> and <code><a href="reference/bin_encode.html">bin_encode()</a></code> are the inverses, and a byte builder appends without quadratic copying, up to a hard cap.</li>
+<strong>Writing too.</strong> <code><a href="reference/bin_pack.html">bin_pack()</a></code> and <code><a href="reference/bin_encode.html">bin_encode()</a></code> are the inverses, and a byte builder appends without quadratic copying, up to a hard cap. <code><a href="reference/bin_serialize.html">bin_serialize()</a></code> writes an R object into one without first making a raw vector, and <code><a href="reference/bin_hash_object.html">bin_hash_object()</a></code> fingerprints an object without making its serialisation at all.</li>
 <li>
 <strong>A C library underneath.</strong> The same buffers, cursors and kernels are a header-only C99 library that other packages use through <code>LinkingTo</code> alone.</li>
 </ul>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
+<p>zubin is not on CRAN yet. Once it is, install it with:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"zubin"</span><span class="op">)</span></span></code></pre></div>
-<p>or the development version from GitHub:</p>
+<p>Until then, and for the development version, install it from GitHub:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"pedrobtz/zubin"</span><span class="op">)</span></span></code></pre></div>
@@ -99,7 +100,7 @@
 <span><span class="fu"><a href="reference/bin_unpack.html">bin_unpack</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin</a></span><span class="op">(</span><span class="va">png_file</span>, <span class="st">"raw"</span>, <span class="fl">64</span><span class="op">)</span>, <span class="va">ihdr</span>, n <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   length type width height depth colour</span></span>
 <span><span class="co">#&gt; 1     13 IHDR   640    480     8      6</span></span></code></pre></div>
-<p><strong>The types base R lacks.</strong> <code><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin()</a></code> has no unsigned 32-bit integers and no half floats; zubin decodes both, in either byte order:</p>
+<p><strong>The types base R lacks.</strong> <code><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin()</a></code> has no unsigned 32-bit integers, so it warns and reads four <code>ff</code> bytes as -1, and it has no half floats. zubin decodes both, in either byte order:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">as.raw</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0xff</span>, <span class="fl">0xff</span>, <span class="fl">0xff</span>, <span class="fl">0xff</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin</a></span><span class="op">(</span><span class="va">x</span>, <span class="st">"integer"</span>, size <span class="op">=</span> <span class="fl">4</span>, signed <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
@@ -188,7 +189,9 @@
 <a href="https://pedrobtz.github.io/zubin/articles/zubin.html">Structured binary data with zubin</a>, the getting-started guide: layouts, a WAV file written and read back, C structs, arrays, 64-bit integers and errors.</li>
 <li>
 <a href="https://pedrobtz.github.io/zubin/articles/c-api.html">The C API</a>, for package authors: the <code>LinkingTo</code> recipe, the cursor, the record kernels, and buffers owned by R.</li>
-<li>The <a href="https://pedrobtz.github.io/zubin/reference/">reference index</a>, with the full type table under <code><a href="reference/bin_layout.html">?bin_layout</a></code>.</li>
+<li>
+<a href="https://pedrobtz.github.io/zubin/articles/sexp-header.html">Reading R’s own object header</a>, a layout over bytes zubin did not write: the fixed-size C header behind every R object, in native order, with a bitfield word, pointers and a body at a known offset.</li>
+<li>The <a href="https://pedrobtz.github.io/zubin/reference/">reference index</a>, with the full type table under <code><a href="reference/bin_layout.html">?bin_layout</a></code> and the error classes under <code>?zubin-conditions</code>.</li>
 </ul>
 </div>
 <div class="section level2">
