@@ -79,11 +79,13 @@ rw_values <- function(type) {
 # loop, whose R_CheckUserInterrupt() enforces setTimeLimit(). TRUE if it was
 # cut short. The limit is always lifted again: transient limits last until R
 # returns to top level, which inside a test run is never (zucrypt's helper).
-# R's message is matched in English whatever the session's language.
+# R's message is matched in English whatever the session's language. The
+# limit is lifted first on exit (after = FALSE), ahead of withr's restore of
+# the language, which would otherwise run under it and could trip it.
 interrupted_by_time_limit <- function(f, limit) {
   withr::local_language("en")
   setTimeLimit(elapsed = limit, transient = TRUE)
-  on.exit(setTimeLimit(elapsed = Inf), add = TRUE)
+  on.exit(setTimeLimit(elapsed = Inf), add = TRUE, after = FALSE)
   tryCatch({
     f()
     FALSE
