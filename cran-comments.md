@@ -19,7 +19,8 @@ The checks below ran on the release commit in the package's continuous integrati
 
 * GitHub Actions: macOS (R release), Windows (R release and R-devel), Ubuntu (R release
   and oldrel-1).
-* R-hub containers with CRAN's compilers: clang 23, Ubuntu clang, Ubuntu GCC 16.
+* The r-devel containers with CRAN's compilers: `clang23`, `ubuntu-clang`, `ubuntu-gcc16`.
+* `nosuggests` (CRAN's noSuggests flavour) and `nold`.
 * 32-bit i386 and musl (Alpine), and big-endian s390x under QEMU.
 * UBSan and ASan (GCC and clang), valgrind, LTO, `gctorture`, rchk, and GCC's
   `-fanalyzer`.

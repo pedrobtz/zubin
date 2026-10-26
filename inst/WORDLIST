@@ -25,3 +25,5 @@ zufast's
 dtypes
 NumPy
 zuint
+NaNs
+refhook
