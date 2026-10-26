@@ -52,8 +52,8 @@ holds. An integer vector of three elements holds 48 bytes of header and
 x <- c(10L, 20L, 30L)
 b <- peek(x, 60L)
 bin_hexdump(b)
-#> 00000000: 0d00 0040 0300 0000 20cf ee78 7e55 0000  ...@.... ..x~U..
-#> 00000010: b8bb 3d7d 7e55 0000 38bc 3d7d 7e55 0000  ..=}~U..8.=}~U..
+#> 00000000: 0d00 0040 0300 0000 20df 27e9 c155 0000  ...@.... .'..U..
+#> 00000010: b81a 78ed c155 0000 381b 78ed c155 0000  ..x..U..8.x..U..
 #> 00000020: 0300 0000 0000 0000 0000 0000 0000 0000  ................
 #> 00000030: 0a00 0000 1400 0000 1e00 0000            ............
 ```
@@ -169,7 +169,7 @@ attrib <- function(x) address(bin_unpack(peek(x), header)$attrib[[1]])
 z <- structure(c(1, 2), units = "cm")
 c(double = attrib(c(1, 2)), string = attrib("a"), with_attr = attrib(z))
 #>           double           string        with_attr 
-#> "0x557e78eecf20" "0x557e78eecf20" "0x557e7ed7d5d8"
+#> "0x55c1e927df20" "0x55c1e927df20" "0x55c1ef149180"
 ```
 
 `1:3` is an ALTREP object, a compact sequence that stores its start and
@@ -198,12 +198,12 @@ The same fields, as R prints them; the `ATTRIB` address is the one
 ``` r
 
 .Internal(inspect(z))
-#> @557e7ed08028 14 REALSXP g0c2 [REF(2),ATT] (len=2, tl=0) 1,2
+#> @55c1ef10a968 14 REALSXP g0c2 [REF(2),ATT] (len=2, tl=0) 1,2
 #> ATTRIB:
-#>   @557e7ed7d5d8 02 LISTSXP g0c0 [REF(1)] 
-#>     TAG: @557e78ffaf48 01 SYMSXP g1c0 [MARK,REF(155),LCK,gp=0x4000] "units" (has value)
-#>     @557e7ed14460 16 STRSXP g0c1 [REF(6)] (len=1, tl=0)
-#>       @557e796af848 09 CHARSXP g1c1 [MARK,REF(97),gp=0x61] [ASCII] [cached] "cm"
+#>   @55c1ef149180 02 LISTSXP g0c0 [REF(1)] 
+#>     TAG: @55c1e938d408 01 SYMSXP g1c0 [MARK,REF(155),LCK,gp=0x4000] "units" (has value)
+#>     @55c1ef0e02a8 16 STRSXP g0c1 [REF(6)] (len=1, tl=0)
+#>       @55c1e9a41d08 09 CHARSXP g1c1 [MARK,REF(97),gp=0x61] [ASCII] [cached] "cm"
 ```
 
 ## How the real tools read the header

@@ -51,7 +51,23 @@ The first release.
   `"bytes"`, which is written as its bytes, so that what
   `bin_unpack(encoding = "bytes")` reads packs back
   ([\#44](https://github.com/pedrobtz/zubin/issues/44),
-  [\#50](https://github.com/pedrobtz/zubin/issues/50)).
+  [\#50](https://github.com/pedrobtz/zubin/issues/50)). A layout may not
+  name a field `a.1` beside an array field `a`, whose data-frame columns
+  those are ([\#73](https://github.com/pedrobtz/zubin/issues/73)), and a
+  `refhook` that changes the builder
+  [`bin_serialize()`](https://pedrobtz.github.io/zubin/reference/bin_serialize.md)
+  writes into is an error rather than a corrupt stream
+  ([\#72](https://github.com/pedrobtz/zubin/issues/72)).
+- [`bin_encode()`](https://pedrobtz.github.io/zubin/reference/bin_encode.md)
+  and a typed
+  [`bin_put()`](https://pedrobtz.github.io/zubin/reference/bin_put.md)
+  write every element of a matrix or array, as
+  [`writeBin()`](https://rdrr.io/r/base/readBin.html) does
+  ([\#79](https://github.com/pedrobtz/zubin/issues/79)); a typed
+  [`bin_put()`](https://pedrobtz.github.io/zubin/reference/bin_put.md)
+  of complex numbers or a byte list checks for an interrupt every 64
+  MiB, as one of numbers does
+  ([\#77](https://github.com/pedrobtz/zubin/issues/77)).
 
 ### C
 

@@ -60,10 +60,10 @@ unchecked, so that `bin_unpack(x, l, encoding = "bytes")` packs back to
 `x`; any other string must be valid UTF-8 once translated to it, or the
 call is a `zubin_encoding_error`. Nothing is truncated, wrapped or
 rounded into an integer type: a value that does not fit is a
-`zubin_range_error`, and an `NA` a `zubin_na_error`, each carrying
-`field` and the 0-based record `index` of the first one. `NA` has bytes
-only in `i32` (with `na = "allow"`), `f64`, and the other floating
-types, where it becomes a NaN.
+`zubin_range_error`, and an `NA` or a NaN a `zubin_na_error`, each
+carrying `field` and the 0-based record `index` of the first one. `NA`
+has bytes only in `i32` (with `na = "allow"`), `f64`, and the other
+floating types, where it becomes a NaN.
 
 ## See also
 

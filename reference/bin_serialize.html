@@ -111,7 +111,10 @@ the stream (an object it cannot serialise, a malformed stream, an error in
 <code>refhook</code>) arrive as R raised them. A stream that ends before the
 object does is a <code>zubin_bounds_error</code> carrying <code>offset</code> and <code>length</code>. An
 append that would pass the builder's <code>max</code> is a <code>zubin_limit_error</code>; in
-every failure, an interrupt included, the builder is left as it was.</p>
+every failure, an interrupt included, the builder is left as it was.
+<code>refhook</code> must not use <code>b</code>: a refhook that changes it is a
+<code>zubin_invalid_argument</code> error, and one that removed bytes from <code>b</code> leaves
+it holding what the refhook left.</p>
 <p>Only read serialised data from a source you trust: a serialisation
 stream can hold any R object, functions and environments included.</p>
     </div>

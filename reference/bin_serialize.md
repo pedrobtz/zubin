@@ -63,7 +63,10 @@ cannot serialise, a malformed stream, an error in `refhook`) arrive as R
 raised them. A stream that ends before the object does is a
 `zubin_bounds_error` carrying `offset` and `length`. An append that
 would pass the builder's `max` is a `zubin_limit_error`; in every
-failure, an interrupt included, the builder is left as it was.
+failure, an interrupt included, the builder is left as it was. `refhook`
+must not use `b`: a refhook that changes it is a
+`zubin_invalid_argument` error, and one that removed bytes from `b`
+leaves it holding what the refhook left.
 
 Only read serialised data from a source you trust: a serialisation
 stream can hold any R object, functions and environments included.

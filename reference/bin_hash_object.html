@@ -103,17 +103,23 @@ converse holds only up to the chance of a collision.</p>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>It is a fingerprint, not a cryptographic digest and not a durable content
 address: fast, and well distributed, but not a defence against someone
-choosing inputs to collide. The digest is the same on every platform R
-runs on, with two exceptions:</p><ul><li><p>On 32-bit x86 a double <code>NA</code> is stored with different bits, so an object
-holding one hashes differently there.</p></li>
-<li><p>R serialises a string as its bytes and its encoding mark, so the same
-non-ASCII text hashes differently when it is marked UTF-8, latin1 or
-not at all; and unmarked text is in the session's native encoding,
-which depends on the locale. <code><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical()</a></code> compares the text, not the
-mark, so <code>identical(x, y)</code> does not imply equal digests. Apply
-<code><a href="https://rdrr.io/r/base/Encoding.html" class="external-link">enc2utf8()</a></code> to the strings first for a digest that does not depend on
-either.</p></li>
-</ul><p><code>version = 2</code>, the default, writes compact sequences such as <code>1:10</code> as the
+choosing inputs to collide.</p>
+<p>The digest is of the bytes R writes, not of the values they stand for, so
+<code>identical(x, y)</code> does not imply equal digests:</p><ul><li><p>A double is its 64 bits. <code>0</code> and <code>-0</code> differ, as do NaNs of different
+sign or payload, and <code>NA</code> once arithmetic has set its quiet bit
+(<code>c(NA, 1) + 0</code>), though <code><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical()</a></code> treats each pair as the same.
+How NaN and <code>NA</code> propagate through arithmetic depends on the platform
+(see <a href="https://rdrr.io/r/base/NA.html" class="external-link">NA</a>), so the same computation may hash differently on two
+machines; and on 32-bit x86 even a double <code>NA</code> written as a literal has
+different bits.</p></li>
+<li><p>A string is its bytes and its encoding mark, so the same non-ASCII text
+hashes differently when it is marked UTF-8, latin1 or not at all; and
+unmarked text is in the session's native encoding, which depends on the
+locale. Apply <code><a href="https://rdrr.io/r/base/Encoding.html" class="external-link">enc2utf8()</a></code> to the strings first for a digest that does
+not depend on either.</p></li>
+</ul><p>Apart from these, the digest of an object is the same on every platform R
+runs on.</p>
+<p><code>version = 2</code>, the default, writes compact sequences such as <code>1:10</code> as the
 vectors they are; <code>version = 3</code> writes their compact form, so the same
 values may then hash differently.</p>
     </div>

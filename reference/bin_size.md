@@ -8,6 +8,9 @@ one record.
 ``` r
 bin_size(x, ...)
 
+# S3 method for class 'zubin_builder'
+bin_size(x, ...)
+
 # S3 method for class 'zubin_layout'
 bin_size(x, ...)
 ```

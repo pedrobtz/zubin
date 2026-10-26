@@ -112,8 +112,8 @@ header and 12 of data.</p>
 <code class="sourceCode R"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10L</span>, <span class="fl">20L</span>, <span class="fl">30L</span><span class="op">)</span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="fu">peek</span><span class="op">(</span><span class="va">x</span>, <span class="fl">60L</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/bin_hexdump.html">bin_hexdump</a></span><span class="op">(</span><span class="va">b</span><span class="op">)</span></span>
-<span><span class="co">#&gt; 00000000: 0d00 0040 0300 0000 20cf ee78 7e55 0000  ...@.... ..x~U..</span></span>
-<span><span class="co">#&gt; 00000010: b8bb 3d7d 7e55 0000 38bc 3d7d 7e55 0000  ..=}~U..8.=}~U..</span></span>
+<span><span class="co">#&gt; 00000000: 0d00 0040 0300 0000 20df 27e9 c155 0000  ...@.... .'..U..</span></span>
+<span><span class="co">#&gt; 00000010: b81a 78ed c155 0000 381b 78ed c155 0000  ..x..U..8.x..U..</span></span>
 <span><span class="co">#&gt; 00000020: 0300 0000 0000 0000 0000 0000 0000 0000  ................</span></span>
 <span><span class="co">#&gt; 00000030: 0a00 0000 1400 0000 1e00 0000            ............</span></span></code></pre></div>
 </div>
@@ -304,7 +304,7 @@ address. An attribute makes it a pairlist of its own:</p>
 <span><span class="va">z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/structure.html" class="external-link">structure</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span>, units <span class="op">=</span> <span class="st">"cm"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>double <span class="op">=</span> <span class="fu">attrib</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span>, string <span class="op">=</span> <span class="fu">attrib</span><span class="op">(</span><span class="st">"a"</span><span class="op">)</span>, with_attr <span class="op">=</span> <span class="fu">attrib</span><span class="op">(</span><span class="va">z</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;           double           string        with_attr </span></span>
-<span><span class="co">#&gt; "0x557e78eecf20" "0x557e78eecf20" "0x557e7ed7d5d8"</span></span></code></pre></div>
+<span><span class="co">#&gt; "0x55c1e927df20" "0x55c1e927df20" "0x55c1ef149180"</span></span></code></pre></div>
 <p><code>1:3</code> is an ALTREP object, a compact sequence that stores
 its start and end, not its elements: <code>alt</code> is set, and the 16
 bytes at offset 32 hold ALTREP’s own pointers, not a length.</p>
@@ -321,12 +321,12 @@ bytes at offset 32 hold ALTREP’s own pointers, not a length.</p>
 the one <code>attrib()</code> read above:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Internal.html" class="external-link">.Internal</a></span><span class="op">(</span><span class="fu">inspect</span><span class="op">(</span><span class="va">z</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; @557e7ed08028 14 REALSXP g0c2 [REF(2),ATT] (len=2, tl=0) 1,2</span></span>
+<span><span class="co">#&gt; @55c1ef10a968 14 REALSXP g0c2 [REF(2),ATT] (len=2, tl=0) 1,2</span></span>
 <span><span class="co">#&gt; ATTRIB:</span></span>
-<span><span class="co">#&gt;   @557e7ed7d5d8 02 LISTSXP g0c0 [REF(1)] </span></span>
-<span><span class="co">#&gt;     TAG: @557e78ffaf48 01 SYMSXP g1c0 [MARK,REF(155),LCK,gp=0x4000] "units" (has value)</span></span>
-<span><span class="co">#&gt;     @557e7ed14460 16 STRSXP g0c1 [REF(6)] (len=1, tl=0)</span></span>
-<span><span class="co">#&gt;       @557e796af848 09 CHARSXP g1c1 [MARK,REF(97),gp=0x61] [ASCII] [cached] "cm"</span></span></code></pre></div>
+<span><span class="co">#&gt;   @55c1ef149180 02 LISTSXP g0c0 [REF(1)] </span></span>
+<span><span class="co">#&gt;     TAG: @55c1e938d408 01 SYMSXP g1c0 [MARK,REF(155),LCK,gp=0x4000] "units" (has value)</span></span>
+<span><span class="co">#&gt;     @55c1ef0e02a8 16 STRSXP g0c1 [REF(6)] (len=1, tl=0)</span></span>
+<span><span class="co">#&gt;       @55c1e9a41d08 09 CHARSXP g1c1 [MARK,REF(97),gp=0x61] [ASCII] [cached] "cm"</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="how-the-real-tools-read-the-header">How the real tools read the header<a class="anchor" aria-label="anchor" href="#how-the-real-tools-read-the-header"></a>

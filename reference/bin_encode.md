@@ -1,6 +1,7 @@
 # Write a vector of one type to bytes
 
-`bin_encode()` writes every element of `x` as `type`, in `endian` order:
+`bin_encode()` writes every element of `x` as `type`, in `endian` order
+(a matrix or array in column-major order, as its elements are stored):
 [`writeBin()`](https://rdrr.io/r/base/readBin.html) generalised to every
 width and both byte orders, rounding to f16, bf16 and f32 to nearest
 even, and refusing, never truncating, an integer that does not fit.

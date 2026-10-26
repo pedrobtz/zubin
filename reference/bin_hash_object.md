@@ -45,20 +45,29 @@ A string of 16 or 32 lower-case hexadecimal digits.
 
 It is a fingerprint, not a cryptographic digest and not a durable
 content address: fast, and well distributed, but not a defence against
-someone choosing inputs to collide. The digest is the same on every
-platform R runs on, with two exceptions:
+someone choosing inputs to collide.
 
-- On 32-bit x86 a double `NA` is stored with different bits, so an
-  object holding one hashes differently there.
+The digest is of the bytes R writes, not of the values they stand for,
+so `identical(x, y)` does not imply equal digests:
 
-- R serialises a string as its bytes and its encoding mark, so the same
-  non-ASCII text hashes differently when it is marked UTF-8, latin1 or
-  not at all; and unmarked text is in the session's native encoding,
-  which depends on the locale.
-  [`identical()`](https://rdrr.io/r/base/identical.html) compares the
-  text, not the mark, so `identical(x, y)` does not imply equal digests.
-  Apply [`enc2utf8()`](https://rdrr.io/r/base/Encoding.html) to the
-  strings first for a digest that does not depend on either.
+- A double is its 64 bits. `0` and `-0` differ, as do NaNs of different
+  sign or payload, and `NA` once arithmetic has set its quiet bit
+  (`c(NA, 1) + 0`), though
+  [`identical()`](https://rdrr.io/r/base/identical.html) treats each
+  pair as the same. How NaN and `NA` propagate through arithmetic
+  depends on the platform (see [NA](https://rdrr.io/r/base/NA.html)), so
+  the same computation may hash differently on two machines; and on
+  32-bit x86 even a double `NA` written as a literal has different bits.
+
+- A string is its bytes and its encoding mark, so the same non-ASCII
+  text hashes differently when it is marked UTF-8, latin1 or not at all;
+  and unmarked text is in the session's native encoding, which depends
+  on the locale. Apply
+  [`enc2utf8()`](https://rdrr.io/r/base/Encoding.html) to the strings
+  first for a digest that does not depend on either.
+
+Apart from these, the digest of an object is the same on every platform
+R runs on.
 
 `version = 2`, the default, writes compact sequences such as `1:10` as
 the vectors they are; `version = 3` writes their compact form, so the

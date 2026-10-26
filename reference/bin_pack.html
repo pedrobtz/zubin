@@ -97,14 +97,15 @@ double for <code>i32</code> and <code>u32</code>; integer, whole double and <cod
 to nearest even); complex, or numeric as a real part, for <code>c64</code> and <code>c128</code>;
 logical for <code>bool</code>; character for <code>s&lt;n&gt;</code> (UTF-8, at most <code>n</code> bytes); and a
 list of raw vectors of exactly <code>n</code> bytes for <code>b&lt;n&gt;</code>. A string marked
-<code>"bytes"</code> is written as its bytes, unchecked, so that <code>bin_unpack(x, l, encoding = "bytes")</code> packs back to <code>x</code>; any other string must be valid
-UTF-8 once translated to it, or the call is a <code>zubin_encoding_error</code>.
-Nothing is truncated, wrapped or rounded into an integer type: a value
-that does not fit is a <code>zubin_range_error</code>, and an <code>NA</code> a
-<code>zubin_na_error</code>, each carrying <code>field</code> and the 0-based record <code>index</code> of
-the first one. <code>NA</code> has bytes only in
-<code>i32</code> (with <code>na = "allow"</code>), <code>f64</code>, and the other floating types, where it
-becomes a NaN.</p>
+<code>"bytes"</code> is written as its bytes, unchecked, so that
+<code>bin_unpack(x, l, encoding = "bytes")</code> packs back to <code>x</code>; any other string
+must be valid UTF-8 once translated to it, or the call is a
+<code>zubin_encoding_error</code>. Nothing is truncated, wrapped or rounded into an
+integer type: a value that does not fit is a <code>zubin_range_error</code>, and an
+<code>NA</code> or a NaN a <code>zubin_na_error</code>, each carrying <code>field</code> and the 0-based
+record <code>index</code> of the first one. <code>NA</code> has bytes only in <code>i32</code> (with
+<code>na = "allow"</code>), <code>f64</code>, and the other floating types, where it becomes a
+NaN.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
