@@ -7,6 +7,8 @@
 
 [![R-CMD-check](https://github.com/pedrobtz/zubin/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/pedrobtz/zubin/actions/workflows/R-CMD-check.yaml)
 [![coverage](https://raw.githubusercontent.com/pedrobtz/zubin/main/.github/badges/coverage.svg)](https://github.com/pedrobtz/zubin/actions/workflows/coverage.yaml)
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
 Every binary format, from an image header to a market data feed to a C
@@ -32,17 +34,22 @@ or write any number of records in one call.
   large for its field, is an error that names the field and the record.
 - **Writing too.** `bin_pack()` and `bin_encode()` are the inverses, and
   a byte builder appends without quadratic copying, up to a hard cap.
+  `bin_serialize()` writes an R object into one without first making a
+  raw vector, and `bin_hash_object()` fingerprints an object without
+  making its serialisation at all.
 - **A C library underneath.** The same buffers, cursors and kernels are
   a header-only C99 library that other packages use through `LinkingTo`
   alone.
 
 ## Installation
 
+zubin is not on CRAN yet. Once it is, install it with:
+
 ``` r
 install.packages("zubin")
 ```
 
-or the development version from GitHub:
+Until then, and for the development version, install it from GitHub:
 
 ``` r
 # install.packages("pak")
@@ -71,8 +78,9 @@ bin_unpack(readBin(png_file, "raw", 64), ihdr, n = 1)
 #> 1     13 IHDR   640    480     8      6
 ```
 
-**The types base R lacks.** `readBin()` has no unsigned 32-bit integers
-and no half floats; zubin decodes both, in either byte order:
+**The types base R lacks.** `readBin()` has no unsigned 32-bit integers,
+so it warns and reads four `ff` bytes as -1, and it has no half floats.
+zubin decodes both, in either byte order:
 
 ``` r
 x <- as.raw(c(0xff, 0xff, 0xff, 0xff))
@@ -196,8 +204,14 @@ as in every format specification.
 - [The C API](https://pedrobtz.github.io/zubin/articles/c-api.html), for
   package authors: the `LinkingTo` recipe, the cursor, the record
   kernels, and buffers owned by R.
+- [Reading R’s own object
+  header](https://pedrobtz.github.io/zubin/articles/sexp-header.html), a
+  layout over bytes zubin did not write: the fixed-size C header behind
+  every R object, in native order, with a bitfield word, pointers and a
+  body at a known offset.
 - The [reference index](https://pedrobtz.github.io/zubin/reference/),
-  with the full type table under `?bin_layout`.
+  with the full type table under `?bin_layout` and the error classes
+  under `?zubin-conditions`.
 
 ## Related work
 

@@ -1,5 +1,6 @@
 ALTREP
 CMD
+Lifecycle
 LinkingTo
 NUL
 NULs
@@ -7,6 +8,7 @@ R's
 XDR
 XXH
 bfloat
+bitfield
 bitfields
 booleans
 finalizer
