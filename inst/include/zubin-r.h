@@ -337,21 +337,36 @@ ZB_INLINE void zb_serialize_to_sink(SEXP x, zb_sink_fn fn, void *state,
 
 /* zb_serialize: the builder as the sink. A builder that refuses to grow
    keeps refusing; the stream runs to its end into nothing, and the status
-   and the size it would have needed are reported afterwards. */
+   and the size it would have needed are reported afterwards. A refhook is
+   R code run in the middle of the stream: if it changes the builder, the
+   length is no longer len0 plus what the sink wrote, and the stream is
+   refused as ZB_ERR_INVALID rather than written around its changes. */
 typedef struct {
     zb_buf *b;
     size_t len0;           /* the builder's length before, restored on failure */
+    size_t written;        /* bytes the sink appended */
     size_t total;          /* bytes R produced, whether they fitted or not */
     zb_status st;
     SEXP x, refhook;
     int version, xdr;
 } zb_r_int_ser;
 
+ZB_INLINE int zb_r_int_ser_moved(const zb_r_int_ser *s)
+{
+    return s->b->len != s->len0 + s->written;
+}
+
 ZB_INLINE void zb_r_int_bufsink(void *state, const void *p, size_t n)
 {
     zb_r_int_ser *s = (zb_r_int_ser *)state;
     s->total += n;
-    if (!s->st) s->st = zb_put_bytes(s->b, p, n);
+    if (s->st) return;
+    if (zb_r_int_ser_moved(s)) {
+        s->st = ZB_ERR_INVALID;
+        return;
+    }
+    s->st = zb_put_bytes(s->b, p, n);
+    if (!s->st) s->written += n;
 }
 
 ZB_INLINE SEXP zb_r_int_ser_body(void *data)
@@ -361,10 +376,18 @@ ZB_INLINE SEXP zb_r_int_ser_body(void *data)
     return R_NilValue;
 }
 
+/* Restores the length the builder had before, unless a refhook has taken
+   bytes from it: what it left is then the caller's to make sense of, and
+   len0 might point past bytes it overwrote. */
+ZB_INLINE void zb_r_int_ser_restore(zb_r_int_ser *s)
+{
+    if (s->b->len >= s->len0) s->b->len = s->len0;
+}
+
 ZB_INLINE void zb_r_int_ser_clean(void *data, Rboolean jump)
 {
     zb_r_int_ser *s = (zb_r_int_ser *)data;
-    if (jump) s->b->len = s->len0;   /* an error or an interrupt appends nothing */
+    if (jump) zb_r_int_ser_restore(s);   /* an error or an interrupt appends nothing */
 }
 
 /* zb_serialize, also reporting in *total the bytes R produced, whether they
@@ -386,15 +409,18 @@ ZB_INLINE zb_status zb_r_int_serialize_buf(SEXP x, zb_buf *b, int version, int x
     cont = PROTECT(R_MakeUnwindCont());
     R_UnwindProtect(zb_r_int_ser_body, &s, zb_r_int_ser_clean, &s, cont);
     UNPROTECT(1);
-    if (s.st) b->len = s.len0;
+    if (!s.st && zb_r_int_ser_moved(&s)) s.st = ZB_ERR_INVALID;
+    if (s.st) zb_r_int_ser_restore(&s);
     if (total) *total = s.total;
     return s.st;
 }
 
 /* Appends x's serialization to b. ZB_ERR_INVALID for a version other than 2
-   or 3; ZB_ERR_LIMIT or ZB_ERR_MEMORY when b cannot hold it. On any failure,
-   and when R_Serialize raises (b's memory must then be owned by R, as
-   zb_r_buf_new() makes it), b holds exactly what it held. */
+   or 3, or when the refhook changes b; ZB_ERR_LIMIT or ZB_ERR_MEMORY when b
+   cannot hold it. On any failure, and when R_Serialize raises (b's memory
+   must then be owned by R, as zb_r_buf_new() makes it), b holds exactly
+   what it held, unless the refhook removed bytes from it: a refhook must
+   not use b. */
 ZB_INLINE zb_status zb_serialize(SEXP x, zb_buf *b, int version, int xdr, SEXP refhook)
 {
     return zb_r_int_serialize_buf(x, b, version, xdr, refhook, NULL);
@@ -404,7 +430,8 @@ ZB_INLINE zb_status zb_serialize(SEXP x, zb_buf *b, int version, int xdr, SEXP r
 typedef struct {
     const uint8_t *base;
     size_t len, pos;
-    int eof;
+    int eof;               /* the in-stream ran out */
+    int caught;            /* the handler caught the private class */
     SEXP refhook;
 } zb_r_int_in;
 
@@ -462,11 +489,12 @@ ZB_INLINE SEXP zb_r_int_unser_body(void *data)
     return R_Unserialize(&in);
 }
 
+/* Returns the condition, so that one the stream did not signal (a refhook
+   can signal any class) is raised again rather than taken for EOF. */
 ZB_INLINE SEXP zb_r_int_unser_eof(SEXP cond, void *data)
 {
-    (void)cond;
-    (void)data;
-    return R_NilValue;
+    ((zb_r_int_in *)data)->caught = 1;
+    return cond;
 }
 
 /* Unserializes one stream at the cursor and advances it past the stream,
@@ -483,12 +511,18 @@ ZB_INLINE SEXP zb_unserialize(zb_cur *c, SEXP refhook, zb_status *st)
     s.len = c->len - c->pos;
     s.refhook = refhook;
     cls = PROTECT(Rf_mkString("zb_int_stream_eof"));
-    out = R_tryCatch(zb_r_int_unser_body, &s, cls, zb_r_int_unser_eof, NULL, NULL, NULL);
-    UNPROTECT(1);
+    out = PROTECT(R_tryCatch(zb_r_int_unser_body, &s, cls, zb_r_int_unser_eof, &s, NULL, NULL));
     if (s.eof) {
+        UNPROTECT(2);
         *st = ZB_ERR_EOF;
         return R_NilValue;
     }
+    if (s.caught) {
+        SEXP call = PROTECT(Rf_lang2(Rf_install("stop"), out));
+        Rf_eval(call, R_BaseEnv);
+        UNPROTECT(1);   /* not reached */
+    }
+    UNPROTECT(2);
     c->pos += s.pos;
     *st = ZB_OK;
     return out;

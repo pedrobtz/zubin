@@ -38,7 +38,7 @@ static const R_CallMethodDef call_methods[] = {
     CALLDEF(zubin_test_buf_borrow, 2),
     CALLDEF(zubin_test_buf_put, 4),
     CALLDEF(zubin_test_buf_misc, 0),
-    CALLDEF(zubin_test_put_then_error, 0),
+    CALLDEF(zubin_test_put_then_error, 1),
     CALLDEF(zubin_test_put_loop, 2),
     CALLDEF(zubin_test_buf_new_fail, 0),
     CALLDEF(zubin_test_kernel_types, 0),
@@ -60,6 +60,7 @@ static const R_CallMethodDef call_methods[] = {
     CALLDEF(zubin_test_sink, 5),
     CALLDEF(zubin_test_serialize_owned, 2),
     CALLDEF(zubin_test_unserialize_cursor, 2),
+    CALLDEF(zubin_test_type_info, 1),
     {NULL, NULL, 0}
 };
 

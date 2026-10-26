@@ -2,10 +2,13 @@
 % Please edit documentation in R/builder.R, R/layout.R
 \name{bin_size}
 \alias{bin_size}
+\alias{bin_size.zubin_builder}
 \alias{bin_size.zubin_layout}
 \title{The size of a builder or a layout, in bytes}
 \usage{
 bin_size(x, ...)
+
+\method{bin_size}{zubin_builder}(x, ...)
 
 \method{bin_size}{zubin_layout}(x, ...)
 }

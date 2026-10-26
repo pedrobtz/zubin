@@ -53,6 +53,10 @@ test_that("integer64 mode refuses u64 from 2^63 and i64 at -2^63 unless allowed"
   x <- c(bytes("01 00 00 00 00 00 00 00"), big, big, bytes("01 00 00 00 00 00 00 00"))
   e <- expect_error(bin_unpack(x, "a:i64[2]", int64 = "integer64"), class = "zubin_range_error")
   expect_identical(e$index, 0)
+  # and not the last one met: record 0 in element 0, record 1 in element 1
+  x <- c(big, bytes("01 00 00 00 00 00 00 00"), bytes("01 00 00 00 00 00 00 00"), big)
+  e <- expect_error(bin_unpack(x, "a:i64[2]", int64 = "integer64"), class = "zubin_range_error")
+  expect_identical(e$index, 0)
 })
 
 test_that("floating point reads exactly, NA_real_ and NaN payloads included", {

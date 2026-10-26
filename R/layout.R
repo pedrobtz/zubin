@@ -37,7 +37,8 @@
 #'
 #' \tabular{llll}{
 #'   **Spec** \tab **Bytes** \tab **Read as** \tab **Written from** \cr
-#'   `u8 i8 u16 i16` \tab 1--2 \tab integer \tab integer, whole double, logical \cr
+#'   `u8 i8 u16 i16` \tab 1--2 \tab integer \tab integer, whole double,
+#'     logical \cr
 #'   `i32` \tab 4 \tab integer; -2^31 is an error unless `na = "allow"` \tab
 #'     integer, whole double; `NA` only with `na = "allow"` \cr
 #'   `u32` \tab 4 \tab double \tab integer, whole double \cr
@@ -113,9 +114,7 @@ bin_layout <- function(
     return(spec)
   }
   endian <- arg_match(endian)
-  if (!is.logical(align) || length(align) != 1L || is.na(align)) {
-    invalid_argument("`align` must be TRUE or FALSE.", arg = "align")
-  }
+  check_flag(align, "align")
   text <- spec_text(spec)
   big <- endian == "big" || (endian == "native" && bin_info()$endian == "big")
   parse_layout(text, big, align)
@@ -140,12 +139,13 @@ spec_text <- function(spec, call = sys.call(-1L)) {
   }
   nms[is.na(nms)] <- ""
   parts <- ifelse(nzchar(nms), paste0(nms, ":", spec), spec)
+  # every count is of bytes, as `position` is
   starts <- cumsum(c(0L, nchar(parts, type = "bytes") + 1L))
   # a name inside a value, or anything that would split one value in two
   bad <- grepl("[:,[:space:]]", spec)
   if (any(bad)) {
     i <- which(bad)[1L]
-    at <- regexpr("[:,[:space:]]", spec[i])
+    at <- regexpr("[:,[:space:]]", spec[i], useBytes = TRUE)
     zubin_abort(
       sprintf(
         "The value of field %d, \"%s\", must be a type token alone.",
@@ -154,7 +154,11 @@ spec_text <- function(spec, call = sys.call(-1L)) {
       ),
       "zubin_spec_error",
       position = as.double(
-        starts[i] + nchar(parts[i]) - nchar(spec[i]) + at - 1L
+        starts[i] +
+          nchar(parts[i], type = "bytes") -
+          nchar(spec[i], type = "bytes") +
+          at -
+          1L
       ),
       call = call
     )
@@ -188,34 +192,11 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
       call = call
     )
   }
-  tokens <- c(
-    "u8",
-    "i8",
-    "u16",
-    "i16",
-    "u32",
-    "i32",
-    "u64",
-    "i64",
-    "f16",
-    "bf16",
-    "f32",
-    "f64",
-    "bool",
-    "b",
-    "s",
-    "x",
-    rep(NA, 15L),
-    "u128",
-    "i128",
-    "c64",
-    "c128"
-  )
-  types <- tokens[res$type]
+  types <- type_tokens[res$type]
   # b, s and x carry their width in the token
-  wide <- res$type %in% 14:16
+  wide <- types %in% c("b", "s", "x")
   token <- ifelse(wide, paste0(types, res$size), types)
-  pad <- res$type == 16L
+  pad <- types == "x"
   name <- res$name
   # unnamed value fields are V1, V2, ... by their position among value fields
   k <- cumsum(!pad)
@@ -235,6 +216,7 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
       call = call
     )
   }
+  check_array_names(name, res, pad, call)
   endian <- ifelse(
     is.na(res$big),
     NA_character_,
@@ -250,16 +232,13 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
     stringsAsFactors = FALSE
   )
   # the order the spec itself declares, when it declares one
-  prefix <- spec_prefix(text)
-  if (prefix == "<") {
-    big <- FALSE
-  }
-  if (prefix == ">") {
-    big <- TRUE
-  }
-  if (prefix == "=") {
-    big <- bin_info()$endian == "big"
-  }
+  big <- switch(
+    spec_prefix(text),
+    "<" = FALSE,
+    ">" = TRUE,
+    "=" = bin_info()$endian == "big",
+    big
+  )
   structure(
     list(
       spec = normalise_spec(fields, pad, big),
@@ -269,6 +248,103 @@ parse_layout <- function(text, big, align, call = sys.call(-1L)) {
     ),
     class = "zubin_layout"
   )
+}
+
+# A one-field layout for a single type token, or an error naming `type`.
+# No regular expression: the allocation-failure sweep found R's regex engine
+# segfaulting when an allocation inside grepl() fails. The characters are
+# checked here, so the token cannot smuggle in a second field; the grammar
+# is the native parser's.
+type_layout <- function(type, endian, call = sys.call(-1L)) {
+  if (!is_type_token(type)) {
+    invalid_argument(
+      "`type` must be one type token, such as \"u32\", \"f64.be\" or \"s16\".",
+      arg = "type",
+      call = call
+    )
+  }
+  tryCatch(
+    bin_layout(paste0("v:", type), endian = endian),
+    zubin_spec_error = function(e) {
+      invalid_argument(
+        sprintf("Unknown `type` \"%s\".", type),
+        arg = "type",
+        call = call
+      )
+    }
+  )
+}
+
+# One string of lower-case letters, digits and dots that starts with a
+# letter other than x (padding has no value to read or write).
+is_type_token <- function(type) {
+  if (!is_string(type)) {
+    return(FALSE)
+  }
+  ch <- utf8ToInt(type) # NA when type is not valid UTF-8
+  length(ch) > 0L &&
+    !anyNA(ch) &&
+    ch[1L] >= 97L &&
+    ch[1L] <= 122L &&
+    ch[1L] != 120L &&
+    all((ch >= 97L & ch <= 122L) | (ch >= 48L & ch <= 57L) | ch == 46L)
+}
+
+# Type tokens by their C zb_type value: element i is value i (layout.h).
+# Values 17 to 31 are unused; u128 is 32.
+type_tokens <- c(
+  "u8",
+  "i8",
+  "u16",
+  "i16",
+  "u32",
+  "i32",
+  "u64",
+  "i64",
+  "f16",
+  "bf16",
+  "f32",
+  "f64",
+  "bool",
+  "b",
+  "s",
+  "x",
+  rep(NA, 15L),
+  "u128",
+  "i128",
+  "c64",
+  "c128"
+)
+
+# An array field a of k elements is the columns a.1 ... a.k of a data frame
+# (columns_to_frame()), so no other field may take one of those names: the
+# frame would hold two columns of that name, and bin_pack() would refuse it.
+# A layout with no array field, every typed bin_put()'s, skips the regular
+# expression (see type_layout()).
+check_array_names <- function(name, res, pad, call) {
+  arr <- !pad & res$count > 1L
+  if (!any(arr)) {
+    return()
+  }
+  at <- regexpr("[.][1-9][0-9]*$", name)
+  dotted <- which(!is.na(at) & at > 0L)
+  stem <- substr(name[dotted], 1L, at[dotted] - 1L)
+  k <- as.numeric(substring(name[dotted], at[dotted] + 1L))
+  owner <- match(stem, name[arr])
+  clash <- !is.na(owner) & k <= res$count[arr][owner]
+  if (any(clash)) {
+    i <- dotted[clash][1L]
+    zubin_abort(
+      sprintf(
+        "The name \"%s\" is also a column of the array field \"%s\".",
+        name[i],
+        stem[clash][1L]
+      ),
+      "zubin_spec_error",
+      position = as.double(res$name_pos[i]),
+      call = call
+    )
+  }
 }
 
 # The first character of text that is not a space, as the C parser counts

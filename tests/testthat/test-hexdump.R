@@ -29,6 +29,12 @@ test_that("n past the end shows what there is; offset past the end is an error",
   expect_length(bin_hexdump(x, n = 0), 0L)
 })
 
+test_that("a dump prints one line per element", {
+  h <- bin_hexdump(bytes("41 42 00 ff"), width = 2)
+  expect_identical(capture.output(print(h)), c("00000000: 4142  AB", "00000002: 00ff  .."))
+  expect_identical(format(h), unclass(h))
+})
+
 test_that("empty input dumps to nothing and says so", {
   h <- bin_hexdump(raw(0))
   expect_length(h, 0L)
@@ -70,6 +76,14 @@ test_that("equal inputs and a prefix have no differing bytes, only lengths", {
 test_that("a huge n on tiny inputs allocates for the inputs, not for n", {
   d <- bin_diff(bytes("01 02"), bytes("01 03"), n = 2^52)
   expect_identical(d$offset, 1)
+  # many differences asked for, few found: the second pass collects them
+  a <- raw(1e5)
+  b <- a
+  b[c(10, 5e4, 1e5)] <- as.raw(7)
+  d <- bin_diff(a, b, n = 1e5)
+  expect_identical(d$offset, c(9, 5e4 - 1, 1e5 - 1))
+  expect_identical(d$b, as.raw(c(7, 7, 7)))
+  expect_identical(bin_diff(a, b, n = 2)$offset, c(9, 5e4 - 1))
   # past a 32-bit size_t, too
   expect_identical(bin_hexdump(bytes("01 02"), n = 2^52), bin_hexdump(bytes("01 02")))
 })

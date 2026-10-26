@@ -77,10 +77,13 @@ ZB_INLINE size_t zb_bitmap_bytes(size_t nbits)
 
 /* The number of set bits in [offset, offset + n): whole bytes at a time
    once aligned. Bit order does not matter for a count of whole bytes, but
-   the partial bytes at either end are counted least significant first. */
+   the partial bytes at either end are counted least significant first. A
+   range whose end does not fit in a size_t holds no bitmap, and counts 0. */
 ZB_INLINE size_t zb_bitmap_count(const uint8_t *bm, size_t offset, size_t n)
 {
-    size_t c = 0, i = offset, end = offset + n;
+    size_t c = 0, i = offset, end;
+    if (n > (size_t)-1 - offset) return 0;
+    end = offset + n;
     while (i < end && (i & 7)) c += (size_t)zb_bit_get(bm, i++);
     for (; i + 8 <= end; i += 8) {
         unsigned b = bm[i >> 3];

@@ -557,14 +557,17 @@ SEXP zubin_test_buf_misc(void)
 
 /* A buffer owned by R, some bytes in it, then an error: the longjmp strands
    it, and only its finalizer can free it. */
-SEXP zubin_test_put_then_error(void)
+SEXP zubin_test_put_then_error(SEXP fail)
 {
     zb_status st;
     SEXP ptr = PROTECT(zb_r_buf_new(1024, 0, &st));
     zb_buf *b = zb_r_buf_get(ptr);
+    SEXP call;
     if (b) zb_put_zeros(b, 1000);
-    Rf_error("zubin_test_put_then_error: the planned error");
-    UNPROTECT(1);
+    /* fail() raises the test's classed condition: a longjmp out of here */
+    call = PROTECT(Rf_lang1(fail));
+    Rf_eval(call, R_GlobalEnv);
+    UNPROTECT(2);
     return R_NilValue;
 }
 
@@ -1205,5 +1208,30 @@ SEXP zubin_test_unserialize_cursor(SEXP bytes, SEXP offset)
     SET_VECTOR_ELT(out, 1, Rf_mkString(zb_status_string(st)));
     SET_VECTOR_ELT(out, 2, Rf_ScalarReal((double)c.pos));
     UNPROTECT(2);
+    return out;
+}
+
+/* zb_type_name(), zb_type_width() and zb_type_align() for each integer in
+   codes, values outside the enumeration included: the public helpers'
+   answers there are part of the contract a consumer relies on. */
+SEXP zubin_test_type_info(SEXP codes)
+{
+    const char *names[] = {"name", "width", "align", ""};
+    R_xlen_t i, n = XLENGTH(codes);
+    SEXP out = PROTECT(Rf_mkNamed(VECSXP, names));
+    SEXP nm = Rf_allocVector(STRSXP, n);
+    SEXP w, a;
+    SET_VECTOR_ELT(out, 0, nm);
+    w = Rf_allocVector(INTSXP, n);
+    SET_VECTOR_ELT(out, 1, w);
+    a = Rf_allocVector(INTSXP, n);
+    SET_VECTOR_ELT(out, 2, a);
+    for (i = 0; i < n; i++) {
+        zb_type t = (zb_type)INTEGER(codes)[i];
+        SET_STRING_ELT(nm, i, Rf_mkChar(zb_type_name(t)));
+        INTEGER(w)[i] = (int)zb_type_width(t);
+        INTEGER(a)[i] = (int)zb_type_align(t);
+    }
+    UNPROTECT(1);
     return out;
 }

@@ -28,7 +28,8 @@ an \code{integer64} \code{NA} into \code{i64} as -2^63).}
 A raw vector of \code{length(x)} times the type's width.
 }
 \description{
-\code{bin_encode()} writes every element of \code{x} as \code{type}, in \code{endian} order:
+\code{bin_encode()} writes every element of \code{x} as \code{type}, in \code{endian} order
+(a matrix or array in column-major order, as its elements are stored):
 \code{\link[=writeBin]{writeBin()}} generalised to every width and both byte orders, rounding to
 f16, bf16 and f32 to nearest even, and refusing, never truncating, an
 integer that does not fit.

@@ -524,6 +524,30 @@ SEXP zubin_unpack(SEXP x, SEXP spec, SEXP align, SEXP offset, SEXP n, SEXP strid
 
 /* ---- pack (design 11.5, 13.3-13.5) -------------------------------------- */
 
+/* Checks that the n elements of a list from `start` are raw vectors of the
+   width of the b<n> field f: ZB_ERR_INVALID for one that is not raw,
+   ZB_ERR_RANGE for a wrong length, with its index from start in *bad. */
+static zb_status check_bytes(SEXP col, size_t start, size_t n, const zb_field *f, size_t *bad)
+{
+    size_t i;
+    if (f->type != ZB_BYTES) return ZB_ERR_INVALID;
+    for (i = 0; i < n; i++) {
+        SEXP r = VECTOR_ELT(col, (R_xlen_t)(start + i));
+        if (TYPEOF(r) != RAWSXP) { *bad = i; return ZB_ERR_INVALID; }
+        if ((size_t)XLENGTH(r) != f->size) { *bad = i; return ZB_ERR_RANGE; }
+    }
+    return ZB_OK;
+}
+
+/* Copies n checked raw vectors of a list, from `start`, into b<n> slots. */
+static void pack_bytes(uint8_t *base, size_t n, size_t stride, const zb_field *f, SEXP col,
+                       size_t start)
+{
+    size_t i;
+    for (i = 0; i < n; i++)
+        memcpy(base + i * stride + f->offset, RAW(VECTOR_ELT(col, (R_xlen_t)(start + i))), f->size);
+}
+
 /* Writes one field of n records from an R column: integer or logical
    through zb_pack_i32, double through zb_pack_f64 (or zb_pack_i64 when it
    carries integer64 bits), character into s<n> (UTF-8, NUL-padded), and a
@@ -565,15 +589,11 @@ static zb_status pack_field(uint8_t *base, size_t n, size_t stride, const zb_fie
         }
         return ZB_OK;
     }
-    case VECSXP:
-        if (f->type != ZB_BYTES) return ZB_ERR_INVALID;
-        for (i = 0; i < n; i++) {
-            SEXP r = VECTOR_ELT(col, (R_xlen_t)i);
-            if (TYPEOF(r) != RAWSXP) { *bad = i; return ZB_ERR_INVALID; }
-            if ((size_t)XLENGTH(r) != f->size) { *bad = i; return ZB_ERR_RANGE; }
-            memcpy(base + i * stride + f->offset, RAW(r), f->size);
-        }
-        return ZB_OK;
+    case VECSXP: {
+        zb_status st = check_bytes(col, 0, n, f, bad);
+        if (!st) pack_bytes(base, n, stride, f, col, 0);
+        return st;
+    }
     default:
         return ZB_ERR_INVALID;
     }
@@ -633,10 +653,13 @@ SEXP zubin_pack(SEXP spec, SEXP align, SEXP cols, SEXP is64, SEXP n, SEXP allow_
     return out;
 }
 
-/* Appends a column encoded as the one-field layout `spec` to a builder.
-   The space is reserved first and len advances only after the last chunk
-   is written, with an interrupt check every 64 MiB in between, so neither
-   an error nor an interrupt changes the builder. */
+/* Appends a column encoded as the one-field layout `spec` to a builder:
+   numbers, complex numbers, or a list of raw vectors for b<n> (strings take
+   zubin_builder_put_str). The space is reserved first and len advances only
+   after the last chunk is written, with an interrupt check every 64 MiB in
+   between, so neither an error nor an interrupt changes the builder. A byte
+   list is checked whole before anything is reserved, so that a wrong
+   element does not first grow the builder to its full size. */
 SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
 {
     zb_buf *b = zb_r_buf_get(ptr);
@@ -649,6 +672,11 @@ SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
         (l.fields[0].type != ZB_BYTES && l.fields[0].type != ZB_STR && l.fields[0].count != 1))
         return zubin_int_status(ZB_ERR_INVALID, -1);
     n = (size_t)XLENGTH(col);
+    if (TYPEOF(col) == VECSXP) {
+        size_t bad = 0;
+        st = check_bytes(col, 0, n, &l.fields[0], &bad);
+        if (st) return zubin_int_failure(zb_status_string(st), (R_xlen_t)bad, 0);
+    }
     if (zb_int_mul(n, l.size, &total)) return zubin_int_status(ZB_ERR_MEMORY, -1);
     st = zb_buf_reserve(b, total);
     if (st) return zubin_int_status(st, -1);
@@ -656,9 +684,7 @@ SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
     if (!chunk) chunk = 1;
     while (done < n) {
         size_t m = n - done < chunk ? n - done : chunk, bad = 0;
-        int enc = 0;
         uint8_t *slot = b->data + b->len + done * l.size;
-        SEXP part = col;
         if (done) R_CheckUserInterrupt();
         /* a chunk of the column: offset the kernel's source by `done` */
         switch (TYPEOF(col)) {
@@ -670,17 +696,18 @@ SEXP zubin_builder_put_typed(SEXP ptr, SEXP spec, SEXP col, SEXP is64)
             else
                 st = zb_pack_f64(slot, m, l.size, &l.fields[0], REAL(col) + done, 0, &bad);
             break;
-        default:
-            /* strings and byte lists go through pack_field whole */
-            if (done) { st = ZB_ERR_INVALID; break; }
-            st = pack_field(slot, n, l.size, &l.fields[0], part, 0, 0, &bad, &enc);
-            m = n;
+        case CPLXSXP:
+            st = zb_pack_cplx(slot, m, l.size, &l.fields[0],
+                              (const double *)(const void *)COMPLEX(col) + 2 * done);
             break;
+        case VECSXP:
+            pack_bytes(slot, m, l.size, &l.fields[0], col, done);
+            st = ZB_OK;
+            break;
+        default:
+            st = ZB_ERR_INVALID;
         }
-        if (st) {
-            return zubin_int_failure(enc ? "ZUBIN_ERR_ENCODING" : zb_status_string(st),
-                                     (R_xlen_t)(done + bad), 0);
-        }
+        if (st) return zubin_int_failure(zb_status_string(st), (R_xlen_t)(done + bad), 0);
         done += m;
     }
     b->len += total;
@@ -743,12 +770,12 @@ SEXP zubin_hexdump(SEXP x, SEXP offset, SEXP n, SEXP width)
 }
 
 /* The first n offsets at which a and b differ, over their common length,
-   with both bytes there. */
+   with both bytes there. Counted first and then collected, so the memory is
+   for the differences found, not for the n asked for. */
 SEXP zubin_diff(SEXP a, SEXP b, SEXP n)
 {
     const char *names[] = {"offset", "a", "b", ""};
-    size_t la, lb, common, i, max, found = 0;
-    size_t *at;
+    size_t la, lb, common, i, max, found = 0, k;
     SEXP out, off, va, vb;
     if (TYPEOF(a) != RAWSXP || TYPEOF(b) != RAWSXP || zubin_int_size(n, &max))
         return zubin_int_status(ZB_ERR_INVALID, -1);
@@ -757,19 +784,22 @@ SEXP zubin_diff(SEXP a, SEXP b, SEXP n)
     common = la < lb ? la : lb;
     /* no more than common offsets can differ, whatever n asks for */
     if (max > common) max = common;
-    at = (size_t *)R_alloc(max ? max : 1, sizeof(size_t));
     for (i = 0; i < common && found < max; i++) {
-        if (RAW(a)[i] != RAW(b)[i]) at[found++] = i;
+        found += RAW(a)[i] != RAW(b)[i];
         if (i % ZUBIN_INTERRUPT_BYTES == ZUBIN_INTERRUPT_BYTES - 1) R_CheckUserInterrupt();
     }
     out = PROTECT(Rf_mkNamed(VECSXP, names));
     off = Rf_allocVector(REALSXP, (R_xlen_t)found); SET_VECTOR_ELT(out, 0, off);
     va = Rf_allocVector(RAWSXP, (R_xlen_t)found);   SET_VECTOR_ELT(out, 1, va);
     vb = Rf_allocVector(RAWSXP, (R_xlen_t)found);   SET_VECTOR_ELT(out, 2, vb);
-    for (i = 0; i < found; i++) {
-        REAL(off)[i] = (double)at[i];
-        RAW(va)[i] = RAW(a)[at[i]];
-        RAW(vb)[i] = RAW(b)[at[i]];
+    /* the first pass stopped at the last difference, so this one is short */
+    for (i = 0, k = 0; k < found; i++) {
+        if (i % ZUBIN_INTERRUPT_BYTES == ZUBIN_INTERRUPT_BYTES - 1) R_CheckUserInterrupt();
+        if (RAW(a)[i] == RAW(b)[i]) continue;
+        REAL(off)[k] = (double)i;
+        RAW(va)[k] = RAW(a)[i];
+        RAW(vb)[k] = RAW(b)[i];
+        k++;
     }
     UNPROTECT(1);
     return out;

@@ -33,19 +33,27 @@ converse holds only up to the chance of a collision.
 \details{
 It is a fingerprint, not a cryptographic digest and not a durable content
 address: fast, and well distributed, but not a defence against someone
-choosing inputs to collide. The digest is the same on every platform R
-runs on, with two exceptions:
+choosing inputs to collide.
+
+The digest is of the bytes R writes, not of the values they stand for, so
+\code{identical(x, y)} does not imply equal digests:
 \itemize{
-\item On 32-bit x86 a double \code{NA} is stored with different bits, so an object
-holding one hashes differently there.
-\item R serialises a string as its bytes and its encoding mark, so the same
-non-ASCII text hashes differently when it is marked UTF-8, latin1 or
-not at all; and unmarked text is in the session's native encoding,
-which depends on the locale. \code{identical()} compares the text, not the
-mark, so \code{identical(x, y)} does not imply equal digests. Apply
-\code{\link[=enc2utf8]{enc2utf8()}} to the strings first for a digest that does not depend on
-either.
+\item A double is its 64 bits. \code{0} and \code{-0} differ, as do NaNs of different
+sign or payload, and \code{NA} once arithmetic has set its quiet bit
+(\code{c(NA, 1) + 0}), though \code{identical()} treats each pair as the same.
+How NaN and \code{NA} propagate through arithmetic depends on the platform
+(see \link{NA}), so the same computation may hash differently on two
+machines; and on 32-bit x86 even a double \code{NA} written as a literal has
+different bits.
+\item A string is its bytes and its encoding mark, so the same non-ASCII text
+hashes differently when it is marked UTF-8, latin1 or not at all; and
+unmarked text is in the session's native encoding, which depends on the
+locale. Apply \code{\link[=enc2utf8]{enc2utf8()}} to the strings first for a digest that does
+not depend on either.
 }
+
+Apart from these, the digest of an object is the same on every platform R
+runs on.
 
 \code{version = 2}, the default, writes compact sequences such as \code{1:10} as the
 vectors they are; \code{version = 3} writes their compact form, so the same

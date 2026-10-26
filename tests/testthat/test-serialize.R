@@ -80,6 +80,46 @@ test_that("R's own errors reach the caller as R raised them", {
   expect_identical(as.raw(b), bytes("01 02"))
 })
 
+test_that("a refhook that changes the builder is refused", {
+  # it appends: the builder is left as it was
+  b <- bin_builder()
+  bin_put(b, bytes("01 02"))
+  put <- function(x) {
+    bin_put(b, bytes("aa bb"))
+    "ref"
+  }
+  e <- expect_error(bin_serialize(list(new.env()), b, refhook = put),
+                    class = "zubin_invalid_argument")
+  expect_identical(e$arg, "refhook")
+  expect_identical(as.raw(b), bytes("01 02"))
+  # it empties it: what the refhook left
+  b <- bin_builder()
+  bin_put(b, bytes("01 02"))
+  reset <- function(x) {
+    bin_reset(b)
+    "ref"
+  }
+  expect_error(bin_serialize(list(new.env()), b, refhook = reset),
+               class = "zubin_invalid_argument")
+  expect_identical(bin_size(b), 0)
+  # a refhook that only reads it is fine
+  b <- bin_builder()
+  look <- function(x) {
+    bin_size(b)
+    "ref"
+  }
+  bin_serialize(list(new.env()), b, refhook = look)
+  expect_identical(bin_take(b), serialize(list(new.env()), NULL, refhook = function(x) "ref"))
+})
+
+test_that("a refhook signalling the private end-of-stream class is not taken for one", {
+  hooked <- serialize(list(new.env()), NULL, refhook = function(x) "an-id")
+  spoof <- structure(class = c("zb_int_stream_eof", "error", "condition"),
+                     list(message = "not the end", call = NULL))
+  expect_error(bin_unserialize(hooked, refhook = function(id) stop(spoof)),
+               class = "zb_int_stream_eof")
+})
+
 test_that("refhooks persist and restore references as in base R", {
   e <- new.env()
   assign("tag", "kept", envir = e)
@@ -187,10 +227,10 @@ test_that("an object that looks like a status unserialises as itself", {
 })
 
 test_that("the digest follows a string's encoding mark, and enc2utf8() removes it", {
-  utf8 <- "é"
-  latin1 <- iconv(utf8, "UTF-8", "latin1")
-  expect_identical(utf8, latin1)
+  e_utf8 <- utf8("c3 a9")
+  latin1 <- iconv(e_utf8, "UTF-8", "latin1")
+  expect_identical(e_utf8, latin1)
   # as documented: identical text, different marks, different digests
-  expect_false(identical(bin_hash_object(utf8), bin_hash_object(latin1)))
-  expect_identical(bin_hash_object(enc2utf8(latin1)), bin_hash_object(utf8))
+  expect_false(identical(bin_hash_object(e_utf8), bin_hash_object(latin1)))
+  expect_identical(bin_hash_object(enc2utf8(latin1)), bin_hash_object(e_utf8))
 })

@@ -11,6 +11,15 @@ bytes <- function(...) {
   as.raw(strtoi(substring(h, seq(1L, nchar(h), 2L), seq(2L, nchar(h), 2L)), 16L))
 }
 
+# utf8("c3 a9") is the one-character string of those bytes, marked UTF-8:
+# non-ASCII text without a non-ASCII source literal, which would read
+# differently in a session whose native encoding is not UTF-8.
+utf8 <- function(...) {
+  s <- rawToChar(bytes(...))
+  Encoding(s) <- "UTF-8"
+  s
+}
+
 # hex(as.raw(c(0x1a, 0x2b))) is "1a 2b".
 hex <- function(x) {
   paste(format(as.hexmode(as.integer(x)), width = 2L), collapse = " ")

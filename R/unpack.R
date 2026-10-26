@@ -85,11 +85,11 @@ bin_unpack <- function(
 #' Read a vector of one type from bytes
 #'
 #' `bin_decode()` reads `n` consecutive values of one type from the raw
-#' vector `x`, starting at the 0-based byte `offset`: `bin_decode(x, "u32",
-#' offset = 4)` is a header field, `bin_decode(x, "f32", offset = 64, n =
-#' 1e6)` is a column. It is [readBin()] generalised to every width and both
-#' byte orders, exact or an error; [bin_encode()] is its inverse. Offsets are
-#' 0-based.
+#' vector `x`, starting at the 0-based byte `offset`:
+#' `bin_decode(x, "u32", offset = 4)` is a header field,
+#' `bin_decode(x, "f32", offset = 64, n = 1e6)` is a column. It is
+#' [readBin()] generalised to every width and both byte orders, exact or an
+#' error; [bin_encode()] is its inverse. Offsets are 0-based.
 #'
 #' @inheritParams bin_unpack
 #' @param type Any type token of [bin_layout()] except padding (`"u8"`,
@@ -124,53 +124,13 @@ bin_decode <- function(
     layout,
     offset,
     n,
-    NULL,
-    int64,
-    na,
-    "UTF-8",
+    stride = NULL,
+    int64 = int64,
+    na = na,
+    encoding = "UTF-8",
     codec = TRUE
   )
   cols[[1L]]
-}
-
-# A one-field layout for a single type token, or an error naming `type`.
-# No regular expression: the allocation-failure sweep found R's regex engine
-# segfaulting when an allocation inside grepl() fails. The characters are
-# checked here, so the token cannot smuggle in a second field; the grammar
-# is the native parser's.
-type_layout <- function(type, endian, call = sys.call(-1L)) {
-  if (!is_type_token(type)) {
-    invalid_argument(
-      "`type` must be one type token, such as \"u32\", \"f64.be\" or \"s16\".",
-      arg = "type",
-      call = call
-    )
-  }
-  tryCatch(
-    bin_layout(paste0("v:", type), endian = endian),
-    zubin_spec_error = function(e) {
-      invalid_argument(
-        sprintf("Unknown `type` \"%s\".", type),
-        arg = "type",
-        call = call
-      )
-    }
-  )
-}
-
-# One string of lower-case letters, digits and dots that starts with a
-# letter other than x (padding has no value to read or write).
-is_type_token <- function(type) {
-  if (!is.character(type) || length(type) != 1L || is.na(type)) {
-    return(FALSE)
-  }
-  ch <- utf8ToInt(type) # NA when type is not valid UTF-8
-  length(ch) > 0L &&
-    !anyNA(ch) &&
-    ch[1L] >= 97L &&
-    ch[1L] <= 122L &&
-    ch[1L] != 120L &&
-    all((ch >= 97L & ch <= 122L) | (ch >= 48L & ch <= 57L) | ch == 46L)
 }
 
 # codec is TRUE for bin_decode(), whose one field has no name to report.
@@ -234,12 +194,7 @@ unpack_columns <- function(
 unpack_fail <- function(res, x, layout, offset, n, stride, codec, call) {
   name <- as.character(res)
   index <- attr(res, "index")
-  pos <- attr(res, "field")
-  field <- if (is.null(pos) || codec) {
-    NA_character_
-  } else {
-    layout$fields$name[pos + 1L]
-  }
+  field <- status_field(res, layout, codec)
   what <- if (is.na(field)) "" else sprintf(" in field `%s`", field)
   switch(
     name,
@@ -288,6 +243,17 @@ unpack_fail <- function(res, x, layout, offset, n, stride, codec, call) {
     ZB_ERR_MEMORY = zb_fail(res, "The result is too large for R.", call = call),
     zb_fail(res, "Invalid arguments to the unpack kernel.", call = call)
   )
+}
+
+# The name of the field a status from C is about, from its 0-based position
+# in the layout (padding included); NA for a codec's one unnamed field, or
+# when the status names none.
+status_field <- function(res, layout, codec) {
+  pos <- attr(res, "field")
+  if (is.null(pos) || codec) {
+    return(NA_character_)
+  }
+  layout$fields$name[pos + 1L]
 }
 
 # The columns as a data frame: matrices expand to name.1 ... name.k, and

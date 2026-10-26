@@ -52,6 +52,18 @@ The cursor is an external pointer over a borrowed raw vector (kept alive as an a
 zuxml's node-handle trick), and every read is bounds-checked with a `zubin_bounds_error`
 carrying the position. It is `zb_cur` from R, nothing more.
 
+The cursor is also how R reads **consecutive serialisation streams**, which 0.1.0 cannot
+walk: `bin_unserialize()` returns the object and not where its stream ended, and
+`length(serialize(obj))` is no substitute, since serialising again need not give the same
+bytes (version 3's native encoding, refhooks, ALTREP). `bin_unserialize(cur)` reads one
+object at the cursor and advances it past the stream, as `zb_unserialize()` already
+advances its `zb_cur`, so a loop walks any number of objects that `bin_serialize()` wrote
+into one builder. The return value of `bin_unserialize(x, offset)` stays the bare object:
+the cursor is the addition. Should the cursor slip from 0.2.0, the fallback is a function
+of its own, `bin_unserialize_next(x, offset, refhook)` returning
+`list(value =, offset =)`, never an attribute on the object or a flag that changes the
+return type (design decision 34; review #87).
+
 Also here, on the same record-major walk: **tagged-message dispatch**, a set of layouts
 keyed by a tag read in C in one pass instead of one `bin_unpack()` per message from R.
 

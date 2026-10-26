@@ -7,6 +7,17 @@ test_that("a mixed record reads back field by field", {
   expect_identical(r$value, c(200, 65000, 4e9, -2, 1.5, -0.1, 0.5, -2, -7, -300, 2^40, -123456))
 })
 
+test_that("the readers the mixed record does not use read their values", {
+  # the other byte order of each multi-byte reader, values written out by hand
+  steps <- c("u16be", "i16le", "u32le", "i32be", "u64le", "i64be", "f16be", "bf16le", "f32le")
+  x <- bytes("12 34", "fe ff", "78 56 34 12", "ff ff ff 85", "00 00 00 00 00 01 00 00",
+             "ff ff ff ff ff ff ff fd", "3c 00", "c0 3f", "00 00 20 40")
+  r <- cursor_run(x, steps)
+  expect_identical(r$status, rep(0L, 9L))
+  expect_identical(r$pos, cumsum(c(2, 2, 4, 4, 8, 8, 2, 2, 4)))
+  expect_identical(r$value, c(4660, -2, 305419896, -123, 2^40, -3, 1, 1.5, 2.5))
+})
+
 test_that("every truncation point fails at the right field and leaves the cursor unchanged", {
   skip_heavy()
   x <- mixed_bytes()
@@ -43,6 +54,12 @@ test_that("every type at every position reads or refuses without moving", {
           if (len - p >= w) {
             expect_identical(r$status[2L], 0L)
             expect_identical(r$pos[2L], as.double(p + w))
+            # the value too, against rw.h's reader; a 64-bit one is checked
+            # by the records above, since rw_read() gives its bits
+            if (w < 8L) {
+              expect_identical(r$value[2L], as.double(rw_read(type, e, x[p + seq_len(w)])),
+                               label = paste(type, e, len, p))
+            }
           } else {
             expect_identical(r$status[2L], 2L, label = paste(type, e, len, p))
             expect_identical(r$pos[2L], as.double(p))
