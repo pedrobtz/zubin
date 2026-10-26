@@ -23,7 +23,12 @@ The first release.
   a classed error naming the field and the 0-based record (`?zubin-conditions`). That
   holds on write too: a string must be valid UTF-8, unless it is marked `"bytes"`, which
   is written as its bytes, so that what `bin_unpack(encoding = "bytes")` reads packs back
-  (#44, #50).
+  (#44, #50). A layout may not name a field `a.1` beside an array field `a`, whose
+  data-frame columns those are (#73), and a `refhook` that changes the builder
+  `bin_serialize()` writes into is an error rather than a corrupt stream (#72).
+* `bin_encode()` and a typed `bin_put()` write every element of a matrix or array, as
+  `writeBin()` does (#79); a typed `bin_put()` of complex numbers or a byte list checks
+  for an interrupt every 64 MiB, as one of numbers does (#77).
 
 ## C
 

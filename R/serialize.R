@@ -15,6 +15,9 @@
 #' object does is a `zubin_bounds_error` carrying `offset` and `length`. An
 #' append that would pass the builder's `max` is a `zubin_limit_error`; in
 #' every failure, an interrupt included, the builder is left as it was.
+#' `refhook` must not use `b`: a refhook that changes it is a
+#' `zubin_invalid_argument` error, and one that removed bytes from `b` leaves
+#' it holding what the refhook left.
 #'
 #' Only read serialised data from a source you trust: a serialisation
 #' stream can hold any R object, functions and environments included.
@@ -66,6 +69,13 @@ bin_serialize <- function(x, b, version = 3L, xdr = TRUE, refhook = NULL) {
     if (name == "ZB_ERR_MEMORY") {
       zb_fail(res, "Could not grow the builder to hold the serialisation.")
     }
+    if (name == "ZB_ERR_INVALID") {
+      zb_fail(
+        res,
+        "`refhook` changed the builder `b` that `x` was being serialised into.",
+        arg = "refhook"
+      )
+    }
     zb_fail(res, "Could not serialise `x` into the builder.")
   }
   invisible(b)
@@ -85,7 +95,10 @@ bin_unserialize <- function(x, offset = 0, refhook = NULL) {
   if (is_status(res)) {
     zubin_abort(
       sprintf(
-        "The serialisation stream at offset %s ends before its object does (`x` has %s bytes).",
+        paste0(
+          "The serialisation stream at offset %s ends before its object ",
+          "does (`x` has %s bytes)."
+        ),
         format(offset, scientific = FALSE),
         length(x)
       ),
@@ -112,18 +125,26 @@ bin_unserialize <- function(x, offset = 0, refhook = NULL) {
 #'
 #' It is a fingerprint, not a cryptographic digest and not a durable content
 #' address: fast, and well distributed, but not a defence against someone
-#' choosing inputs to collide. The digest is the same on every platform R
-#' runs on, with two exceptions:
+#' choosing inputs to collide.
 #'
-#' * On 32-bit x86 a double `NA` is stored with different bits, so an object
-#'   holding one hashes differently there.
-#' * R serialises a string as its bytes and its encoding mark, so the same
-#'   non-ASCII text hashes differently when it is marked UTF-8, latin1 or
-#'   not at all; and unmarked text is in the session's native encoding,
-#'   which depends on the locale. `identical()` compares the text, not the
-#'   mark, so `identical(x, y)` does not imply equal digests. Apply
-#'   [enc2utf8()] to the strings first for a digest that does not depend on
-#'   either.
+#' The digest is of the bytes R writes, not of the values they stand for, so
+#' `identical(x, y)` does not imply equal digests:
+#'
+#' * A double is its 64 bits. `0` and `-0` differ, as do NaNs of different
+#'   sign or payload, and `NA` once arithmetic has set its quiet bit
+#'   (`c(NA, 1) + 0`), though `identical()` treats each pair as the same.
+#'   How NaN and `NA` propagate through arithmetic depends on the platform
+#'   (see [NA]), so the same computation may hash differently on two
+#'   machines; and on 32-bit x86 even a double `NA` written as a literal has
+#'   different bits.
+#' * A string is its bytes and its encoding mark, so the same non-ASCII text
+#'   hashes differently when it is marked UTF-8, latin1 or not at all; and
+#'   unmarked text is in the session's native encoding, which depends on the
+#'   locale. Apply [enc2utf8()] to the strings first for a digest that does
+#'   not depend on either.
+#'
+#' Apart from these, the digest of an object is the same on every platform R
+#' runs on.
 #'
 #' `version = 2`, the default, writes compact sequences such as `1:10` as the
 #' vectors they are; `version = 3` writes their compact form, so the same
@@ -147,19 +168,7 @@ bin_hash_object <- function(
 ) {
   algo <- arg_match(algo)
   version <- check_version(version)
-  if (
-    !is.numeric(seed) ||
-      length(seed) != 1L ||
-      is.na(seed) ||
-      seed < 0 ||
-      seed > 2^53 ||
-      seed != floor(seed)
-  ) {
-    invalid_argument(
-      "`seed` must be a whole number from 0 to 2^53.",
-      arg = "seed"
-    )
-  }
+  check_size(seed, "seed", "`seed` must be a whole number from 0 to 2^53.")
   .Call(
     zubin_hash_object,
     x,
@@ -167,31 +176,4 @@ bin_hash_object <- function(
     version,
     as.double(seed)
   )
-}
-
-check_version <- function(version, call = sys.call(-1L)) {
-  if (!is.numeric(version) || length(version) != 1L || !version %in% c(2, 3)) {
-    invalid_argument("`version` must be 2 or 3.", arg = "version", call = call)
-  }
-  as.integer(version)
-}
-
-check_flag <- function(x, arg, call = sys.call(-1L)) {
-  if (!is.logical(x) || length(x) != 1L || is.na(x)) {
-    invalid_argument(
-      sprintf("`%s` must be TRUE or FALSE.", arg),
-      arg = arg,
-      call = call
-    )
-  }
-}
-
-check_refhook <- function(refhook, call = sys.call(-1L)) {
-  if (!is.null(refhook) && !is.function(refhook)) {
-    invalid_argument(
-      "`refhook` must be NULL or a function.",
-      arg = "refhook",
-      call = call
-    )
-  }
 }

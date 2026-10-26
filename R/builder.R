@@ -111,36 +111,42 @@ bin_put <- function(b, x, type = NULL, endian = c("little", "big", "native")) {
   endian <- arg_match(endian)
   if (is.null(type)) {
     invalid_argument("`x` must be a raw vector when `type` is NULL.", arg = "x")
+  }
+  if (!is_string(type)) {
+    invalid_argument(
+      "`type` must be NULL or a single type token.",
+      arg = "type"
+    )
+  }
+  width <- string_width(type)
+  if (is.null(width)) {
+    # a numeric, complex, bool or b<n> token: the pack kernels write it in
+    # place
+    layout <- type_layout(type, endian)
+    col <- pack_value(
+      drop_dim(x),
+      layout$fields$type,
+      count = 1L,
+      name = "x",
+      call = sys.call()
+    )
+    is64 <- inherits(col, "integer64")
+    res <- .Call(zubin_builder_put_typed, ptr, layout$spec, col, is64)
+    n <- length(col) * bin_size(layout)
   } else {
-    if (!is.character(type) || length(type) != 1L || is.na(type)) {
+    if (!is.character(x)) {
       invalid_argument(
-        "`type` must be NULL or a single type token.",
-        arg = "type"
+        sprintf("`x` must be character for type \"%s\".", type),
+        arg = "x"
       )
     }
-    width <- string_width(type)
-    if (is.null(width)) {
-      # a numeric, bool or b<n> token: the pack kernels write it in place
-      layout <- type_layout(type, endian)
-      col <- pack_value(x, layout$fields$type, 1L, "x", sys.call())
-      is64 <- inherits(col, "integer64")
-      res <- .Call(zubin_builder_put_typed, ptr, layout$spec, col, is64)
-      n <- length(col) * bin_size(layout)
-    } else {
-      if (!is.character(x)) {
-        invalid_argument(
-          sprintf("`x` must be character for type \"%s\".", type),
-          arg = "x"
-        )
-      }
-      res <- .Call(zubin_builder_put_str, ptr, x, width)
-      # the byte count is for the message alone: worked out only on failure
-      if (is_status(res)) {
-        n <- if (width < 0L) {
-          sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1)
-        } else {
-          length(x) * width
-        }
+    res <- .Call(zubin_builder_put_str, ptr, x, width)
+    # the byte count is for the message alone: worked out only on failure
+    if (is_status(res)) {
+      n <- if (width < 0L) {
+        sum(nchar(enc2utf8(x[!is.na(x)]), type = "bytes") + 1)
+      } else {
+        length(x) * width
       }
     }
   }
@@ -229,6 +235,7 @@ bin_size.default <- function(x, ...) {
   invalid_argument("`x` must be a builder or a layout.", arg = "x")
 }
 
+#' @rdname bin_size
 #' @export
 bin_size.zubin_builder <- function(x, ...) {
   builder_state(x)[[1L]]
@@ -328,7 +335,7 @@ builder_fail <- function(res, b, n, call = sys.call(-1L)) {
     },
     ZB_ERR_NA = zb_fail(
       res,
-      sprintf("`x[%s]` is NA, which has no bytes.", index + 1),
+      sprintf("`x[%s]` is NA or NaN, which has no bytes.", index + 1),
       field = NA_character_,
       index = index,
       call = call
@@ -359,22 +366,4 @@ builder_fail <- function(res, b, n, call = sys.call(-1L)) {
     },
     zb_fail(res, "Could not allocate the builder's storage.", call = call)
   )
-}
-
-# A non-negative whole number of bytes, at most 2^53.
-check_size <- function(x, arg, call = sys.call(-1L)) {
-  if (
-    !is.numeric(x) ||
-      length(x) != 1L ||
-      is.na(x) ||
-      x < 0 ||
-      x != floor(x) ||
-      x > 2^53
-  ) {
-    invalid_argument(
-      sprintf("`%s` must be a whole number of bytes, at least 0.", arg),
-      arg = arg,
-      call = call
-    )
-  }
 }

@@ -88,7 +88,7 @@ test_that("max is a hard cap: exactly max fits, one byte more is a limit error",
 test_that("a string append past max reports its size and appends nothing", {
   b <- bin_builder(max = 6)
   bin_put(b, bytes("01 02"))
-  e <- expect_error(bin_put(b, c("ab", "cé"), type = "z"), class = "zubin_limit_error")
+  e <- expect_error(bin_put(b, c("ab", utf8("63 c3 a9")), type = "z"), class = "zubin_limit_error")
   expect_identical(e$size, 2 + 3 + 4)
   e <- expect_error(bin_put(b, c("ab", "c"), type = "s3"), class = "zubin_limit_error")
   expect_identical(e$size, 2 + 6)
@@ -130,9 +130,29 @@ test_that("a builder restored from serialization errors cleanly", {
   expect_error(bin_reset(b2), class = "zubin_invalid_argument")
   expect_error(bin_reserve(b2, 1), class = "zubin_invalid_argument")
   expect_error(bin_put(b2, "a", type = "z"), class = "zubin_invalid_argument")
+  # typed appends, whose one guard against the freed pointer is in C
+  expect_error(bin_put(b2, 1:3, type = "u8"), class = "zubin_invalid_argument")
+  expect_error(bin_put(b2, list(as.raw(1:2)), type = "b2"), class = "zubin_invalid_argument")
+  expect_error(bin_serialize(1, b2), class = "zubin_invalid_argument")
   expect_identical(format(b2), "<zubin_builder: freed>")
   # the original is untouched
   expect_identical(as.raw(b), bytes("01"))
+})
+
+test_that("a b<n> element that is not raw cannot be written, and appends nothing", {
+  b <- bin_builder()
+  bin_put(b, bytes("aa"))
+  e <- expect_error(bin_put(b, list(as.raw(1:2), 1:2, "x"), type = "b2"),
+                    class = "zubin_invalid_argument")
+  expect_identical(e$index, 1)
+  e <- expect_error(bin_put(b, list(as.raw(1:2), as.raw(1:2), as.raw(1)), type = "b2"),
+                    class = "zubin_range_error")
+  expect_identical(e$index, 2)
+  # checked before anything is reserved: a wrong element of a wide field
+  # does not first grow the builder to hold it
+  expect_error(bin_put(b, list(raw(1)), type = "b2000000000"), class = "zubin_range_error")
+  expect_lt(builder_state(b)[[2L]], 1e6)
+  expect_identical(as.raw(b), bytes("aa"))
 })
 
 test_that("print shows size, capacity and max", {

@@ -515,6 +515,12 @@ R glue checks them once with `anyDuplicated()` and parses with the internal
 re-parsed on every `bin_unpack()` and `bin_pack()`, in linear time (#52). The field array
 is sized by `zb_layout_count_fields()`, one more than the runs of separators.
 
+An array field `a[k]` is the columns `a.1` … `a.k` of a data frame (§13.3), so R also
+refuses a field named `a.j` for j ≤ k, at that name's position: the frame would hold two
+columns of one name, and `bin_pack()` would refuse what `bin_unpack()` returned. `a.0`,
+`a.01` and `a.j` past k are other names. The C parser does not know data frames, and
+accepts them.
+
 Examples:
 
 ```
@@ -728,6 +734,15 @@ zubin owns are statuses:
   raises instead, `R_UnwindProtect` restores the length on the way out, so an error or an
   interrupt (in a refhook; R_Serialize itself never checks for one) appends nothing. The
   buffer's memory must be owned by R (`zb_r_buf_new()`) for that jump not to leak it.
+- **A refhook that changes the builder** is `ZB_ERR_INVALID` from `zb_serialize`: the
+  sink checks before each append, and once more at the end, that the builder's length is
+  its length before plus what the sink wrote, rather than writing the stream around the
+  refhook's bytes. The length is restored when the refhook only appended; when it took
+  bytes away, the builder holds what it left. A refhook must not use the builder.
+
+The private EOF class is not proof of EOF: a refhook can signal any class, so the
+handler records that it ran, and a condition of that class signalled while the cursor
+had bytes left is raised again, unchanged, rather than taken for the end of the stream.
 
 A sink must not call `R_CheckUserInterrupt()` or anything else that can jump. The R
 functions are `bin_serialize()`, `bin_unserialize()` and `bin_hash_object()` (§13.9).
@@ -850,7 +865,10 @@ bin_encode(x, type, endian = c("little", "big", "native"), na = c("error", "allo
 is the one-field read at an offset, vectorised: `bin_decode(x, "u32", offset = 4)` is a
 header field, `bin_decode(x, "f32", offset = 64, n = 1e6)` is a column. `bin_encode` is
 `writeBin(x, raw(), size = 4)` generalised to every width, with rounding to f16/bf16/f32
-and an error, never a silent truncation, for an integer that does not fit.
+and an error, never a silent truncation, for an integer that does not fit. Like
+`writeBin()`, it writes every element of a matrix or array, in column-major order, and so
+does a typed `bin_put()`: a codec has one field of one element, so the dimensions are
+dropped rather than read as an array field's columns.
 `bin_encode(bin_decode(b, t), t)` is the identity on canonical bytes, pinned by a property
 test; the exceptions are a `bool` byte other than 00 or 01, the bytes after an `s<n>`'s first
 NUL, and an `i64`/`u64` beyond 2^53 under `int64 = "double"`, which does not decode.
@@ -1118,6 +1136,15 @@ Branches no test reaches from R, and why:
   and from `bin_serialize()` when the builder cannot grow: the first needs an input of
   more than 4 GiB, the second a real allocation failure part-way through a stream; the
   weekly `alloc-failure.yaml` sweep covers the latter.
+- The `malloc()` of the small struct in `zubin-r.h`'s `zb_r_buf_new()` and
+  `zb_r_extbuf_new()` returning `NULL`: a few dozen bytes cannot be made to fail from R,
+  and the harness has no hook into `malloc()`. Both paths unprotect the one external
+  pointer they hold, which has no address yet, so its finalizer has nothing to free.
+  The weekly `alloc-failure.yaml` sweep reaches the first, through `bin_builder()`; the
+  second, the same three lines, only a consumer's own allocation-failure run.
+- The overflow of the summed string lengths in `zubin_builder_put_str()` (a `"z"`
+  append): the strings would have to hold more than `SIZE_MAX` bytes, which no R
+  session can, even on a 32-bit `size_t`, where R's vectors are smaller still.
 
 ### 16.4 Correctness
 
@@ -1270,6 +1297,7 @@ Draft 1's eleven open questions, resolved, followed by the decisions revision 2 
 | 31 | Shared foreign memory | One lifetime primitive in `zubin-r.h`, two-step so it cannot leak (§12.2); ALTREP classes stay with the package that owns each R type. Settles next.md's question of one home for views, mappings and zero-copy columns without a `zuview` package. |
 | 32 | `int64 = "zuint"` | Deferred: a CRAN package cannot suggest one that is not on CRAN. The kernels and §12.2 are what it will be built on (next.md). |
 | 33 | Where the C recipe lives | The `c-api` article, which renders the fixture's files as they are, not the README (2026-10-23). The README is the front page for R users and links to the article; a copy in two places needed `tools/check-recipe` to keep it honest, and the article needs nothing. |
+| 34 | Where a serialisation stream ends | Not exposed in 0.1.0: `bin_unserialize()` returns the object alone (§13.9), although `zb_unserialize()` advances its cursor (critical review, #87). An `end` attribute would land on the user's object, and a flag that switches the return type between an object and a list is the shape the tidyverse guide advises against; keeping the return value bare leaves the addition free. It is 0.2.0's, through `bin_unserialize(cur)` on the R cursor (next.md). |
 
 ## 20. Deferred
 

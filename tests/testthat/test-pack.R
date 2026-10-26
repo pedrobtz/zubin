@@ -23,6 +23,47 @@ test_that("a value out of range, a fraction or an infinity is a range error", {
   expect_bytes(bin_encode(2^64 - 2048, "u64"), "00 f8 ff ff ff ff ff ff")
 })
 
+test_that("each integer type writes its bounds and refuses one past them, from integer and double, in both orders", {
+  # the bytes of a whole number in two's complement, built in R alone
+  ref <- function(v, w, endian) {
+    u <- v %% 2^(8 * w)
+    b <- as.raw((u %/% 256^(seq_len(w) - 1)) %% 256)
+    if (endian == "big") rev(b) else b
+  }
+  bounds <- list(
+    u8 = c(1, 0, 255), i8 = c(1, -128, 127), u16 = c(2, 0, 65535),
+    i16 = c(2, -32768, 32767), u32 = c(4, 0, 2^32 - 1), i32 = c(4, -2^31, 2^31 - 1)
+  )
+  for (t in names(bounds)) {
+    w <- bounds[[t]][1]
+    lo <- bounds[[t]][2]
+    hi <- bounds[[t]][3]
+    for (endian in c("little", "big")) {
+      for (input in c("double", "integer")) {
+        # -2^31 is NA_integer_, so an integer i32 starts one above it
+        lo_in <- if (input == "integer" && t == "i32") lo + 1 else lo
+        as_input <- function(v) if (input == "integer") as.integer(v) else v
+        fits <- function(v) input == "double" || abs(v) <= .Machine$integer.max
+        label <- paste(t, endian, input)
+        if (fits(hi)) {
+          expect_identical(bin_encode(as_input(c(lo_in, hi)), t, endian = endian),
+                           c(ref(lo_in, w, endian), ref(hi, w, endian)), label = label)
+        }
+        for (v in c(lo - 1, hi + 1)) {
+          if (!fits(v)) next
+          e <- expect_error(bin_encode(as_input(c(lo_in, v)), t, endian = endian),
+                            class = "zubin_range_error", label = paste(label, v))
+          expect_identical(e$index, 1)
+        }
+      }
+    }
+  }
+  # in i32, -2^31 is a value from a double and NA from an integer
+  expect_bytes(bin_encode(-2^31, "i32"), "00 00 00 80")
+  expect_error(bin_encode(NA_integer_, "i32"), class = "zubin_na_error")
+  expect_error(bin_encode(-2^31 - 1, "i32"), class = "zubin_range_error")
+})
+
 test_that("NA has bytes only in i32 (when allowed) and the floating types", {
   for (t in c("u8", "i8", "u16", "i16", "u32", "u64", "i64", "bool")) {
     x <- if (t == "bool") c(TRUE, NA) else c(1, NA)
@@ -77,8 +118,8 @@ test_that("bool takes logical only", {
 
 test_that("s<n> takes character of at most n UTF-8 bytes, NUL-padded", {
   expect_bytes(bin_encode(c("ab", "", "abcd"), "s4"), "61 62 00 00 00 00 00 00 61 62 63 64")
-  expect_bytes(bin_encode("é", "s2"), "c3 a9")
-  e <- expect_error(bin_encode(c("ok", "éé"), "s3"), class = "zubin_range_error")
+  expect_bytes(bin_encode(utf8("c3 a9"), "s2"), "c3 a9")
+  e <- expect_error(bin_encode(c("ok", utf8("c3 a9 c3 a9")), "s3"), class = "zubin_range_error")
   expect_identical(e$index, 1)
   expect_error(bin_encode(1, "s4"), class = "zubin_invalid_argument")
 })
@@ -228,9 +269,12 @@ test_that("integer64 keeps its class through recycling, arrays and typed bin_put
   # as a vector
   v <- "05 00 00 00 00 00 00 00 05 00 00 00 00 00 00 00"
   expect_bytes(bin_pack("<v:i64[2]", list(v.1 = five, v.2 = five)), v)
-  expect_bytes(bin_pack("<v:i64[2]", v = c(five, five)), v)
+  # built without c(), whose integer64 method is bit64's and is only there
+  # once bit64 is loaded
+  five2 <- structure(c(unclass(five), unclass(five)), class = "integer64")
+  expect_bytes(bin_pack("<v:i64[2]", v = five2), v)
   # an array matrix recycled to the longest column
-  m <- structure(matrix(unclass(c(five, five)), nrow = 1L), class = "integer64")
+  m <- structure(matrix(unclass(five2), nrow = 1L), class = "integer64")
   expect_bytes(bin_pack("<v:i64[2] b:u8", v = m, b = 1:2),
                paste(v, "01", v, "02"))
   # and unpacked as a data frame: integer64 columns with the exact bits,
@@ -279,9 +323,29 @@ test_that("a string that is not valid UTF-8 is an encoding error on every write 
   }
   expect_identical(as.raw(b), bytes("aa"))
   # latin1 is translated, so it writes as valid UTF-8
-  l1 <- iconv("é", "UTF-8", "latin1")
+  l1 <- iconv(utf8("c3 a9"), "UTF-8", "latin1")
   expect_identical(Encoding(l1), "latin1")
   expect_bytes(bin_encode(l1, "s2"), "c3 a9")
+})
+
+test_that("bin_encode() and typed bin_put() write every element of a matrix, as writeBin() does", {
+  m <- matrix(1:6, 2)
+  expect_identical(bin_encode(m, "u8"), writeBin(as.vector(m), raw(), size = 1L))
+  expect_identical(bin_encode(m, "i32", endian = "big"), writeBin(as.vector(m), raw(), endian = "big"))
+  a <- array(c(0.5, 1.5, 2.5, 3.5), c(2, 1, 2))
+  expect_identical(bin_encode(a, "f64"), writeBin(as.vector(a), raw(), endian = "little"))
+  b <- bin_builder()
+  bin_put(b, m, type = "u16")
+  expect_identical(bin_take(b), bin_encode(1:6, "u16"))
+  # the integer64 class survives losing the dimensions
+  five <- structure(rw_read("i64", "le", bytes("05 00 00 00 00 00 00 00")), class = "integer64")
+  m64 <- structure(matrix(rep(unclass(five), 2), 1), class = "integer64")
+  expect_bytes(bin_encode(m64, "i64"), "05 00 00 00 00 00 00 00 05 00 00 00 00 00 00 00")
+})
+
+test_that("a NaN is an NA error in the integer types", {
+  e <- expect_error(bin_encode(c(1, NaN), "u8"), class = "zubin_na_error")
+  expect_identical(e$index, 1)
 })
 
 test_that("i16 big-endian packs from a double", {

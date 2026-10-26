@@ -66,7 +66,8 @@ read; \code{\link[=bin_pack]{bin_pack()}}, \code{\link[=bin_encode]{bin_encode()
 
 \tabular{llll}{
 \strong{Spec} \tab \strong{Bytes} \tab \strong{Read as} \tab \strong{Written from} \cr
-\verb{u8 i8 u16 i16} \tab 1--2 \tab integer \tab integer, whole double, logical \cr
+\verb{u8 i8 u16 i16} \tab 1--2 \tab integer \tab integer, whole double,
+logical \cr
 \code{i32} \tab 4 \tab integer; -2^31 is an error unless \code{na = "allow"} \tab
 integer, whole double; \code{NA} only with \code{na = "allow"} \cr
 \code{u32} \tab 4 \tab double \tab integer, whole double \cr

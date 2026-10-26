@@ -46,6 +46,34 @@ test_that("i128 and u128 read as doubles while exact, as integer64 while they fi
   expect_error(bin_decode(bin_encode(2^100, "u128"), "u128"), class = "zubin_range_error")
 })
 
+test_that("i128 and u128 read as integer64 only while the value is one", {
+  dec64 <- function(v, t, ...) bin_decode(bin_encode(v, t), t, int64 = "integer64", ...)
+  # u128 from 2^63 has a zero high half and a low half past int64
+  expect_error(dec64(2^63, "u128"), class = "zubin_range_error")
+  expect_error(dec64(2^64 - 2048, "u128"), class = "zubin_range_error")
+  expect_identical(bits(unclass(dec64(2^63 - 1024, "u128"))), bin_encode(2^63 - 1024, "u64"))
+  # i128 at 2^63 has a zero high half and the low half's top bit set: not a
+  # sign extension, so not -2^63
+  expect_error(dec64(2^63, "i128"), class = "zubin_range_error")
+  expect_error(dec64(-2^63 - 2048, "i128"), class = "zubin_range_error")
+  # -2^63 is bit64's NA: an error unless NA is allowed
+  e <- expect_error(dec64(c(0, -2^63), "i128"), class = "zubin_range_error")
+  expect_identical(e$index, 1)
+  expect_identical(bits(unclass(dec64(-2^63, "i128", na = "allow"))),
+                   bytes("00 00 00 00 00 00 00 80"))
+})
+
+test_that("an integer64 NA has no bytes in i128 or u128", {
+  na64 <- structure(rw_read("i64", "le", bytes("00 00 00 00 00 00 00 80")), class = "integer64")
+  for (t in c("i128", "u128")) {
+    for (na in c("error", "allow")) {
+      e <- expect_error(bin_encode(na64, t, na = na), class = "zubin_na_error",
+                        label = paste(t, na))
+      expect_identical(e$index, 0)
+    }
+  }
+})
+
 test_that("integer64 writes into i128 and u128 sign-extended", {
   minus1 <- structure(readBin(rep(as.raw(0xff), 8), "double", size = 8L, endian = "little"),
                       class = "integer64")

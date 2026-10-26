@@ -147,13 +147,43 @@ test_that("a duplicate name is found at its position in a wide spec", {
 test_that("a layout of tens of thousands of fields parses and unpacks in linear time", {
   skip_if_no_slow_tests()
   spec <- paste0("f", 1:40000, ":u8", collapse = " ")
-  # quadratic, this took seconds to parse and again on every unpack
-  elapsed <- system.time({
-    l <- bin_layout(spec)
-    cols <- bin_unpack(raw(40000), l, as = "list")
-  })[["elapsed"]]
-  expect_length(cols, 40000L)
-  expect_lt(elapsed, 5)
+  # quadratic, this took seconds to parse and again on every unpack. Four
+  # times the fields costs about four times as long when linear, sixteen
+  # when quadratic: a ratio, so that a slow runner does not fail it.
+  run <- function(k) {
+    spec <- paste0("f", seq_len(k), ":u8", collapse = " ")
+    system.time({
+      l <- bin_layout(spec)
+      cols <- bin_unpack(raw(k), l, as = "list")
+    })[["elapsed"]]
+  }
+  small <- run(10000)
+  expect_lt(run(40000), 10 * max(small, 0.05))
+  expect_length(bin_unpack(raw(40000), spec, as = "list"), 40000L)
+})
+
+test_that("a field may not take the name of an array field's column", {
+  # a:u8[2] is the columns a.1 and a.2 of a data frame
+  for (spec in c("a:u8[2] a.1:u8", "a.2:u8 a:u8[2]", "a:f64[3] b:u8 a.3:u16")) {
+    e <- expect_error(bin_layout(spec), class = "zubin_spec_error", label = spec)
+    expect_identical(e$position, as.double(regexpr("a[.][0-9]", spec) - 1L), label = spec)
+  }
+  # past the count, or not a column number, is a different name
+  for (spec in c("a:u8[2] a.3:u8", "a:u8[2] a.01:u8", "a:u8 a.1:u8", "a:s4 a.1:u8")) {
+    expect_s3_class(bin_layout(spec), "zubin_layout")
+  }
+})
+
+test_that("spec positions count bytes when names or values are not ASCII", {
+  # e-acute is two bytes, so the space of "u8 x" after its name is byte 5
+  spec <- "u8 x"
+  names(spec) <- utf8("c3 a9")
+  e <- expect_error(bin_layout(spec), class = "zubin_spec_error")
+  expect_identical(e$position, 5)
+  spec <- c(a = "u8", b = "u16 y")
+  names(spec)[1] <- utf8("e2 82 ac")
+  e <- expect_error(bin_layout(spec), class = "zubin_spec_error")
+  expect_identical(e$position, 12)
 })
 
 test_that("an unnamed field's default name may not shadow an explicit one", {
@@ -201,9 +231,14 @@ test_that("align = TRUE places fields as the C compiler does", {
   cases <- .Call(zubin_test_struct_offsets)
   expect_length(cases, 12L)
   for (s in cases) {
-    # 32-bit x86 aligns 8-byte struct members to 4; design 11.4 documents it
-    if (s$has8 && .Machine$sizeof.pointer == 4L) next
     l <- bin_layout(s$spec, endian = "native", align = TRUE)
+    if (s$has8 && .Machine$sizeof.pointer == 4L) {
+      # 32-bit x86 aligns 8-byte struct members to 4 (design 11.4); the
+      # layout keeps the 64-bit rule, which pads at least as much
+      expect_gte(bin_size(l), s$size, label = s$spec)
+      expect_identical(bin_layout(s$spec, align = TRUE)$align, 8L, label = s$spec)
+      next
+    }
     expect_identical(l$fields$offset, s$offsets, label = s$spec)
     expect_identical(bin_size(l), s$size, label = s$spec)
   }
@@ -261,4 +296,20 @@ test_that("length, names, as.data.frame and bin_size describe the layout", {
 test_that("a layout prints as a table", {
   expect_snapshot(print(bin_layout("<ts:i64 price:f64 qty:i32 side:u8 x3 crc:u32.be")))
   expect_snapshot(print(bin_layout("a:u8 b:u32 c:u16", align = TRUE)))
+})
+
+test_that("the type helpers name every type, and answer 0 and \"?\" outside the enumeration", {
+  codes <- 0:40
+  info <- .Call(zubin_test_type_info, codes)
+  # type_tokens[i] is the token of value i; value 0 is not a type
+  known <- c(FALSE, !is.na(type_tokens[1:40]))
+  # R's table of tokens by type value is the C one
+  expect_identical(info$name[known], type_tokens[codes[known]])
+  expect_true(all(info$width[known] %in% c(1L, 2L, 4L, 8L, 16L)))
+  expect_identical(info$align[codes == 34L | codes == 35L], c(4L, 8L))   # c64, c128
+  expect_identical(unique(info$name[!known]), "?")
+  expect_identical(unique(info$width[!known]), 0L)
+  expect_identical(unique(info$align[!known]), 0L)
+  # and a negative one
+  expect_identical(.Call(zubin_test_type_info, -1L)$name, "?")
 })

@@ -91,9 +91,15 @@ SEXP zb_rfuzz_object(zb_rfuzz_in *in, int depth)
         }
         break;
     case 7:   /* a compact sequence (ALTREP) */
-        x = PROTECT(Rf_eval(Rf_lang3(Rf_install(":"), Rf_ScalarInteger(1),
-                                     Rf_ScalarInteger(1 + (int)n * 1000)), R_BaseEnv));
+    {
+        SEXP from = PROTECT(Rf_ScalarInteger(1));
+        SEXP to = PROTECT(Rf_ScalarInteger(1 + (int)n * 1000));
+        SEXP call = PROTECT(Rf_lang3(Rf_install(":"), from, to));
+        x = Rf_eval(call, R_BaseEnv);
+        UNPROTECT(3);
+        PROTECT(x);
         break;
+    }
     case 8:
         x = PROTECT(Rf_install(n ? "zb_sym" : "another_sym"));
         break;

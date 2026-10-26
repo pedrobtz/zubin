@@ -69,7 +69,7 @@ random_column <- function(type, count, n) {
     NULL
   )
   if (base == "s") {
-    pool <- c("", "a", "ab", "é", "xyz", "€", "hello", "abcdefgh")
+    pool <- c("", "a", "ab", utf8("c3 a9"), "xyz", utf8("e2 82 ac"), "hello", "abcdefgh")
     pool <- pool[nchar(pool, type = "bytes") <= width]
     return(sample(pool, n, TRUE))
   }

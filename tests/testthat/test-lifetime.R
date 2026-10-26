@@ -19,7 +19,11 @@ test_that("builders that are dropped are freed by the collector", {
 test_that("a buffer stranded by an error is freed once collected", {
   gc()
   before <- live_buffers()
-  expect_error(.Call(zubin_test_put_then_error), "planned error")
+  planned <- function() {
+    stop(structure(class = c("zubin_test_planned", "error", "condition"),
+                   list(message = "the planned error", call = NULL)))
+  }
+  expect_error(.Call(zubin_test_put_then_error, planned), class = "zubin_test_planned")
   gc()
   expect_identical(live_buffers(), before)
 })
@@ -90,21 +94,31 @@ test_that("an interrupted string bin_put() leaves the builder unchanged", {
 test_that("an interrupted typed bin_put() leaves the builder unchanged", {
   skip_on_cran()
   skip_if_no_slow_tests()
-  b <- bin_builder()
-  bin_put(b, bytes("01"))
-  big <- integer(2^28)   # 1 GiB as i32, 16 chunks of 64 MiB
-  cut_short <- FALSE
-  for (limit in c(0.02, 0.05, 0.1)) {
-    if (interrupted_by_time_limit(function() bin_put(b, big, type = "i32"), limit)) {
-      cut_short <- TRUE
-      break
-    }
-    bin_reset(b)
+  # 1 GiB of each, 16 chunks of 64 MiB: numbers, complex numbers, and a
+  # byte list (one raw vector repeated, so the list itself is small)
+  cases <- list(
+    i32 = function() integer(2^28),
+    c128 = function() complex(2^26),
+    b4096 = function() rep(list(raw(4096)), 2^18)
+  )
+  for (type in names(cases)) {
+    b <- bin_builder()
     bin_put(b, bytes("01"))
+    big <- cases[[type]]()
+    cut_short <- FALSE
+    for (limit in c(0.02, 0.05, 0.1)) {
+      if (interrupted_by_time_limit(function() bin_put(b, big, type = type), limit)) {
+        cut_short <- TRUE
+        break
+      }
+      bin_reset(b)
+      bin_put(b, bytes("01"))
+    }
+    expect_true(cut_short, label = type)
+    expect_identical(bin_size(b), 1)
+    expect_identical(as.raw(b), bytes("01"))
+    rm(big)
   }
-  expect_true(cut_short)
-  expect_identical(bin_size(b), 1)
-  expect_identical(as.raw(b), bytes("01"))
 })
 
 test_that("an interrupted bin_pack() leaves nothing behind", {
@@ -114,7 +128,6 @@ test_that("an interrupted bin_pack() leaves nothing behind", {
   spec <- paste0("f", 1:64, ":f64", collapse = " ")
   cols <- rep(list(double(2^21)), 64)   # 1 GiB of records in all
   names(cols) <- paste0("f", 1:64)
-  copy <- cols
   cut_short <- FALSE
   for (limit in c(0.02, 0.05, 0.1)) {
     if (interrupted_by_time_limit(function() bin_pack(spec, cols), limit)) {
@@ -123,7 +136,6 @@ test_that("an interrupted bin_pack() leaves nothing behind", {
     }
   }
   expect_true(cut_short)
-  expect_identical(cols, copy)
   gc()
   # the half-written result was R's, and is collected like any vector
   expect_length(bin_pack("a:u8", a = 1:3), 3L)

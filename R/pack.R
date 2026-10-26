@@ -23,15 +23,15 @@
 #' to nearest even); complex, or numeric as a real part, for `c64` and `c128`;
 #' logical for `bool`; character for `s<n>` (UTF-8, at most `n` bytes); and a
 #' list of raw vectors of exactly `n` bytes for `b<n>`. A string marked
-#' `"bytes"` is written as its bytes, unchecked, so that `bin_unpack(x, l,
-#' encoding = "bytes")` packs back to `x`; any other string must be valid
-#' UTF-8 once translated to it, or the call is a `zubin_encoding_error`.
-#' Nothing is truncated, wrapped or rounded into an integer type: a value
-#' that does not fit is a `zubin_range_error`, and an `NA` a
-#' `zubin_na_error`, each carrying `field` and the 0-based record `index` of
-#' the first one. `NA` has bytes only in
-#' `i32` (with `na = "allow"`), `f64`, and the other floating types, where it
-#' becomes a NaN.
+#' `"bytes"` is written as its bytes, unchecked, so that
+#' `bin_unpack(x, l, encoding = "bytes")` packs back to `x`; any other string
+#' must be valid UTF-8 once translated to it, or the call is a
+#' `zubin_encoding_error`. Nothing is truncated, wrapped or rounded into an
+#' integer type: a value that does not fit is a `zubin_range_error`, and an
+#' `NA` or a NaN a `zubin_na_error`, each carrying `field` and the 0-based
+#' record `index` of the first one. `NA` has bytes only in `i32` (with
+#' `na = "allow"`), `f64`, and the other floating types, where it becomes a
+#' NaN.
 #'
 #' @param layout A [bin_layout()], or a specification string for one.
 #' @param ... Named columns, or one data frame or list of them.
@@ -57,7 +57,8 @@ bin_pack <- function(layout, ..., na = c("error", "allow")) {
 
 #' Write a vector of one type to bytes
 #'
-#' `bin_encode()` writes every element of `x` as `type`, in `endian` order:
+#' `bin_encode()` writes every element of `x` as `type`, in `endian` order
+#' (a matrix or array in column-major order, as its elements are stored):
 #' [writeBin()] generalised to every width and both byte orders, rounding to
 #' f16, bf16 and f32 to nearest even, and refusing, never truncating, an
 #' integer that does not fit.
@@ -95,7 +96,16 @@ bin_encode <- function(
   endian <- arg_match(endian)
   na <- arg_match(na)
   layout <- type_layout(type, endian)
-  pack_columns(layout, list(v = x), na, codec = TRUE)
+  pack_columns(layout, list(v = drop_dim(x)), na, codec = TRUE)
+}
+
+# A vector of the elements of x, as writeBin() writes an array: a codec has
+# one field of one element, which a matrix of more than one column is not.
+drop_dim <- function(x) {
+  if (!is.null(dim(x))) {
+    dim(x) <- NULL
+  }
+  x
 }
 
 # The columns, from named arguments or one data frame or list, matched to
@@ -268,7 +278,10 @@ pack_value <- function(x, type, count, name, call) {
     if (length(x) != count) {
       invalid_argument(
         sprintf(
-          "Field `%s` is an array of %d: give a matrix of %d columns, or one record's %d values.",
+          paste0(
+            "Field `%s` is an array of %d: give a matrix of %d columns, ",
+            "or one record's %d values."
+          ),
           name,
           count,
           count,
@@ -280,7 +293,9 @@ pack_value <- function(x, type, count, name, call) {
     }
     cls <- oldClass(x)
     x <- matrix(unclass(x), nrow = 1L)
-    if (identical(cls, "integer64")) class(x) <- cls
+    if (identical(cls, "integer64")) {
+      class(x) <- cls
+    }
   }
   if (is.matrix(x) && ncol(x) != count) {
     invalid_argument(
@@ -339,32 +354,25 @@ pack_rows <- function(x) {
   if (is.matrix(x)) nrow(x) else length(x)
 }
 
+# C reads only the type, so the one class worth keeping is integer64, whose
+# doubles hold 64-bit integers.
 recycle_rows <- function(x, n) {
-  if (is.matrix(x)) {
-    cls <- oldClass(x)
-    m <- unclass(x)[rep_len(seq_len(nrow(x)), n), , drop = FALSE]
-    if (!is.null(cls)) {
-      class(m) <- cls
-    }
-    return(m)
-  }
   cls <- oldClass(x)
-  v <- rep_len(unclass(x), n)
-  if (identical(cls, "integer64")) {
-    class(v) <- cls
+  out <- if (is.matrix(x)) {
+    unclass(x)[rep_len(seq_len(nrow(x)), n), , drop = FALSE]
+  } else {
+    rep_len(unclass(x), n)
   }
-  v
+  if (identical(cls, "integer64")) {
+    class(out) <- cls
+  }
+  out
 }
 
 pack_fail <- function(res, layout, codec, call) {
   name <- as.character(res)
   index <- attr(res, "index")
-  pos <- attr(res, "field")
-  field <- if (is.null(pos) || codec) {
-    NA_character_
-  } else {
-    layout$fields$name[pos + 1L]
-  }
+  field <- status_field(res, layout, codec)
   what <- if (is.na(field)) "" else sprintf(" of field `%s`", field)
   rec <- format(index, scientific = FALSE)
   switch(
@@ -378,7 +386,11 @@ pack_fail <- function(res, layout, codec, call) {
     ),
     ZB_ERR_NA = zb_fail(
       res,
-      sprintf("Value %s%s is NA, which has no bytes in its type.", rec, what),
+      sprintf(
+        "Value %s%s is NA or NaN, which has no bytes in its type.",
+        rec,
+        what
+      ),
       field = field,
       index = index,
       call = call

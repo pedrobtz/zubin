@@ -47,6 +47,9 @@ the stream (an object it cannot serialise, a malformed stream, an error in
 object does is a \code{zubin_bounds_error} carrying \code{offset} and \code{length}. An
 append that would pass the builder's \code{max} is a \code{zubin_limit_error}; in
 every failure, an interrupt included, the builder is left as it was.
+\code{refhook} must not use \code{b}: a refhook that changes it is a
+\code{zubin_invalid_argument} error, and one that removed bytes from \code{b} leaves
+it holding what the refhook left.
 
 Only read serialised data from a source you trust: a serialisation
 stream can hold any R object, functions and environments included.
