@@ -36,10 +36,10 @@
       Error in `bin_unpack()`:
       ! The string of record 1 in field `s` is not valid UTF-8.
     Code
-      bin_reserve(b, 2147483648)
+      bin_reserve(b, 2e+09)
     Condition
       Error in `bin_reserve()`:
-      ! Appending 2147483648 bytes would pass the builder's max of 2147483648 bytes.
+      ! Appending 2000000000 bytes would pass the builder's max of 2000000000 bytes.
     Code
       bin_put(b, c(1, 2, NA), type = "u8")
     Condition

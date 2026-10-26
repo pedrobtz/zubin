@@ -5,7 +5,8 @@
 # that a shuffled run cannot reorder the snapshot file.
 
 test_that("every condition class's message reads well", {
-  b <- bin_builder(max = 2147483648)
+  # 2e9, not 2^31: a 32-bit size_t holds no size past 2^31 - 1
+  b <- bin_builder(max = 2e9)
   bin_put(b, raw(4))
   small <- bin_builder(max = 10)
   bin_put(small, raw(4))
@@ -18,7 +19,7 @@ test_that("every condition class's message reads well", {
     bin_encode(c(1, 2, -1), "u32")
     bin_pack("a:i32", a = c(1L, NA))
     bin_unpack(as.raw(c(0x61, 0xff)), "s:s1")
-    bin_reserve(b, 2147483648)
+    bin_reserve(b, 2e9)
     bin_put(b, c(1, 2, NA), type = "u8")
     bin_put(b, c("ab", "abc"), type = "s2")
     bin_layout("id:u32 name:s0")
