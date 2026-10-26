@@ -2,8 +2,9 @@
 
 Describe a fixed binary record once, as a layout, and read or write
 millions of them in one vectorised call: integers from 8 to 128 bits,
-IEEE half, 'bfloat16' (brain floating point), single and double
-precision floats, complex numbers, booleans, fixed bytes and fixed
+the half, single and double precision floats of the IEEE 754 (Institute
+of Electrical and Electronics Engineers) standard, 'bfloat16' (brain
+floating point), complex numbers, booleans, fixed bytes and fixed
 strings, padding, arrays and 'C' struct alignment, in either byte order.
 Typed codecs convert whole vectors to and from bytes at every width and
 byte order, refusing rather than rounding a value that does not fit, and
