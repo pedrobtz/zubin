@@ -14,3 +14,7 @@
 ^src/.*\.dll$
 ^src/.*\.dylib$
 ^README\.Rmd$
+^\.superpowers$
+^\.worktrees$
+^CLAUDE\.md$
+^AGENTS\.md$
