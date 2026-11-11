@@ -11,11 +11,11 @@
 # CRAN ships, not zufast's main. The serialize and sink targets exercise
 # zubin-r.h, so they embed R (embed-r).
 on:
-  push:
-    branches: [main, master]
+  # No `push:`: a pull request already checks its merge with main,
+  # and the schedule checks main (r-actions README, "Pushes to main").
   pull_request:
   schedule:
-    - cron: "23 2 * * *"
+    - cron: "20 18 * * *"
   workflow_dispatch:
     inputs:
       seconds:
