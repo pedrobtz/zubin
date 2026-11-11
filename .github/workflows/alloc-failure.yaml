@@ -8,7 +8,7 @@
 # bin_put() nor type_layout(), which typed bin_put() reaches, uses one now.
 on:
   schedule:
-    - cron: "37 4 * * 3"
+    - cron: "5 18 * * 6"
   workflow_dispatch:
 
 name: alloc-failure

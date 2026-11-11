@@ -8,8 +8,8 @@
 # directory: a checkout of pedrobtz/zufast at the tag of the version on CRAN
 # for the header gate (no R there), and the CRAN package for the symbol audit.
 on:
-  push:
-    branches: [main, master]
+  # No `push:`: a pull request already checks its merge with main,
+  # and the schedule checks main (r-actions README, "Pushes to main").
   pull_request:
 
 name: abi
