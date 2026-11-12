@@ -1,6 +1,6 @@
 Package: zubin
 Title: Read and Write Structured Binary Data
-Version: 0.1.0
+Version: 0.1.0.9000
 Authors@R: 
     person("Pedro", "Baltazar", , "pedrobtz@gmail.com",
            role = c("aut", "cre", "cph"))
