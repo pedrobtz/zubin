@@ -8,7 +8,7 @@
 [![CRAN
 status](https://www.r-pkg.org/badges/version/zubin)](https://CRAN.R-project.org/package=zubin)
 [![R-CMD-check](https://github.com/pedrobtz/zubin/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/pedrobtz/zubin/actions/workflows/R-CMD-check.yaml)
-[![coverage](https://raw.githubusercontent.com/pedrobtz/zubin/main/.github/badges/coverage.svg)](https://github.com/pedrobtz/zubin/actions/workflows/coverage.yaml)
+[![coverage](https://raw.githubusercontent.com/pedrobtz/zubin/gh-pages/badges/coverage.svg)](https://github.com/pedrobtz/zubin/actions/workflows/coverage.yaml)
 [![Lifecycle:
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
