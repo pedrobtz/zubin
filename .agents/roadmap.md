@@ -702,9 +702,10 @@ matches the code.
 
 ## Stage 9 — Release 0.1.0 · S
 
-**Status:** ready to submit. zufast 0.1.0 reached CRAN (checked 2026-10-22), the
-pre-release review (#31) is addressed, and the release commit is green on every leg. What
-remains is the maintainer's: submit, then the post-acceptance steps below.
+**Status:** done (#13). zubin 0.1.0 was published on CRAN on 2026-11-11. `cran-release.yaml`
+tags the submitted commit `0.1.0` (bare, the family's convention, not `v0.1.0`), publishes
+the release and opens the `0.1.0.9000` bump. Of design §3.2's adoption issues, only zucbor's
+(zucbor#49) is filed.
 
 **Entry:** zufast 0.1.0 is on CRAN.
 

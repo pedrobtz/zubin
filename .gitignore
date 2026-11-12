@@ -1,6 +1,5 @@
 docs
 inst/doc
-CRAN-SUBMISSION
 _problems/
 # build products, anywhere (the fixture under tools/ is built in place too)
 *.o

@@ -51,14 +51,14 @@ The specification outranks this file:
 
 ## Current state
 
-**0.1.0 is submitted to CRAN** and sits in the incoming queue's `newbies`
-folder (the portfolio board, 2026-11-11). Stages 0–8 and 10–12 are done
-(Stage 10: serialisation streams, #25; Stage 11: #26's small items;
-Stage 12: what zunpy, zumsgpack, zuint and zuarrow call, #38), and the
-pre-release review (#31) is addressed. Stage 9 is the release itself and
-stays open until CRAN accepts. Stage 13, the foreign-buffer contract (#40),
-is planned, independent of the release, and lands before any sibling's
-zero-copy stage. After acceptance come Stage 9's post-acceptance steps; #32
+**0.1.0 is on CRAN** (published 2026-11-11; tag and release `0.1.0`), and
+`main` is at `0.1.0.9000`, working towards v0.1.1. Stages 0–9 and 10–12 are
+done (Stage 10: serialisation streams, #25; Stage 11: #26's small items;
+Stage 12: what zunpy, zumsgpack, zuint and zuarrow call, #38). Stage 13, the
+foreign-buffer contract (#40), is planned for v0.1.1 and lands before any
+sibling's zero-copy stage. A release is recorded by committing the
+`CRAN-SUBMISSION` that `devtools::submit_cran()` writes: `cran-release.yaml`
+tags that commit and opens the `.9000` bump. #32
 and `.agents/next.md` hold what follows.
 
 - **Headers:** `zubin.h` and
