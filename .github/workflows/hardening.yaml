@@ -15,7 +15,7 @@ on:
   # and the schedule checks main (r-actions README, "Pushes to main").
   pull_request:
   schedule:
-    - cron: "20 18 * * *"
+    - cron: "20 18 * * 4"  # weekly, Thursdays
   workflow_dispatch:
     inputs:
       seconds:
