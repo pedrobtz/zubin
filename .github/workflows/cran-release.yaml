@@ -14,4 +14,4 @@ permissions:
 
 jobs:
   cran-release:
-    uses: pedrobtz/r-actions/.github/workflows/cran-release.yml@147ba6b0f3921398914884b5ef16c42e2add7629 # v1.39.0
+    uses: pedrobtz/r-actions/.github/workflows/cran-release.yml@d53e033699ab3fb2fa48a156156e2f142ff68fbc # v1.43.0

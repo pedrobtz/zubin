@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   alloc-failure:
-    uses: pedrobtz/r-actions/.github/workflows/alloc-failure.yml@8caf5119301bb2a3bd433b92045b8c75b3097096 # v1.24.0
+    uses: pedrobtz/r-actions/.github/workflows/alloc-failure.yml@d53e033699ab3fb2fa48a156156e2f142ff68fbc # v1.43.0
     with:
       run: R_ENABLE_JIT=0 Rscript tools/alloc-exercise.R
       baseline-run: R_ENABLE_JIT=0 Rscript -e 'suppressPackageStartupMessages(library(zubin))'
