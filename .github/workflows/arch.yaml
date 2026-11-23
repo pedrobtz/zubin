@@ -1,5 +1,5 @@
 # The suite on architectures the check matrix never reaches (r-actions
-# arch.yml): 32-bit i386 and musl, both native on an x86-64 runner, and
+# arch.yml): musl, native on an x86-64 runner, and
 # s390x under QEMU, the one big-endian leg. For zubin it is load-bearing
 # (design 15): the golden vectors must decode to the same values there.
 #
@@ -20,13 +20,14 @@ permissions:
 
 jobs:
   arch:
-    uses: pedrobtz/r-actions/.github/workflows/arch.yml@8caf5119301bb2a3bd433b92045b8c75b3097096 # v1.24.0
+    uses: pedrobtz/r-actions/.github/workflows/arch.yml@v1
     with:
+      # No i386 leg: from 2026-11-10 apt-get update inside i386/debian:bookworm
+      # cannot resolve deb.debian.org (musl and s390x in the same run can), so
+      # it never got as far as installing R. r-actions dropped it from its
+      # default targets for the same reason (r-actions#133, v1.46.0).
       targets: >-
-        [{"name": "i386", "platform": "linux/386",
-          "image": "i386/debian:bookworm",
-          "setup": "apt-get update && apt-get install -y --no-install-recommends r-base-dev r-cran-testthat r-cran-withr ca-certificates locales && echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen"},
-         {"name": "musl", "platform": "linux/amd64",
+        [{"name": "musl", "platform": "linux/amd64",
           "image": "alpine:3.21",
           "setup": "apk add --no-cache R R-dev R-doc build-base linux-headers libuv-dev ca-certificates"},
          {"name": "s390x", "platform": "linux/s390x",
